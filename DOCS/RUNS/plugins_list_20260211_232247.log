@@ -1,0 +1,102 @@
+│
+◇  Doctor warnings ────────────────────────────────────────────╮
+│                                                              │
+│  - State dir migration skipped: target already exists        │
+│    (/home/lucy-ubuntu/.openclaw). Remove or merge manually.  │
+│                                                              │
+├──────────────────────────────────────────────────────────────╯
+Plugins (7/34 loaded)
+┌──────────────┬──────────┬──────────┬─────────────────────────────────────────────────────────────────────┬──────────┐
+│ Name         │ ID       │ Status   │ Source                                                              │ Version  │
+├──────────────┼──────────┼──────────┼─────────────────────────────────────────────────────────────────────┼──────────┤
+│ @openclaw/   │ bluebubb │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/bluebubbles/index. │ 2026.2.9 │
+│ bluebubbles  │ les      │          │ ts                                                                  │          │
+│              │          │          │ OpenClaw BlueBubbles channel plugin                                 │          │
+│ Copilot      │ copilot- │ loaded   │ ~/.openclaw/lib/node_modules/openclaw/extensions/copilot-proxy/     │ 2026.2.9 │
+│ Proxy        │ proxy    │          │ index.ts                                                            │          │
+│              │          │          │ Local Copilot Proxy (VS Code LM) provider plugin                    │          │
+│ Device       │ device-  │ loaded   │ ~/.openclaw/lib/node_modules/openclaw/extensions/device-pair/index. │          │
+│ Pairing      │ pair     │          │ ts                                                                  │          │
+│              │          │          │ Generate setup codes and approve device pairing requests.           │          │
+│ @openclaw/   │ diagnost │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/diagnostics-otel/  │ 2026.2.9 │
+│ diagnostics- │ ics-otel │          │ index.ts                                                            │          │
+│ otel         │          │          │ OpenClaw diagnostics OpenTelemetry exporter                         │          │
+│ @openclaw/   │ discord  │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/discord/index.ts   │ 2026.2.9 │
+│ discord      │          │          │ OpenClaw Discord channel plugin                                     │          │
+│ @openclaw/   │ feishu   │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/feishu/index.ts    │ 2026.2.9 │
+│ feishu       │          │          │ OpenClaw Feishu/Lark channel plugin (community maintained by        │          │
+│              │          │          │ @m1heng)                                                            │          │
+│ @openclaw/   │ google-  │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/google-            │ 2026.2.9 │
+│ google-      │ antigrav │          │ antigravity-auth/index.ts                                           │          │
+│ antigravity- │ ity-auth │          │ OpenClaw Google Antigravity OAuth provider plugin                   │          │
+│ auth         │          │          │                                                                     │          │
+│ @openclaw/   │ google-  │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/google-gemini-cli- │ 2026.2.9 │
+│ google-      │ gemini-  │          │ auth/index.ts                                                       │          │
+│ gemini-cli-  │ cli-auth │          │ OpenClaw Gemini CLI OAuth provider plugin                           │          │
+│ auth         │          │          │                                                                     │          │
+│ @openclaw/   │ googlech │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/googlechat/index.  │ 2026.2.9 │
+│ googlechat   │ at       │          │ ts                                                                  │          │
+│              │          │          │ OpenClaw Google Chat channel plugin                                 │          │
+│ @openclaw/   │ imessage │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/imessage/index.ts  │ 2026.2.9 │
+│ imessage     │          │          │ OpenClaw iMessage channel plugin                                    │          │
+│ @openclaw/   │ line     │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/line/index.ts      │ 2026.2.9 │
+│ line         │          │          │ OpenClaw LINE channel plugin                                        │          │
+│ LLM Task     │ llm-task │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/llm-task/index.ts  │ 2026.2.9 │
+│              │          │          │ Generic JSON-only LLM tool for structured tasks callable from       │          │
+│              │          │          │ workflows.                                                          │          │
+│ Lobster      │ lobster  │ loaded   │ ~/.openclaw/lib/node_modules/openclaw/extensions/lobster/index.ts   │ 2026.2.9 │
+│              │          │          │ Typed workflow tool with resumable approvals.                       │          │
+│ @openclaw/   │ matrix   │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/matrix/index.ts    │ 2026.2.9 │
+│ matrix       │          │          │ OpenClaw Matrix channel plugin                                      │          │
+│ @openclaw/   │ mattermo │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/mattermost/index.  │ 2026.2.9 │
+│ mattermost   │ st       │          │ ts                                                                  │          │
+│              │          │          │ OpenClaw Mattermost channel plugin                                  │          │
+│ Memory       │ memory-  │ loaded   │ ~/.openclaw/lib/node_modules/openclaw/extensions/memory-core/index. │ 2026.2.9 │
+│ (Core)       │ core     │          │ ts                                                                  │          │
+│              │          │          │ File-backed memory search tools and CLI                             │          │
+│ @openclaw/   │ memory-  │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/memory-lancedb/    │ 2026.2.9 │
+│ memory-      │ lancedb  │          │ index.ts                                                            │          │
+│ lancedb      │          │          │ OpenClaw LanceDB-backed long-term memory plugin with auto-recall/   │          │
+│              │          │          │ capture                                                             │          │
+│ @openclaw/   │ minimax- │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/minimax-portal-    │ 2026.2.9 │
+│ minimax-     │ portal-  │          │ auth/index.ts                                                       │          │
+│ portal-auth  │ auth     │          │ OpenClaw MiniMax Portal OAuth provider plugin                       │          │
+│ @openclaw/   │ msteams  │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/msteams/index.ts   │ 2026.2.9 │
+│ msteams      │          │          │ OpenClaw Microsoft Teams channel plugin                             │          │
+│ @openclaw/   │ nextclou │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/nextcloud-talk/    │ 2026.2.9 │
+│ nextcloud-   │ d-talk   │          │ index.ts                                                            │          │
+│ talk         │          │          │ OpenClaw Nextcloud Talk channel plugin                              │          │
+│ @openclaw/   │ nostr    │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/nostr/index.ts     │ 2026.2.9 │
+│ nostr        │          │          │ OpenClaw Nostr channel plugin for NIP-04 encrypted DMs              │          │
+│ OpenProse    │ open-    │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/open-prose/index.  │ 2026.2.9 │
+│              │ prose    │          │ ts                                                                  │          │
+│              │          │          │ OpenProse VM skill pack with a /prose slash command.                │          │
+│ Phone        │ phone-   │ loaded   │ ~/.openclaw/lib/node_modules/openclaw/extensions/phone-control/     │          │
+│ Control      │ control  │          │ index.ts                                                            │          │
+│              │          │          │ Arm/disarm high-risk phone node commands (camera/screen/writes)     │          │
+│              │          │          │ with an optional auto-expiry.                                       │          │
+│ qwen-portal- │          │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/qwen-portal-auth/  │          │
+│ auth         │          │          │ index.ts                                                            │          │
+│ @openclaw/   │ signal   │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/signal/index.ts    │ 2026.2.9 │
+│ signal       │          │          │ OpenClaw Signal channel plugin                                      │          │
+│ @openclaw/   │ slack    │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/slack/index.ts     │ 2026.2.9 │
+│ slack        │          │          │ OpenClaw Slack channel plugin                                       │          │
+│ Talk Voice   │ talk-    │ loaded   │ ~/.openclaw/lib/node_modules/openclaw/extensions/talk-voice/index.  │          │
+│              │ voice    │          │ ts                                                                  │          │
+│              │          │          │ Manage Talk voice selection (list/set).                             │          │
+│ @openclaw/   │ telegram │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/telegram/index.ts  │ 2026.2.9 │
+│ telegram     │          │          │ OpenClaw Telegram channel plugin                                    │          │
+│ @openclaw/   │ tlon     │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/tlon/index.ts      │ 2026.2.9 │
+│ tlon         │          │          │ OpenClaw Tlon/Urbit channel plugin                                  │          │
+│ @openclaw/   │ twitch   │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/twitch/index.ts    │ 2026.2.9 │
+│ twitch       │          │          │ OpenClaw Twitch channel plugin                                      │          │
+│ @openclaw/   │ voice-   │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/voice-call/index.  │ 2026.2.9 │
+│ voice-call   │ call     │          │ ts                                                                  │          │
+│              │          │          │ OpenClaw voice-call plugin                                          │          │
+│ WhatsApp     │ whatsapp │ loaded   │ ~/.openclaw/lib/node_modules/openclaw/extensions/whatsapp/index.ts  │ 2026.2.9 │
+│              │          │          │ WhatsApp channel plugin                                             │          │
+│ @openclaw/   │ zalo     │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/zalo/index.ts      │ 2026.2.9 │
+│ zalo         │          │          │ OpenClaw Zalo channel plugin                                        │          │
+│ @openclaw/   │ zalouser │ disabled │ ~/.openclaw/lib/node_modules/openclaw/extensions/zalouser/index.ts  │ 2026.2.9 │
+│ zalouser     │          │          │ OpenClaw Zalo Personal Account plugin via zca-cli                   │          │
+└──────────────┴──────────┴──────────┴─────────────────────────────────────────────────────────────────────┴──────────┘
