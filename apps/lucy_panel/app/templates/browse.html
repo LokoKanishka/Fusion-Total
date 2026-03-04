@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Browse {{ box }}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>Browse {{ box }}</h1>
+    <p><a href="/">Back</a></p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <section class="card">
+      <table>
+        <thead><tr><th>file</th><th>cid</th><th>size</th><th>mtime</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.name }}</td>
+              <td><a href="/cid/{{ row.cid }}">{{ row.cid }}</a></td>
+              <td>{{ row.size }}</td>
+              <td>{{ row.mtime }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4">empty</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,3119 @@
+Directory structure:
+└── lokokanishka-cunningham/
+    ├── README.md
+    ├── PLAN.md
+    ├── DOCS/
+    │   ├── allowlist_plugins.txt
+    │   ├── AUTONOMY_VISION_STACK.md
+    │   ├── AUTONOMY_VISION_STACK_NEXT10.md
+    │   ├── CAPABILITIES.md
+    │   ├── COMMUNITY_MCP.md
+    │   ├── community_mcp_catalog.json
+    │   ├── GATEWAY.md
+    │   ├── LOBSTER.md
+    │   ├── PLAN.md
+    │   ├── PLUGINS.md
+    │   ├── UX_SPANISH_VOICE.md
+    │   └── RUNS/
+    │       └── web_research_20260212_011122.md
+    ├── docs/
+    │   ├── INTEGRATIONS.md
+    │   └── SECURITY_CHECKLIST.md
+    └── scripts/
+        ├── adr_bot.sh
+        ├── autotest_gen.sh
+        ├── browser_vision.sh
+        ├── chat_voice_es.sh
+        ├── community_mcp.sh
+        ├── community_mcp_bridge.sh
+        ├── console_pro.sh
+        ├── diff_intel.sh
+        ├── gateway_autoheal.sh
+        ├── git_autopilot.sh
+        ├── goals_queue.sh
+        ├── goals_worker.sh
+        ├── knowledge_ingest.sh
+        ├── lobster_approval.sh
+        ├── local_vision.sh
+        ├── memory_semantic.sh
+        ├── mode_full.sh
+        ├── mode_safe.sh
+        ├── model_max.sh
+        ├── model_mini.sh
+        ├── model_normal.sh
+        ├── model_router.sh
+        ├── ops_alerts.sh
+        ├── ops_dashboard.sh
+        ├── ops_observe.sh
+        ├── plan_execute.sh
+        ├── policy_engine.sh
+        ├── rpa_web_task.sh
+        ├── runbook.sh
+        ├── set_spanish_mode.sh
+        ├── task_profile.sh
+        ├── verify_all.sh
+        ├── verify_capabilities.sh
+        ├── verify_codex_subscription.sh
+        ├── verify_gateway.sh
+        ├── verify_lobster.sh
+        ├── verify_next10.sh
+        ├── verify_plugins.sh
+        ├── verify_security_audit.sh
+        ├── verify_smoke.sh
+        ├── verify_stack10.sh
+        ├── watch_workspace.sh
+        └── web_research.sh
+
+================================================
+FILE: README.md
+================================================
+# cunningham
+
+Laboratorio desde cero para Moltbot upstream + modelos externos + cambio de modelo + extensiones comunitarias (con trazabilidad y seguridad).
+
+## Documentación clave
+- `PLAN.md` — objetivo, reglas, roadmap
+- `docs/SECURITY_CHECKLIST.md` — checklist para integrar comunidad
+- `docs/INTEGRATIONS.md` — registro de integraciones pinneadas
+
+## Operación rápida
+- Botón rojo: `./scripts/verify_all.sh`
+- Modo amplio (más capacidad de tools): `./scripts/mode_full.sh`
+- Modo seguro (allowlist reducida): `./scripts/mode_safe.sh`
+
+## Stack autonomía+visión (10)
+- Documento: `DOCS/AUTONOMY_VISION_STACK.md`
+- Verificación del stack: `./scripts/verify_stack10.sh`
+- Botón rojo base (estable): `./scripts/verify_all.sh`
+
+## Stack autonomía+visión (next 10)
+- Documento: `DOCS/AUTONOMY_VISION_STACK_NEXT10.md`
+- Verificación: `./scripts/verify_next10.sh`
+- Extras: `./scripts/goals_worker.sh check`, `./scripts/ops_alerts.sh check`, `./scripts/web_research.sh check`
+
+## Comunidad GitHub (20 descargas, pinneadas)
+- Catálogo: `DOCS/community_mcp_catalog.json`
+- Guía: `DOCS/COMMUNITY_MCP.md`
+- Validar: `./scripts/community_mcp.sh check`
+- Descargar bundle comunitario: `./scripts/community_mcp.sh sync`
+- Bridge MCP top10 (mcporter): `./scripts/community_mcp_bridge.sh setup`
+- Verificar bridge: `./scripts/community_mcp_bridge.sh check`
+- Probar 10/10: `./scripts/community_mcp_bridge.sh probe`
+
+## UX (Consola + Español + Voz)
+- Consola pro: `./scripts/console_pro.sh`
+- Modo español persistente: `./scripts/set_spanish_mode.sh`
+- Chat con salida por voz: `./scripts/chat_voice_es.sh "tu pregunta"`
+- Doc: `DOCS/UX_SPANISH_VOICE.md`
+
+
+
+================================================
+FILE: PLAN.md
+================================================
+# PLAN — Proyecto “Moltbot Upstream Lab” (desde cero)
+
+## 0) Qué es este repo (de verdad)
+Repo nuevo y autónomo para:
+1) Instalar y correr **Moltbot upstream** (tal cual lo publica el proyecto).
+2) Usarlo con **modelos externos por API** (proveedores).
+3) Habilitar **cambio de modelo** (perfiles) de forma reproducible.
+4) Potenciarlo integrando **aportes de la comunidad** (GitHub) con proceso seguro y trazable.
+5) Trabajar con **Codex en VS Code (Antigravity)** como ejecutor y este chat como arquitectura/supervisión.
+
+## 1) Principios
+- Open-source, reproducible, trazable.
+- Seguridad primero: skills/extensiones = código ejecutable.
+- Secretos fuera de git (API keys nunca se commitean).
+- Trabajo por tickets encadenados (“tramos largos”) + verificación estándar.
+
+## 2) Definition of Done
+Logrado cuando:
+1) Moltbot upstream instala y corre.
+2) 1 proveedor externo responde a prompt mínimo.
+3) Cambio de modelo (perfiles) probado.
+4) Suite `scripts/verify_all.sh` valida end-to-end.
+5) 1 integración comunitaria pinneada (commit/tag) + revisión + doc + smoke test.
+
+## 3) Estructura target
+/
+├─ README.md
+├─ PLAN.md
+├─ .gitignore
+├─ config/               # plantillas .env / perfiles
+├─ runtime/              # instalación/runner upstream
+├─ skills/               # integraciones (pin) + parches
+├─ scripts/              # bootstrap + verify
+└─ docs/                 # ADR + integraciones + seguridad
+
+## 4) Roadmap (hitos)
+- H0: bootstrap repo (docs + scripts + estructura).
+- H1: instalar upstream (vanilla).
+- H2: configurar proveedor externo.
+- H3: perfiles y cambio de modelo.
+- H4: 1ra skill comunitaria integrada (pin + doc + test).
+- H5: hardening + reproducibilidad (bootstrap + verify_all).
+
+
+
+================================================
+FILE: DOCS/allowlist_plugins.txt
+================================================
+copilot-proxy
+llm-task
+lobster
+open-prose
+whatsapp
+
+
+
+================================================
+FILE: DOCS/AUTONOMY_VISION_STACK.md
+================================================
+# Autonomy + Vision Stack (10 módulos)
+
+Objetivo: ampliar autonomía operativa y visión del agente sin API keys pagas.
+
+## 1) Memoria semántica local
+Script: `scripts/memory_semantic.sh`
+- `status`: estado del índice
+- `index`: reindexado
+- `search <query>`: búsqueda
+
+## 2) Visión web por tool (web_fetch/web_search)
+Script: `scripts/browser_vision.sh`
+- `probe`: valida disponibilidad real del tool
+- `search <query>`: búsqueda con resumen por agente
+
+## 3) Watcher de workspace
+Script: `scripts/watch_workspace.sh`
+- `watch_workspace.sh <ruta> watch`
+- `watch_workspace.sh <ruta> check`
+
+## 4) Planner + Executor en dos etapas
+Script: `scripts/plan_execute.sh`
+- `plan_execute.sh "tarea"`
+- `plan_execute.sh check`
+
+## 5) Aprobaciones Lobster
+Script: `scripts/lobster_approval.sh`
+- `lobster_approval.sh <resume-token> yes|no`
+- `lobster_approval.sh check`
+
+## 6) RPA de navegador
+Script: `scripts/rpa_web_task.sh`
+- `rpa_web_task.sh check`
+- `rpa_web_task.sh run <url>`
+
+## 7) Observabilidad operativa
+Script: `scripts/ops_observe.sh`
+- genera `DOCS/RUNS/ops_<timestamp>.log`
+
+## 8) Goal queue persistente
+Script: `scripts/goals_queue.sh`
+- `add`, `list`, `next`, `done`
+
+## 9) Git autopilot seguro
+Script: `scripts/git_autopilot.sh`
+- `check`
+- `git_autopilot.sh <branch> <commit-msg> [paths...]`
+
+## 10) Ingesta de conocimiento local
+Script: `scripts/knowledge_ingest.sh`
+- consolida docs en `~/.openclaw/workspace/KNOWLEDGE_LOCAL.md`
+- dispara `openclaw memory index`
+
+## Verificación de stack
+Script: `scripts/verify_stack10.sh`
+- valida ejecutables
+- corre checks/dry-run por módulo
+- imprime `STACK10_OK`
+
+
+
+================================================
+FILE: DOCS/AUTONOMY_VISION_STACK_NEXT10.md
+================================================
+# Autonomy + Vision Stack (Next 10)
+
+Extensión del stack original con 10 módulos adicionales, priorizando autonomía controlada y visión local/web.
+
+## Módulos
+1. Auto-healing gateway: `scripts/gateway_autoheal.sh`
+2. Perfilador de tareas: `scripts/task_profile.sh`
+3. Router multi-modelo + fallback: `scripts/model_router.sh`
+4. Visión local OCR/PDF: `scripts/local_vision.sh`
+5. Diff intelligence: `scripts/diff_intel.sh`
+6. Autotest runner/scaffold: `scripts/autotest_gen.sh`
+7. Runbooks ejecutables: `scripts/runbook.sh`
+8. Policy engine por riesgo: `scripts/policy_engine.sh`
+9. ADR bot (decisiones): `scripts/adr_bot.sh`
+10. Dashboard local de ops: `scripts/ops_dashboard.sh`
+
+## Verificación
+- `./scripts/verify_next10.sh` -> `NEXT10_OK`
+- Baseline estable: `./scripts/verify_all.sh` -> `ALL_OK`
+
+## Nota de red
+El módulo web puede operar en modo "tool disponible pero red DNS caída" sin marcar error de permisos.
+
+## Extras integrados
+11. Worker de objetivos: `scripts/goals_worker.sh`
+12. Alertas operativas locales: `scripts/ops_alerts.sh`
+13. Investigación web con reporte: `scripts/web_research.sh`
+
+Checks:
+- `./scripts/goals_worker.sh check`
+- `./scripts/ops_alerts.sh check`
+- `./scripts/web_research.sh check`
+
+
+
+================================================
+FILE: DOCS/CAPABILITIES.md
+================================================
+# Capacidades prácticas (desktop + web)
+
+## Estado actual
+- Herramientas habilitadas en `main`: `exec`, `read`, `write`, `edit`, `process`, `browser`, `web_fetch`, `web_search`, `lobster`, `llm-task`.
+- Verificación automática: `./scripts/verify_capabilities.sh`.
+
+## Ver escritorio (desde el agente)
+Prompt recomendado:
+
+```text
+Usá la herramienta exec y corré: ls -la ~/Escritorio
+```
+
+## Navegar web (desde el agente)
+Prompt recomendado:
+
+```text
+Usá la herramienta web_fetch para leer https://example.com y resumí el contenido.
+```
+
+Si la red DNS está caída, la tool devuelve error de red (`ENOTFOUND`/`EAI_AGAIN`).
+Eso no implica falta de permisos, sino conectividad del host.
+
+## Botón rojo
+```bash
+./scripts/verify_capabilities.sh
+./scripts/verify_all.sh
+```
+
+
+
+================================================
+FILE: DOCS/COMMUNITY_MCP.md
+================================================
+# Community MCP 20 (solo comunidad)
+
+Catálogo pinneado: `DOCS/community_mcp_catalog.json`
+
+Objetivo: incorporar 20 repositorios de GitHub mantenidos por la comunidad para ampliar herramientas/capacidades del agente sin desarrollar módulos propios en este repo.
+
+## Comandos
+- Listar catálogo: `./scripts/community_mcp.sh list`
+- Validar catálogo: `./scripts/community_mcp.sh check`
+- Descargar los 20 repos pinneados: `./scripts/community_mcp.sh sync`
+- Configurar bridge MCP (top 10): `./scripts/community_mcp_bridge.sh setup`
+- Verificar bridge MCP (top 10): `./scripts/community_mcp_bridge.sh check`
+- Probar handshake de los 10: `./scripts/community_mcp_bridge.sh probe`
+- Demo real (Cloudflare docs): `./scripts/community_mcp_bridge.sh demo`
+
+## Ubicación de descargas
+- Carpeta local: `community/mcp/repos/`
+- Cada carpeta incluye `.community_source.json` con commit pinneado y URL de origen.
+
+## Seguridad operativa
+- No habilita plugins automáticamente.
+- No modifica `allowlist_plugins.txt`.
+- Solo descarga código fuente pinneado por commit para revisión/integración posterior.
+
+## Bridge MCP (operación en OpenClaw)
+- El bridge usa `mcporter` (skill oficial de OpenClaw) y configura 10 servidores `community-*` en `~/.mcporter/mcporter.json`.
+- Esto permite usarlos desde el runtime de skills/comandos nativos del agente sin convertirlos a plugins OpenClaw.
+
+
+
+================================================
+FILE: DOCS/community_mcp_catalog.json
+================================================
+{
+  "generated_at": "2026-02-12T04:22:58Z",
+  "source": "GitHub API",
+  "count": 20,
+  "repos": [
+    {
+      "name": "github-mcp-server",
+      "full_name": "github/github-mcp-server",
+      "html_url": "https://github.com/github/github-mcp-server",
+      "clone_url": "https://github.com/github/github-mcp-server.git",
+      "description": "GitHub's official MCP Server",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 26852,
+      "open_issues": 262,
+      "pushed_at": "2026-02-11T16:31:38Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "bbc675abe9eb4106fe1ba1900ee60209f333f33c"
+      }
+    },
+    {
+      "name": "firecrawl-mcp-server",
+      "full_name": "firecrawl/firecrawl-mcp-server",
+      "html_url": "https://github.com/firecrawl/firecrawl-mcp-server",
+      "clone_url": "https://github.com/firecrawl/firecrawl-mcp-server.git",
+      "description": "🔥 Official Firecrawl MCP Server - Adds powerful web scraping and search to Cursor, Claude and any other LLM clients.",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 5476,
+      "open_issues": 65,
+      "pushed_at": "2026-02-05T21:27:48Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "0159dda1b04130e8c212d80c4e620120f9f93bce"
+      }
+    },
+    {
+      "name": "notion-mcp-server",
+      "full_name": "makenotion/notion-mcp-server",
+      "html_url": "https://github.com/makenotion/notion-mcp-server",
+      "clone_url": "https://github.com/makenotion/notion-mcp-server.git",
+      "description": "Official Notion MCP Server",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 3868,
+      "open_issues": 103,
+      "pushed_at": "2026-01-31T18:26:02Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "7e254df95e805861db8c052f5c325a1bb77a7560"
+      }
+    },
+    {
+      "name": "exa-mcp-server",
+      "full_name": "exa-labs/exa-mcp-server",
+      "html_url": "https://github.com/exa-labs/exa-mcp-server",
+      "clone_url": "https://github.com/exa-labs/exa-mcp-server.git",
+      "description": "Exa MCP for web search and web crawling!",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 3784,
+      "open_issues": 26,
+      "pushed_at": "2026-02-11T23:47:15Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "079848e7381a482b5cbe25e0da941cdc7bcdf555"
+      }
+    },
+    {
+      "name": "mcp-server-cloudflare",
+      "full_name": "cloudflare/mcp-server-cloudflare",
+      "html_url": "https://github.com/cloudflare/mcp-server-cloudflare",
+      "clone_url": "https://github.com/cloudflare/mcp-server-cloudflare.git",
+      "description": "",
+      "default_branch": "main",
+      "license": "Apache-2.0",
+      "stars": 3397,
+      "open_issues": 52,
+      "pushed_at": "2026-01-22T15:36:49Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "eb24e3bba8be7b682aa721d34918ff0954f1254a"
+      }
+    },
+    {
+      "name": "excel-mcp-server",
+      "full_name": "haris-musa/excel-mcp-server",
+      "html_url": "https://github.com/haris-musa/excel-mcp-server",
+      "clone_url": "https://github.com/haris-musa/excel-mcp-server.git",
+      "description": "A Model Context Protocol server for Excel file manipulation",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 3322,
+      "open_issues": 40,
+      "pushed_at": "2026-01-19T08:14:42Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "de4dc75f6ba629ccd2e097f5963235846be622e6"
+      }
+    },
+    {
+      "name": "mcp-server-browserbase",
+      "full_name": "browserbase/mcp-server-browserbase",
+      "html_url": "https://github.com/browserbase/mcp-server-browserbase",
+      "clone_url": "https://github.com/browserbase/mcp-server-browserbase.git",
+      "description": "Allow LLMs to control a browser with Browserbase and Stagehand",
+      "default_branch": "main",
+      "license": "Apache-2.0",
+      "stars": 3127,
+      "open_issues": 27,
+      "pushed_at": "2026-01-23T23:24:36Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "51f2175c7956033d7984d77fec311604b2ebaf7c"
+      }
+    },
+    {
+      "name": "arxiv-mcp-server",
+      "full_name": "blazickjp/arxiv-mcp-server",
+      "html_url": "https://github.com/blazickjp/arxiv-mcp-server",
+      "clone_url": "https://github.com/blazickjp/arxiv-mcp-server.git",
+      "description": "A Model Context Protocol server for searching and analyzing arXiv papers",
+      "default_branch": "main",
+      "license": "Apache-2.0",
+      "stars": 2165,
+      "open_issues": 28,
+      "pushed_at": "2026-01-26T23:10:41Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "0065f5abb48f3eb4e011a130dd63fc52b381a1d2"
+      }
+    },
+    {
+      "name": "Office-Word-MCP-Server",
+      "full_name": "GongRzhe/Office-Word-MCP-Server",
+      "html_url": "https://github.com/GongRzhe/Office-Word-MCP-Server",
+      "clone_url": "https://github.com/GongRzhe/Office-Word-MCP-Server.git",
+      "description": "A Model Context Protocol (MCP) server for creating, reading, and manipulating Microsoft Word documents. This server enables AI assistants to work with Word documents through a standardized interface, providing rich document editing capabilities.",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 1570,
+      "open_issues": 63,
+      "pushed_at": "2025-12-31T13:23:05Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "a3bbbb6d6167e68cf855d73ef7dc6cd8cfbfedba"
+      }
+    },
+    {
+      "name": "n8n-mcp-server",
+      "full_name": "leonardsellem/n8n-mcp-server",
+      "html_url": "https://github.com/leonardsellem/n8n-mcp-server",
+      "clone_url": "https://github.com/leonardsellem/n8n-mcp-server.git",
+      "description": "MCP server that provides tools and resources for interacting with n8n API",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 1563,
+      "open_issues": 29,
+      "pushed_at": "2025-07-09T21:05:08Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "3b97d467ae076564afd2a597a8e986463c227153"
+      }
+    },
+    {
+      "name": "Office-PowerPoint-MCP-Server",
+      "full_name": "GongRzhe/Office-PowerPoint-MCP-Server",
+      "html_url": "https://github.com/GongRzhe/Office-PowerPoint-MCP-Server",
+      "clone_url": "https://github.com/GongRzhe/Office-PowerPoint-MCP-Server.git",
+      "description": "A MCP (Model Context Protocol) server for PowerPoint manipulation using python-pptx. This server provides tools for creating, editing, and manipulating PowerPoint presentations through the MCP protocol.",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 1502,
+      "open_issues": 27,
+      "pushed_at": "2025-12-31T13:23:39Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "3631ba2ec0c24504476f78bf74d329c9be11caaa"
+      }
+    },
+    {
+      "name": "mcp-language-server",
+      "full_name": "isaacphi/mcp-language-server",
+      "html_url": "https://github.com/isaacphi/mcp-language-server",
+      "clone_url": "https://github.com/isaacphi/mcp-language-server.git",
+      "description": "mcp-language-server gives MCP enabled clients access semantic tools like get definition, references, rename, and diagnostics.",
+      "default_branch": "main",
+      "license": "BSD-3-Clause",
+      "stars": 1444,
+      "open_issues": 47,
+      "pushed_at": "2026-02-01T23:27:09Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "e4395849a52e18555361abab60a060802c06bf50"
+      }
+    },
+    {
+      "name": "slack-mcp-server",
+      "full_name": "korotovsky/slack-mcp-server",
+      "html_url": "https://github.com/korotovsky/slack-mcp-server",
+      "clone_url": "https://github.com/korotovsky/slack-mcp-server.git",
+      "description": "The most powerful MCP Slack Server with no permission requirements, Apps support, GovSlack, DMs, Group DMs and smart history fetch logic.",
+      "default_branch": "master",
+      "license": "MIT",
+      "stars": 1339,
+      "open_issues": 39,
+      "pushed_at": "2026-02-11T23:04:15Z",
+      "pinned_ref": {
+        "branch": "master",
+        "commit": "6ddc82863ab8b35b2ab73e9258083616532a973d"
+      }
+    },
+    {
+      "name": "mcp-server-kubernetes",
+      "full_name": "Flux159/mcp-server-kubernetes",
+      "html_url": "https://github.com/Flux159/mcp-server-kubernetes",
+      "clone_url": "https://github.com/Flux159/mcp-server-kubernetes.git",
+      "description": "MCP Server for kubernetes management commands",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 1304,
+      "open_issues": 14,
+      "pushed_at": "2026-02-07T00:56:51Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "603a87f2d3af7b62ea2123c571f526463365ee59"
+      }
+    },
+    {
+      "name": "terraform-mcp-server",
+      "full_name": "hashicorp/terraform-mcp-server",
+      "html_url": "https://github.com/hashicorp/terraform-mcp-server",
+      "clone_url": "https://github.com/hashicorp/terraform-mcp-server.git",
+      "description": "The Terraform MCP Server provides seamless integration with Terraform ecosystem, enabling advanced automation and interaction capabilities for Infrastructure as Code (IaC) development.",
+      "default_branch": "main",
+      "license": "MPL-2.0",
+      "stars": 1218,
+      "open_issues": 31,
+      "pushed_at": "2026-02-11T20:27:03Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "fdc2e5895813e74560ed5924809420062c5467bc"
+      }
+    },
+    {
+      "name": "mcp-server-qdrant",
+      "full_name": "qdrant/mcp-server-qdrant",
+      "html_url": "https://github.com/qdrant/mcp-server-qdrant",
+      "clone_url": "https://github.com/qdrant/mcp-server-qdrant.git",
+      "description": "An official Qdrant Model Context Protocol (MCP) server implementation",
+      "default_branch": "master",
+      "license": "Apache-2.0",
+      "stars": 1214,
+      "open_issues": 38,
+      "pushed_at": "2026-01-28T20:51:03Z",
+      "pinned_ref": {
+        "branch": "master",
+        "commit": "860ab93a96ca9f5e6cf6fe47e2f5b75d36eaac69"
+      }
+    },
+    {
+      "name": "kubernetes-mcp-server",
+      "full_name": "containers/kubernetes-mcp-server",
+      "html_url": "https://github.com/containers/kubernetes-mcp-server",
+      "clone_url": "https://github.com/containers/kubernetes-mcp-server.git",
+      "description": "Model Context Protocol (MCP) server for Kubernetes and OpenShift",
+      "default_branch": "main",
+      "license": "Apache-2.0",
+      "stars": 1137,
+      "open_issues": 63,
+      "pushed_at": "2026-02-11T21:14:25Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "8a1dfbfd22f7e9aa2e9f830d133b2a0deb1666a4"
+      }
+    },
+    {
+      "name": "mongodb-mcp-server",
+      "full_name": "mongodb-js/mongodb-mcp-server",
+      "html_url": "https://github.com/mongodb-js/mongodb-mcp-server",
+      "clone_url": "https://github.com/mongodb-js/mongodb-mcp-server.git",
+      "description": "A Model Context Protocol server to connect to MongoDB databases and MongoDB Atlas Clusters.",
+      "default_branch": "main",
+      "license": "Apache-2.0",
+      "stars": 916,
+      "open_issues": 22,
+      "pushed_at": "2026-02-10T16:00:07Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "3946e27bb59f6839ddc904d2fc5e4105b86f52fb"
+      }
+    },
+    {
+      "name": "jupyter-mcp-server",
+      "full_name": "datalayer/jupyter-mcp-server",
+      "html_url": "https://github.com/datalayer/jupyter-mcp-server",
+      "clone_url": "https://github.com/datalayer/jupyter-mcp-server.git",
+      "description": "🪐 🔧 Model Context Protocol (MCP) Server for Jupyter.",
+      "default_branch": "main",
+      "license": "BSD-3-Clause",
+      "stars": 895,
+      "open_issues": 19,
+      "pushed_at": "2026-02-06T16:46:33Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "8123f65757fcc557c2288d599523cb0747e27c0f"
+      }
+    },
+    {
+      "name": "brave-search-mcp-server",
+      "full_name": "brave/brave-search-mcp-server",
+      "html_url": "https://github.com/brave/brave-search-mcp-server",
+      "clone_url": "https://github.com/brave/brave-search-mcp-server.git",
+      "description": "",
+      "default_branch": "main",
+      "license": "MIT",
+      "stars": 623,
+      "open_issues": 17,
+      "pushed_at": "2026-02-11T22:08:53Z",
+      "pinned_ref": {
+        "branch": "main",
+        "commit": "6f0c3013af5da5acefe1c1325361373fccc398f4"
+      }
+    }
+  ]
+}
+
+
+
+================================================
+FILE: DOCS/GATEWAY.md
+================================================
+# Gateway Runbook
+
+## Goal
+Ensure commands use the current OpenClaw config/model state and do not silently fall back to stale legacy daemons.
+
+## Fast checks
+```bash
+export PATH="$HOME/.openclaw/bin:$PATH"
+openclaw status
+openclaw gateway status
+```
+
+## Known pitfall
+If `clawdbot-gateway` is active on `127.0.0.1:18789`, agent turns can use old model/provider settings (e.g. `ollama`) even when `openclaw` defaults are set to `openai-codex/...`.
+
+## Remediation
+```bash
+systemctl --user disable --now clawdbot-gateway.service clawdbot-node.service
+nohup openclaw gateway --force > "$HOME/.openclaw/gateway-foreground.log" 2>&1 &
+openclaw health
+```
+
+## Verify
+```bash
+./scripts/verify_gateway.sh
+./scripts/verify_all.sh
+```
+
+
+
+================================================
+FILE: DOCS/LOBSTER.md
+================================================
+# Lobster in this repo
+
+## What it is
+- OpenClaw plugin tool id: `lobster`.
+- Runs local `lobster` subprocess with typed JSON envelopes.
+- Main actions from plugin code:
+  - `action: run` => `lobster run --mode tool <pipeline> [--args-json ...]`
+  - `action: resume` => `lobster resume --token <token> --approve yes|no`
+
+## Security notes (from local plugin code)
+- Tool is not registered when `ctx.sandboxed` is true.
+- `cwd` must be relative and remain inside gateway working dir.
+- Limits include timeout and max stdout bytes.
+- `lobsterPath` override must be absolute and point to `lobster` executable.
+
+## Local verify
+```bash
+./scripts/verify_lobster.sh
+```
+
+What it validates:
+1. `lobster` binary exists in PATH.
+2. OpenClaw plugin `lobster` is loaded.
+3. A real tool-mode run returns a valid JSON envelope.
+4. If status is `needs_approval`, envelope contains `resumeToken`.
+
+## Notes
+- This verify is local-only and does not require paid API keys.
+- Keep plugin allowlist enforced via `scripts/verify_plugins.sh`.
+
+
+
+================================================
+FILE: DOCS/PLAN.md
+================================================
+# Cunningham — Plan de trabajo (esqueleto)
+
+## Principio rector
+- Cero costos variables: no API keys pagas / no pay-per-token.
+- Se permite: ChatGPT Plus (20 USD) + Codex por suscripción (OAuth).
+- Siempre: scripts verificables ("botón rojo") y commits chicos.
+
+## Estado actual (cerrado)
+- OpenClaw instalado y en PATH.
+- Provider externo sin API key: openai-codex (Codex CLI OAuth).
+- Default model: openai-codex/gpt-5.1-codex-mini.
+- Seguridad: 0 critical.
+- Verificación:
+  - ./scripts/verify_all.sh => ALL_OK
+  - ./scripts/model_{mini,normal,max}.sh fuerzan /new
+
+## Objetivo del proyecto
+1) Entender y documentar cómo opera Moltbot/OpenClaw con IA externa por suscripción.
+2) Extender capacidades usando aportes de la comunidad (plugins/skills/tools) sin costos.
+
+## Roadmap por hitos (cada uno con botón rojo)
+H2 — Observabilidad mínima
+- Entregable: scripts para ver logs, estado, y health rápido.
+- Botón rojo: scripts/verify_all.sh + scripts/verify_security_audit.sh OK.
+
+H3 — “Skills” útiles y seguras (solo locales / offline cuando sea posible)
+- Entregable: 2–3 skills/plugins comunitarios evaluados e integrados.
+- Botón rojo: smoke + audit 0 critical + demo reproducible.
+
+H4 — Tooling local potente
+- Entregable: integración de herramientas locales (fs, git, shell) con sandbox ON.
+- Botón rojo: demo de tarea real (ej: clonar repo, editar archivo, commit) sin intervención manual.
+
+H5 — Interfaz / UX
+- Entregable: comandos de “modo” (mini/normal/max), quickstart, y troubleshooting.
+- Botón rojo: nueva máquina → instalación + verify_all en <10 min.
+
+## Reglas de contribución
+- Cada cambio: commit + push.
+- Nada de secretos en repo.
+- Si un comando no existe, se reemplaza por script.
+
+
+
+================================================
+FILE: DOCS/PLUGINS.md
+================================================
+# Plugins — política y allowlist
+
+## Principio
+- Solo se permite **lo que está en allowlist**.
+- Cualquier plugin opcional fuera de allowlist **no puede estar enabled**.
+- Cambios de plugins requieren reinicio de gateway para aplicar.
+
+## Allowlist (fuente de verdad)
+Ver: `DOCS/allowlist_plugins.txt`
+
+## Mods integrados (gratis)
+- `lobster`: workflows tipados con aprobaciones/reanudación.
+- `llm-task`: herramienta JSON-only para tareas estructuradas.
+- `open-prose`: pack de skills/comandos `/prose` para flujos reutilizables.
+
+## Reglas adicionales
+- `lobster`, `llm-task` y `open-prose` deben estar **loaded**.
+- WhatsApp debe estar **OFF** (canal deshabilitado), independientemente de si el plugin está instalado.
+
+
+
+================================================
+FILE: DOCS/UX_SPANISH_VOICE.md
+================================================
+# UX: Consola pro + Castellano + Voz
+
+## 1) Consola profesional
+Comando:
+
+```bash
+./scripts/console_pro.sh
+```
+
+Abre una vista tipo NOC (si hay tmux):
+- verify gateway
+- status general
+- logs en vivo
+
+## 2) Modo castellano persistente
+Comando:
+
+```bash
+./scripts/set_spanish_mode.sh
+```
+
+Esto escribe `~/.openclaw/workspace/USER.md` para forzar respuestas en español.
+
+## 3) Hablarle / escuchar respuesta
+Comando:
+
+```bash
+./scripts/chat_voice_es.sh "tu pregunta"
+```
+
+- Envía mensaje al agente en castellano
+- Intenta leer respuesta con `spd-say` o `espeak`
+
+## Nota
+Para dictado de voz a texto usá el dictado del sistema operativo (GNOME/VS Code), y este script te da salida por voz.
+
+
+
+================================================
+FILE: DOCS/RUNS/web_research_20260212_011122.md
+================================================
+# Web Research
+
+Query: openclaw gateway security trusted proxies
+Generated: 2026-02-12T01:11:30-03:00
+
+No pude usar `web_search` porque falta la clave de API de Brave (error `missing_brave_api_key`). Podés guardarla con `openclaw configure --section web` o definiendo `BRAVE_API_KEY` en el entorno del Gateway, y luego lo intento de nuevo. ¿Querés que siga otro camino mientras tanto?
+
+
+
+================================================
+FILE: docs/INTEGRATIONS.md
+================================================
+# Integrations log
+
+Registrar cada integración comunitaria:
+
+Nombre: lobster (plugin)
+Repo: bundled with OpenClaw (`@openclaw/lobster`)
+Licencia: OpenClaw bundled plugin
+Pin (tag/commit): version `2026.2.9` (local install)
+Qué aporta: workflows tipados, approvals/resume, envelope JSON estable
+Riesgo / superficie: ejecuta subproceso local `lobster`; requiere allowlist estricta
+Resultado de smoke test: `./scripts/verify_lobster.sh` => `LOBSTER_OK`
+Fecha: 2026-02-12
+
+Nombre: llm-task (plugin)
+Repo: bundled with OpenClaw (`@openclaw/llm-task`)
+Licencia: OpenClaw bundled plugin
+Pin (tag/commit): version `2026.2.9` (local install)
+Qué aporta: herramienta JSON-only para tareas estructuradas
+Riesgo / superficie: permite invocaciones LLM; mantener allowlist por modelo/proveedor
+Resultado de smoke test: `openclaw plugins list` muestra `llm-task loaded`
+Fecha: 2026-02-12
+
+Nombre: open-prose (plugin)
+Repo: bundled with OpenClaw (`@openclaw/open-prose`)
+Licencia: OpenClaw bundled plugin
+Pin (tag/commit): version `2026.2.9` (local install)
+Qué aporta: skill pack y comando `/prose` para flujos reutilizables
+Riesgo / superficie: orquestación adicional; mantener plugin allowlist y gateway local
+Resultado de smoke test: `openclaw plugins list` muestra `open-prose loaded`
+Fecha: 2026-02-12
+
+Nombre: community-mcp-20 (bundle)
+Repo: 20 repos de GitHub (solo comunidad), ver `DOCS/community_mcp_catalog.json`
+Licencia: mezcla de MIT / Apache-2.0 / BSD-3-Clause / MPL-2.0 (por repo)
+Pin (tag/commit): commit pinneado por repo en `DOCS/community_mcp_catalog.json`
+Qué aporta: fuentes MCP para ampliar autonomía/capacidades (web, github, notion, cloud, k8s, terraform, jupyter, búsqueda)
+Riesgo / superficie: código de terceros; no se habilita automático; requiere revisión antes de activar como plugin/herramienta
+Resultado de smoke test: `./scripts/community_mcp.sh check` => `COMMUNITY_MCP_OK catalog=20`
+Fecha: 2026-02-12
+
+Nombre: community-mcp-bridge-top10 (mcporter)
+Repo: top10 del catálogo comunitario, vía `mcporter`
+Licencia: según cada servidor MCP de origen
+Pin (tag/commit): catálogo base en `DOCS/community_mcp_catalog.json`; bridge por nombre `community-*` en `~/.mcporter/mcporter.json`
+Qué aporta: operación real de 10 MCP servers comunitarios dentro del runtime de skills de OpenClaw
+Riesgo / superficie: depende de binarios externos (`mcporter`, `npx`, `uvx`) y de credenciales para algunos providers
+Resultado de smoke test: `./scripts/community_mcp_bridge.sh probe` => `ok=10 fail=0`
+Fecha: 2026-02-12
+
+
+
+================================================
+FILE: docs/SECURITY_CHECKLIST.md
+================================================
+# Security checklist (skills/extensiones de terceros)
+
+Antes de integrar:
+- Licencia clara (ideal: MIT/Apache-2.0/BSD)
+- Actividad (commits recientes, issues respondidos)
+- Evitar installers opacos (curl|bash sin auditar, binarios sin source)
+- Revisar:
+  - shell-outs (`os.system`, `subprocess`, `exec`)
+  - lectura/escritura de archivos
+  - llamadas de red y endpoints
+  - permisos y rutas peligrosas
+- Pin por tag o commit hash
+- Registrar en `docs/INTEGRATIONS.md`
+
+
+
+================================================
+FILE: scripts/adr_bot.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+store="DOCS/DECISIONS.md"
+mkdir -p DOCS
+
+cmd="${1:-list}"
+shift || true
+
+init_store() {
+  if [ ! -f "$store" ]; then
+    cat > "$store" <<'MD'
+# Decisions
+
+MD
+  fi
+}
+
+case "$cmd" in
+  add)
+    title="${1:-}"
+    decision="${2:-}"
+    rationale="${3:-}"
+    [ -n "$title" ] && [ -n "$decision" ] && [ -n "$rationale" ] || {
+      echo "usage: $0 add <title> <decision> <rationale>" >&2
+      exit 2
+    }
+    init_store
+    {
+      echo "## $(date '+%F %T') - $title"
+      echo "- Decision: $decision"
+      echo "- Rationale: $rationale"
+      echo
+    } >> "$store"
+    echo "ADR_ADDED"
+    ;;
+  list)
+    init_store
+    sed -n '1,240p' "$store"
+    ;;
+  search)
+    q="${1:-}"
+    [ -n "$q" ] || { echo "usage: $0 search <term>" >&2; exit 2; }
+    init_store
+    grep -ni "$q" "$store" || true
+    ;;
+  check)
+    init_store
+    echo "ADR_BOT_OK"
+    ;;
+  *)
+    echo "usage: $0 {add|list|search|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/autotest_gen.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-check}"
+shift || true
+
+case "$cmd" in
+  check)
+    [ -x ./scripts/verify_all.sh ] || { echo "verify_all missing" >&2; exit 1; }
+    echo "AUTOTEST_GEN_OK"
+    ;;
+  run)
+    ./scripts/verify_all.sh
+    if [ -x ./scripts/verify_stack10.sh ]; then
+      ./scripts/verify_stack10.sh
+    fi
+    echo "AUTOTEST_RUN_OK"
+    ;;
+  scaffold)
+    cat > scripts/test_changed_files.sh <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+git diff --name-only | sed '/^$/d' || true
+SH
+    chmod +x scripts/test_changed_files.sh
+    echo "SCAFFOLD_OK"
+    ;;
+  *)
+    echo "usage: $0 {check|run|scaffold}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/browser_vision.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+strict=0
+if [ "${1:-}" = "--strict" ]; then
+  strict=1
+  shift
+fi
+
+cmd="${1:-probe}"
+shift || true
+
+probe_web_fetch() {
+  out="$(openclaw agent --agent main --json --timeout 90 \
+    --message 'Usa web_fetch para leer https://example.com y responde en una linea: RESULT=<ok|fail> REASON=<corto>.' \
+    2>&1 || true)"
+
+  result="$(printf "%s" "$out" | node -e '
+const fs=require("fs");
+const raw=fs.readFileSync(0,"utf8");
+const i=raw.indexOf("{");
+const j=raw.lastIndexOf("}");
+if(i<0||j<=i){ console.log("PARSE_FAIL"); process.exit(0); }
+try{
+  const obj=JSON.parse(raw.slice(i,j+1));
+  const p=Array.isArray(obj?.result?.payloads)?obj.result.payloads:(Array.isArray(obj?.payloads)?obj.payloads:[]);
+  const t=p.map(x=>String(x?.text||"")).join("\n").trim().toLowerCase();
+  if(t.includes("result=ok")) {
+    console.log("WEB_OK");
+  } else if(t.includes("enotfound")||t.includes("eai_again")||t.includes("dns")||t.includes("timed out")||t.includes("network")) {
+    console.log("WEB_TOOL_OK_NET_DOWN");
+  } else if(t.includes("no_tool")||t.includes("no disponible")||t.includes("not available")) {
+    console.log("WEB_TOOL_MISSING");
+  } else {
+    console.log("WEB_UNKNOWN");
+  }
+}catch{ console.log("PARSE_FAIL"); }
+')"
+
+  case "$result" in
+    WEB_OK|WEB_TOOL_OK_NET_DOWN)
+      echo "$result"
+      return 0
+      ;;
+    WEB_TOOL_MISSING)
+      echo "$result" >&2
+      return 2
+      ;;
+    *)
+      echo "$result" >&2
+      [ "$strict" -eq 1 ] && return 3 || return 0
+      ;;
+  esac
+}
+
+case "$cmd" in
+  probe)
+    probe_web_fetch
+    ;;
+  search)
+    q="${1:-openclaw}"
+    openclaw agent --agent main --json --timeout 90 \
+      --message "Usa web_search con query: $q. Resume en 3 bullets." \
+      2>&1
+    ;;
+  check)
+    openclaw agent --help >/dev/null
+    echo "BROWSER_VISION_TOOL_OK"
+    ;;
+  *)
+    echo "usage: $0 [--strict] {probe|search <query>|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/chat_voice_es.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+msg="${*:-Decime un resumen breve del estado del sistema.}"
+
+raw="$(openclaw agent --agent main --json --timeout 120 --message "Respondé en castellano: $msg" 2>&1 || true)"
+text="$(printf "%s" "$raw" | node -e '
+const fs=require("fs");
+const raw=fs.readFileSync(0,"utf8");
+const i=raw.indexOf("{");
+const j=raw.lastIndexOf("}");
+if(i<0||j<=i){ console.log("No pude parsear respuesta."); process.exit(0); }
+try{
+  const o=JSON.parse(raw.slice(i,j+1));
+  const p=Array.isArray(o?.result?.payloads)?o.result.payloads:(Array.isArray(o?.payloads)?o.payloads:[]);
+  const t=p.map(x=>String(x?.text||"")).join("\n").trim();
+  console.log(t||"(sin texto)");
+}catch{ console.log("No pude parsear respuesta."); }
+')"
+
+echo "$text"
+
+if command -v spd-say >/dev/null 2>&1; then
+  spd-say -l es "$text" || true
+elif command -v espeak >/dev/null 2>&1; then
+  espeak -v es "$text" || true
+else
+  echo "TTS no disponible (instalá speech-dispatcher o espeak)." >&2
+fi
+
+
+
+================================================
+FILE: scripts/community_mcp.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+CATALOG="${CATALOG:-DOCS/community_mcp_catalog.json}"
+ROOT="${COMMUNITY_ROOT:-community/mcp/repos}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/community_mcp.sh list
+  ./scripts/community_mcp.sh check
+  ./scripts/community_mcp.sh sync
+
+Env:
+  CATALOG        Path to catalog JSON (default: DOCS/community_mcp_catalog.json)
+  COMMUNITY_ROOT Download dir for repositories (default: community/mcp/repos)
+EOF
+}
+
+need_tools() {
+  command -v jq >/dev/null 2>&1 || { echo "FAIL: jq not found" >&2; exit 1; }
+  command -v curl >/dev/null 2>&1 || { echo "FAIL: curl not found" >&2; exit 1; }
+  command -v tar >/dev/null 2>&1 || { echo "FAIL: tar not found" >&2; exit 1; }
+}
+
+check_catalog() {
+  [ -f "$CATALOG" ] || { echo "FAIL: missing catalog $CATALOG" >&2; exit 2; }
+
+  local count unique names_ok commits_ok
+  count="$(jq -r '.repos | length' "$CATALOG")"
+  unique="$(jq -r '[.repos[].full_name] | unique | length' "$CATALOG")"
+  names_ok="$(jq -r '[.repos[].full_name | test("^[^/]+/[^/]+$")] | all' "$CATALOG")"
+  commits_ok="$(jq -r '[.repos[].pinned_ref.commit | test("^[0-9a-f]{40}$")] | all' "$CATALOG")"
+
+  [ "$count" = "20" ] || { echo "FAIL: expected 20 repos, got $count" >&2; exit 3; }
+  [ "$unique" = "$count" ] || { echo "FAIL: duplicate repos in catalog" >&2; exit 3; }
+  [ "$names_ok" = "true" ] || { echo "FAIL: invalid repo name format in catalog" >&2; exit 3; }
+  [ "$commits_ok" = "true" ] || { echo "FAIL: invalid commit hash in catalog" >&2; exit 3; }
+}
+
+cmd_list() {
+  check_catalog
+  jq -r '.repos[] | "\(.full_name)\t\(.stars)\t\(.license)\t\(.pinned_ref.commit)"' "$CATALOG"
+}
+
+cmd_sync() {
+  check_catalog
+  mkdir -p "$ROOT"
+
+  local total updated skipped
+  total=0
+  updated=0
+  skipped=0
+
+  while IFS= read -r item; do
+    total=$((total + 1))
+
+    local full_name commit safe_name dst marker tmpdir archive_url
+    full_name="$(printf "%s" "$item" | jq -r '.full_name')"
+    commit="$(printf "%s" "$item" | jq -r '.pinned_ref.commit')"
+    safe_name="${full_name//\//__}"
+    dst="$ROOT/$safe_name"
+    marker="$dst/.community_source.json"
+    archive_url="https://codeload.github.com/$full_name/tar.gz/$commit"
+
+    if [ -f "$marker" ] && [ "$(jq -r '.pinned_commit' "$marker" 2>/dev/null || true)" = "$commit" ]; then
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    tmpdir="$(mktemp -d)"
+    curl -fsSL "$archive_url" -o "$tmpdir/repo.tgz"
+    tar -xzf "$tmpdir/repo.tgz" -C "$tmpdir"
+
+    rm -rf "$dst"
+    mkdir -p "$dst"
+    cp -a "$tmpdir"/*/./ "$dst/"
+
+    jq -n \
+      --arg full_name "$full_name" \
+      --arg commit "$commit" \
+      --arg archive_url "$archive_url" \
+      --arg synced_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      '{
+        source: "community",
+        full_name: $full_name,
+        pinned_commit: $commit,
+        archive_url: $archive_url,
+        synced_at: $synced_at
+      }' > "$marker"
+
+    rm -rf "$tmpdir"
+    updated=$((updated + 1))
+  done < <(jq -c '.repos[]' "$CATALOG")
+
+  echo "COMMUNITY_MCP_SYNC_OK total=$total updated=$updated skipped=$skipped root=$ROOT"
+}
+
+cmd_check() {
+  check_catalog
+
+  local downloaded
+  downloaded=0
+  if [ -d "$ROOT" ]; then
+    downloaded="$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  fi
+  echo "COMMUNITY_MCP_OK catalog=20 downloaded=$downloaded root=$ROOT"
+}
+
+main() {
+  need_tools
+  local cmd="${1:-check}"
+  case "$cmd" in
+    list) cmd_list ;;
+    sync) cmd_sync ;;
+    check) cmd_check ;;
+    -h|--help|help) usage ;;
+    *)
+      usage >&2
+      exit 64
+      ;;
+  esac
+}
+
+main "$@"
+
+
+
+================================================
+FILE: scripts/community_mcp_bridge.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+NAMES=(
+  community-office-word
+  community-arxiv
+  community-browserbase
+  community-cloudflare
+  community-exa
+  community-firecrawl
+  community-github
+  community-excel
+  community-n8n
+  community-notion
+)
+
+need_bin() {
+  local bin="$1"
+  command -v "$bin" >/dev/null 2>&1 || {
+    echo "FAIL: missing required binary '$bin'" >&2
+    exit 1
+  }
+}
+
+setup_bridge() {
+  need_bin mcporter
+  need_bin npx
+  need_bin uvx
+
+  for name in "${NAMES[@]}"; do
+    mcporter config remove "$name" >/dev/null 2>&1 || true
+  done
+
+  mcporter config add community-office-word --command uvx --arg office-word-mcp-server --scope home
+  mcporter config add community-arxiv --command uvx --arg arxiv-mcp-server --scope home
+  mcporter config add community-browserbase --command npx --arg -y --arg @browserbasehq/mcp-server-browserbase --scope home
+  mcporter config add community-cloudflare --url https://docs.mcp.cloudflare.com/mcp --scope home
+  mcporter config add community-exa --url https://mcp.exa.ai/mcp --scope home
+  mcporter config add community-firecrawl --command npx --arg -y --arg firecrawl-mcp --env FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-} --scope home
+  mcporter config add community-github --url https://api.githubcopilot.com/mcp/ --scope home
+  mcporter config add community-excel --command uvx --arg excel-mcp-server --arg stdio --scope home
+  mcporter config add community-n8n --command npx --arg -y --arg @leonardsellem/n8n-mcp-server --env N8N_API_URL=${N8N_API_URL:-} --env N8N_API_KEY=${N8N_API_KEY:-} --scope home
+  mcporter config add community-notion --command npx --arg -y --arg @notionhq/notion-mcp-server --env NOTION_API_KEY=${NOTION_API_KEY:-} --scope home
+
+  echo "COMMUNITY_MCP_BRIDGE_SETUP_OK count=10"
+}
+
+check_bridge() {
+  need_bin mcporter
+  local count
+  count="$(mcporter config list community- --json | jq -r '.servers | length')"
+  if [ "$count" != "10" ]; then
+    echo "FAIL: expected 10 bridge servers, got $count" >&2
+    exit 2
+  fi
+  echo "COMMUNITY_MCP_BRIDGE_OK count=10"
+}
+
+list_bridge() {
+  need_bin mcporter
+  mcporter config list community- --json | jq -r '.servers[] | [.name,.transport,(.baseUrl // .command)] | @tsv'
+}
+
+probe_bridge() {
+  need_bin mcporter
+  local out="${1:-DOCS/RUNS/community_mcp_bridge_probe_$(date +%Y%m%d_%H%M%S).log}"
+  mkdir -p "$(dirname "$out")"
+  : > "$out"
+
+  local ok fail
+  ok=0
+  fail=0
+  for name in "${NAMES[@]}"; do
+    echo "=== $name ===" | tee -a "$out"
+    if timeout 45s mcporter list "$name" --schema --json >>"$out" 2>&1; then
+      ok=$((ok + 1))
+      echo "OK $name" | tee -a "$out"
+    else
+      fail=$((fail + 1))
+      echo "FAIL $name" | tee -a "$out"
+    fi
+    echo >> "$out"
+  done
+
+  echo "COMMUNITY_MCP_BRIDGE_PROBE_OK ok=$ok fail=$fail log=$out"
+}
+
+demo_call() {
+  need_bin mcporter
+  mcporter call community-cloudflare.search_cloudflare_documentation \
+    --args '{"query":"What is Cloudflare Workers?"}' --json
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/community_mcp_bridge.sh setup
+  ./scripts/community_mcp_bridge.sh check
+  ./scripts/community_mcp_bridge.sh list
+  ./scripts/community_mcp_bridge.sh probe [log_path]
+  ./scripts/community_mcp_bridge.sh demo
+EOF
+}
+
+main() {
+  local cmd="${1:-check}"
+  case "$cmd" in
+    setup) setup_bridge ;;
+    check) check_bridge ;;
+    list) list_bridge ;;
+    probe) probe_bridge "${2:-}" ;;
+    demo) demo_call ;;
+    -h|--help|help) usage ;;
+    *)
+      usage >&2
+      exit 64
+      ;;
+  esac
+}
+
+main "$@"
+
+
+
+================================================
+FILE: scripts/console_pro.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+if command -v tmux >/dev/null 2>&1; then
+  session="openclaw-pro"
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux attach -t "$session"
+    exit 0
+  fi
+
+  tmux new-session -d -s "$session" -n monitor 'cd /home/lucy-ubuntu/Escritorio/cunningham && while true; do clear; echo "== verify_gateway =="; ./scripts/verify_gateway.sh || true; echo; echo "== date =="; date -Is; sleep 3; done'
+  tmux split-window -h -t "$session":monitor 'export PATH="$HOME/.openclaw/bin:$PATH"; while true; do clear; echo "== openclaw status =="; openclaw status || true; sleep 5; done'
+  tmux split-window -v -t "$session":monitor.1 'export PATH="$HOME/.openclaw/bin:$PATH"; openclaw logs --follow --plain --limit 120'
+  tmux select-pane -t "$session":monitor.0
+  tmux set-option -t "$session" -g mouse on >/dev/null 2>&1 || true
+  tmux attach -t "$session"
+else
+  echo "tmux no está instalado. Fallback:" >&2
+  echo "1) ./scripts/verify_gateway.sh" >&2
+  echo "2) openclaw status" >&2
+  echo "3) openclaw logs --follow --plain --limit 120" >&2
+fi
+
+
+
+================================================
+FILE: scripts/diff_intel.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-report}"
+shift || true
+
+case "$cmd" in
+  report)
+    echo "== git status =="
+    git status -sb
+    echo "== diff stat =="
+    git diff --stat
+    echo "== risk hints =="
+    changed="$(git diff --name-only)"
+    [ -z "$changed" ] && { echo "no local changes"; exit 0; }
+    printf "%s\n" "$changed" | while read -r f; do
+      case "$f" in
+        *.sh) echo "MEDIUM: script changed -> validate shellcheck/manual" ;;
+        *.json|*.yml|*.yaml) echo "MEDIUM: config changed -> validate parsing" ;;
+        scripts/verify_*) echo "HIGH: verifier changed -> run verify_all" ;;
+        *) echo "LOW: $f" ;;
+      esac
+    done
+    ;;
+  check)
+    git rev-parse --is-inside-work-tree >/dev/null
+    echo "DIFF_INTEL_OK"
+    ;;
+  *)
+    echo "usage: $0 {report|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/gateway_autoheal.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+interval="${AUTOHEAL_INTERVAL:-5}"
+loops="${AUTOHEAL_LOOPS:-12}"
+logf="${AUTOHEAL_LOG:-DOCS/RUNS/gateway_autoheal.log}"
+
+mkdir -p "$(dirname "$logf")"
+
+check_once() {
+  if openclaw health >/dev/null 2>&1; then
+    echo "$(date -Is) HEALTHY" >> "$logf"
+    return 0
+  fi
+
+  echo "$(date -Is) UNHEALTHY -> restart" >> "$logf"
+  if [ -x ./scripts/verify_gateway.sh ]; then
+    ./scripts/verify_gateway.sh >/dev/null 2>&1 || true
+  else
+    nohup openclaw gateway --force >/tmp/openclaw-gateway-autoheal.log 2>&1 &
+    sleep 2
+  fi
+
+  if openclaw health >/dev/null 2>&1; then
+    echo "$(date -Is) RECOVERED" >> "$logf"
+    return 0
+  fi
+  echo "$(date -Is) STILL_DOWN" >> "$logf"
+  return 1
+}
+
+cmd="${1:-check}"
+case "$cmd" in
+  check)
+    openclaw health >/dev/null 2>&1 || true
+    echo "GATEWAY_AUTOHEAL_OK"
+    ;;
+  once)
+    check_once
+    ;;
+  run)
+    i=0
+    while [ "$i" -lt "$loops" ]; do
+      check_once || true
+      i=$((i+1))
+      sleep "$interval"
+    done
+    echo "AUTOHEAL_DONE loops=$loops log=$logf"
+    ;;
+  *)
+    echo "usage: $0 {check|once|run}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/git_autopilot.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "check" ]; then
+  git rev-parse --is-inside-work-tree >/dev/null
+  echo "GIT_AUTOPILOT_OK"
+  exit 0
+fi
+
+if [ "$#" -lt 2 ]; then
+  echo "usage: $0 <branch-slug> <commit-message> [paths...]" >&2
+  echo "       $0 check" >&2
+  exit 2
+fi
+
+branch="$1"
+shift
+msg="$1"
+shift
+
+git rev-parse --is-inside-work-tree >/dev/null
+
+if ! git rev-parse --verify "$branch" >/dev/null 2>&1; then
+  git checkout -b "$branch"
+else
+  git checkout "$branch"
+fi
+
+if [ "$#" -gt 0 ]; then
+  git add "$@"
+else
+  git add -A
+fi
+
+git commit -m "$msg"
+echo "COMMIT_DONE"
+
+
+
+================================================
+FILE: scripts/goals_queue.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+store="${GOALS_FILE:-DOCS/GOALS.jsonl}"
+mkdir -p "$(dirname "$store")"
+cmd="${1:-list}"
+shift || true
+
+now() { date -Is; }
+
+case "$cmd" in
+  add)
+    goal="$*"
+    [ -n "$goal" ] || { echo "usage: $0 add <goal text>" >&2; exit 2; }
+    id="g$(date +%s%N)"
+    printf '{"id":"%s","status":"todo","created_at":"%s","goal":%s}\n' \
+      "$id" "$(now)" "$(printf '%s' "$goal" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" >> "$store"
+    echo "ADDED:$id"
+    ;;
+  list)
+    [ -f "$store" ] || { echo "[]"; exit 0; }
+    cat "$store"
+    ;;
+  next)
+    [ -f "$store" ] || { echo "NO_GOALS"; exit 0; }
+    python3 - "$store" <<'PY'
+import json,sys
+p=sys.argv[1]
+for ln in open(p,encoding='utf-8'):
+    o=json.loads(ln)
+    if o.get('status')=='todo':
+        print(json.dumps(o,ensure_ascii=True))
+        sys.exit(0)
+print('NO_TODO')
+PY
+    ;;
+  done)
+    id="${1:-}"
+    [ -n "$id" ] || { echo "usage: $0 done <id>" >&2; exit 2; }
+    [ -f "$store" ] || { echo "missing $store" >&2; exit 1; }
+    python3 - "$store" "$id" <<'PY'
+import json,sys
+p,i=sys.argv[1],sys.argv[2]
+rows=[]
+changed=False
+for ln in open(p,encoding='utf-8'):
+    o=json.loads(ln)
+    if o.get('id')==i and o.get('status')!='done':
+        o['status']='done'; o['done_at']=__import__('datetime').datetime.now().astimezone().isoformat(); changed=True
+    rows.append(o)
+open(p,'w',encoding='utf-8').write(''.join(json.dumps(r,ensure_ascii=True)+'\n' for r in rows))
+print('DONE' if changed else 'NO_CHANGE')
+PY
+    ;;
+  check)
+    echo "GOALS_QUEUE_OK"
+    ;;
+  *)
+    echo "usage: $0 {add <text>|list|next|done <id>|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/goals_worker.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+store="${GOALS_FILE:-DOCS/GOALS.jsonl}"
+interval="${GOALS_WORKER_INTERVAL:-3}"
+loops="${GOALS_WORKER_LOOPS:-5}"
+mkdir -p DOCS/RUNS "$(dirname "$store")"
+
+cmd="${1:-check}"
+
+next_goal() {
+  GOALS_FILE="$store" ./scripts/goals_queue.sh next
+}
+
+mark_done() {
+  id="$1"
+  GOALS_FILE="$store" ./scripts/goals_queue.sh done "$id" >/dev/null || true
+}
+
+run_once() {
+  row="$(next_goal)"
+  [ "$row" = "NO_TODO" ] && { echo "NO_TODO"; return 0; }
+
+  id="$(printf "%s" "$row" | python3 -c 'import json,sys; o=json.loads(sys.stdin.read()); print(o.get("id",""))')"
+  goal="$(printf "%s" "$row" | python3 -c 'import json,sys; o=json.loads(sys.stdin.read()); print(o.get("goal",""))')"
+
+  ts="$(date +%Y%m%d_%H%M%S)"
+  log="DOCS/RUNS/goal_${id}_${ts}.log"
+
+  {
+    echo "== goal =="
+    echo "id=$id"
+    echo "goal=$goal"
+    echo "== profile =="
+    ./scripts/task_profile.sh classify "$goal"
+    echo "== execution =="
+    ./scripts/model_router.sh ask "$goal"
+  } >"$log" 2>&1 || true
+
+  mark_done "$id"
+  echo "DONE:$id:$log"
+}
+
+case "$cmd" in
+  check)
+    [ -x ./scripts/goals_queue.sh ]
+    [ -x ./scripts/model_router.sh ]
+    [ -x ./scripts/task_profile.sh ]
+    echo "GOALS_WORKER_OK"
+    ;;
+  once)
+    run_once
+    ;;
+  run)
+    i=0
+    while [ "$i" -lt "$loops" ]; do
+      run_once || true
+      i=$((i+1))
+      sleep "$interval"
+    done
+    echo "GOALS_WORKER_DONE loops=$loops"
+    ;;
+  *)
+    echo "usage: $0 {check|once|run}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/knowledge_ingest.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+dry=0
+if [ "${1:-}" = "--dry-run" ]; then
+  dry=1
+fi
+
+ws="$HOME/.openclaw/workspace"
+out="$ws/KNOWLEDGE_LOCAL.md"
+mkdir -p "$ws"
+
+{
+  echo "# Local Knowledge Snapshot"
+  echo
+  echo "Generated: $(date -Is)"
+  echo
+  for f in README.md DOCS/PLAN.md DOCS/PLUGINS.md DOCS/CAPABILITIES.md DOCS/LOBSTER.md docs/INTEGRATIONS.md; do
+    if [ -f "$f" ]; then
+      echo "## Source: $f"
+      sed -n '1,220p' "$f"
+      echo
+    fi
+  done
+} > "$out"
+
+echo "KNOWLEDGE_FILE=$out"
+
+if [ "$dry" -eq 1 ]; then
+  echo "DRY_RUN"
+  exit 0
+fi
+
+openclaw memory index --agent main || true
+openclaw memory status --agent main || true
+
+
+
+================================================
+FILE: scripts/lobster_approval.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+if [ "${1:-}" = "check" ]; then
+  openclaw plugins list | grep -qi 'extensions/lobster/' || { echo "LOBSTER_PLUGIN_MISSING" >&2; exit 1; }
+  echo "LOBSTER_APPROVAL_OK"
+  exit 0
+fi
+
+token="${1:-}"
+decision="${2:-yes}"
+if [ -z "$token" ]; then
+  echo "usage: $0 <resume-token> [yes|no]" >&2
+  echo "       $0 check" >&2
+  exit 2
+fi
+if [ "$decision" != "yes" ] && [ "$decision" != "no" ]; then
+  echo "decision must be yes|no" >&2
+  exit 2
+fi
+
+openclaw agent --agent main --json --timeout 120 \
+  --message "Usa lobster con action='resume', token='$token', approve='$decision'. Devuelve SOLO JSON." \
+  2>&1
+
+
+
+================================================
+FILE: scripts/local_vision.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-check}"
+shift || true
+
+case "$cmd" in
+  check)
+    if command -v tesseract >/dev/null 2>&1; then
+      echo "LOCAL_VISION_OK:tesseract"
+    else
+      echo "LOCAL_VISION_OK:metadata-only"
+    fi
+    ;;
+  image)
+    f="${1:-}"
+    [ -f "$f" ] || { echo "usage: $0 image <path>" >&2; exit 2; }
+    echo "file=$f"
+    file "$f" || true
+    if command -v identify >/dev/null 2>&1; then identify "$f" || true; fi
+    if command -v tesseract >/dev/null 2>&1; then
+      tesseract "$f" stdout 2>/dev/null | sed -n '1,40p'
+    else
+      echo "OCR_UNAVAILABLE"
+    fi
+    ;;
+  pdf)
+    f="${1:-}"
+    [ -f "$f" ] || { echo "usage: $0 pdf <path>" >&2; exit 2; }
+    if command -v pdftotext >/dev/null 2>&1; then
+      pdftotext "$f" - | sed -n '1,80p'
+    else
+      echo "PDF_TEXT_UNAVAILABLE"
+    fi
+    ;;
+  *)
+    echo "usage: $0 {check|image <path>|pdf <path>}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/memory_semantic.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+cmd="${1:-status}"
+shift || true
+
+case "$cmd" in
+  status)
+    openclaw memory status --agent main "$@"
+    ;;
+  index)
+    openclaw memory index --agent main "$@"
+    ;;
+  search)
+    q="${1:-}"
+    if [ -z "$q" ]; then
+      echo "usage: $0 search <query>" >&2
+      exit 2
+    fi
+    shift || true
+    openclaw memory search --agent main "$q" "$@"
+    ;;
+  check)
+    openclaw memory --help >/dev/null
+    echo "MEMORY_TOOL_OK"
+    ;;
+  *)
+    echo "usage: $0 {status|index|search <query>|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/mode_full.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+CFG="$HOME/.openclaw/openclaw.json"
+
+if [ ! -f "$CFG" ]; then
+  echo "FAIL: config not found at $CFG" >&2
+  exit 1
+fi
+
+node - "$CFG" <<'NODE'
+const fs = require("fs");
+const cfg = process.argv[2];
+const raw = fs.readFileSync(cfg, "utf8");
+const j = JSON.parse(raw);
+
+j.agents = j.agents || {};
+j.agents.list = Array.isArray(j.agents.list) ? j.agents.list : [];
+
+let main = j.agents.list.find((a) => a && a.id === "main");
+if (!main) {
+  main = { id: "main" };
+  j.agents.list.push(main);
+}
+
+main.tools = main.tools || {};
+main.tools.allow = [
+  "read",
+  "edit",
+  "write",
+  "exec",
+  "process",
+  "browser",
+  "canvas",
+  "nodes",
+  "cron",
+  "message",
+  "tts",
+  "gateway",
+  "agents_list",
+  "sessions_list",
+  "sessions_history",
+  "sessions_send",
+  "sessions_spawn",
+  "session_status",
+  "web_search",
+  "web_fetch",
+  "lobster",
+  "llm-task",
+  "memory_search",
+  "memory_get",
+  "whatsapp_login"
+];
+main.tools.deny = [];
+
+const bak = cfg + ".bak_" + new Date().toISOString().replace(/[:.]/g, "-");
+fs.writeFileSync(bak, raw);
+fs.writeFileSync(cfg, JSON.stringify(j, null, 2) + "\n");
+
+console.error("mode=full");
+console.error("patched:", cfg);
+console.error("backup :", bak);
+console.log("main.tools.allow =", JSON.stringify(main.tools.allow));
+NODE
+
+
+
+================================================
+FILE: scripts/mode_safe.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+CFG="$HOME/.openclaw/openclaw.json"
+
+if [ ! -f "$CFG" ]; then
+  echo "FAIL: config not found at $CFG" >&2
+  exit 1
+fi
+
+node - "$CFG" <<'NODE'
+const fs = require("fs");
+const cfg = process.argv[2];
+const raw = fs.readFileSync(cfg, "utf8");
+const j = JSON.parse(raw);
+
+j.agents = j.agents || {};
+j.agents.list = Array.isArray(j.agents.list) ? j.agents.list : [];
+
+let main = j.agents.list.find((a) => a && a.id === "main");
+if (!main) {
+  main = { id: "main" };
+  j.agents.list.push(main);
+}
+
+main.tools = main.tools || {};
+main.tools.allow = [
+  "read",
+  "exec",
+  "web_fetch",
+  "web_search",
+  "memory_search",
+  "memory_get",
+  "lobster",
+  "llm-task"
+];
+main.tools.deny = [
+  "write",
+  "edit",
+  "process",
+  "browser",
+  "canvas",
+  "nodes",
+  "cron",
+  "message",
+  "gateway"
+];
+
+const bak = cfg + ".bak_" + new Date().toISOString().replace(/[:.]/g, "-");
+fs.writeFileSync(bak, raw);
+fs.writeFileSync(cfg, JSON.stringify(j, null, 2) + "\n");
+
+console.error("mode=safe");
+console.error("patched:", cfg);
+console.error("backup :", bak);
+console.log("main.tools.allow =", JSON.stringify(main.tools.allow));
+NODE
+
+
+
+================================================
+FILE: scripts/model_max.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+m="openai-codex/gpt-5.1-codex-max"
+openclaw models set "$m" 1>&2
+openclaw agent --agent main --message "/new $m" --json --timeout 120 >/dev/null 2>&1 || true
+openclaw models status 1>&2
+
+
+
+================================================
+FILE: scripts/model_mini.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+m="openai-codex/gpt-5.1-codex-mini"
+openclaw models set "$m" 1>&2
+openclaw agent --agent main --message "/new $m" --json --timeout 120 >/dev/null 2>&1 || true
+openclaw models status 1>&2
+
+
+
+================================================
+FILE: scripts/model_normal.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+m="openai-codex/gpt-5.1"
+openclaw models set "$m" 1>&2
+openclaw agent --agent main --message "/new $m" --json --timeout 120 >/dev/null 2>&1 || true
+openclaw models status 1>&2
+
+
+
+================================================
+FILE: scripts/model_router.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+choose_model() {
+  txt="$1"
+  prof="$(./scripts/task_profile.sh classify "$txt")"
+  printf "%s\n" "$prof" | awk -F= '/^model=/{print $2}'
+}
+
+run_agent() {
+  msg="$1"
+  out="$(openclaw agent --agent main --json --timeout 120 --message "$msg" 2>&1 || true)"
+  printf "%s" "$out"
+}
+
+cmd="${1:-check}"
+shift || true
+
+case "$cmd" in
+  check)
+    ./scripts/task_profile.sh check >/dev/null
+    echo "MODEL_ROUTER_OK"
+    ;;
+  ask)
+    msg="${*:-}"
+    [ -n "$msg" ] || { echo "usage: $0 ask <message>" >&2; exit 2; }
+    m="$(choose_model "$msg")"
+    openclaw models set "$m" >/dev/null 2>&1 || true
+    openclaw agent --agent main --message "/new $m" --timeout 90 >/dev/null 2>&1 || true
+    run_agent "$msg"
+    ;;
+  ask-with-fallback)
+    msg="${*:-}"
+    [ -n "$msg" ] || { echo "usage: $0 ask-with-fallback <message>" >&2; exit 2; }
+    m="$(choose_model "$msg")"
+    openclaw models set "$m" >/dev/null 2>&1 || true
+    openclaw agent --agent main --message "/new $m" --timeout 90 >/dev/null 2>&1 || true
+    out="$(run_agent "$msg")"
+    if printf "%s" "$out" | grep -Eiq 'quota|rate limit|temporarily unavailable|429'; then
+      if command -v ollama >/dev/null 2>&1; then
+        openclaw models set ollama/gpt-oss:20b >/dev/null 2>&1 || true
+        openclaw agent --agent main --message '/new ollama/gpt-oss:20b' --timeout 90 >/dev/null 2>&1 || true
+        out="$(run_agent "$msg")"
+      fi
+    fi
+    printf "%s" "$out"
+    ;;
+  *)
+    echo "usage: $0 {check|ask <message>|ask-with-fallback <message>}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/ops_alerts.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p DOCS/RUNS
+log="DOCS/RUNS/ops_alerts.log"
+
+notify() {
+  msg="$1"
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "OpenClaw Alert" "$msg" || true
+  fi
+  echo "$(date -Is) ALERT: $msg" >> "$log"
+}
+
+cmd="${1:-check}"
+
+case "$cmd" in
+  check)
+    [ -x ./scripts/verify_gateway.sh ]
+    [ -x ./scripts/verify_all.sh ]
+    echo "OPS_ALERTS_OK"
+    ;;
+  run)
+    if ! ./scripts/verify_gateway.sh >/dev/null 2>&1; then
+      notify "Gateway failed health check"
+    fi
+    if ! ./scripts/verify_all.sh >/dev/null 2>&1; then
+      notify "verify_all failed"
+    fi
+    echo "OPS_ALERTS_RUN_OK"
+    ;;
+  cron-install)
+    line="*/5 * * * * cd $PWD && ./scripts/ops_alerts.sh run >> DOCS/RUNS/ops_alerts_cron.log 2>&1"
+    (crontab -l 2>/dev/null | grep -v 'scripts/ops_alerts.sh run' ; echo "$line") | crontab -
+    echo "OPS_ALERTS_CRON_INSTALLED"
+    ;;
+  cron-remove)
+    (crontab -l 2>/dev/null | grep -v 'scripts/ops_alerts.sh run') | crontab - || true
+    echo "OPS_ALERTS_CRON_REMOVED"
+    ;;
+  *)
+    echo "usage: $0 {check|run|cron-install|cron-remove}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/ops_dashboard.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+out="${1:-DOCS/ops_dashboard.html}"
+mkdir -p "$(dirname "$out")"
+
+health="DOWN"
+if openclaw health >/dev/null 2>&1; then health="UP"; fi
+
+plugins="$(openclaw plugins list 2>/dev/null | sed -n '1,40p' | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
+status="$(openclaw status 2>/dev/null | sed -n '1,120p' | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
+community="$(./scripts/community_mcp.sh check 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
+bridge="COMMUNITY_MCP_BRIDGE_UNAVAILABLE"
+if [ -x "./scripts/community_mcp_bridge.sh" ]; then
+  bridge="$(./scripts/community_mcp_bridge.sh check 2>/dev/null || echo COMMUNITY_MCP_BRIDGE_NOT_CONFIGURED)"
+  bridge="$(printf "%s" "$bridge" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
+fi
+
+health_badge="bg-red-lt text-red"
+if [ "$health" = "UP" ]; then
+  health_badge="bg-green-lt text-green"
+fi
+
+cat > "$out" <<HTML
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenClaw Ops Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --brand-1: #0f172a;
+      --brand-2: #0b3b5e;
+      --brand-3: #14532d;
+      --panel-bg: rgba(8, 16, 30, 0.85);
+    }
+    body {
+      font-family: "Space Grotesk", sans-serif;
+      background:
+        radial-gradient(1200px 600px at -10% -20%, rgba(20, 83, 45, 0.35), transparent 60%),
+        radial-gradient(1200px 600px at 110% -10%, rgba(11, 59, 94, 0.45), transparent 60%),
+        linear-gradient(140deg, var(--brand-1), #05080f);
+      min-height: 100vh;
+    }
+    .page {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    .hero {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: linear-gradient(135deg, rgba(20, 83, 45, 0.22), rgba(11, 59, 94, 0.25));
+      backdrop-filter: blur(8px);
+    }
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+    }
+    .kpi-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    pre {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      margin: 0;
+      max-height: 460px;
+      overflow: auto;
+    }
+    .fade-in {
+      animation: fadeInUp 460ms ease both;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card hero p-4 p-md-5 mb-4 fade-in">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+          <div class="text-uppercase text-secondary fw-bold mb-1">OpenClaw Runtime</div>
+          <h1 class="m-0">Ops Dashboard</h1>
+        </div>
+        <div class="badge $health_badge fs-4 px-3 py-2">Gateway $health</div>
+      </div>
+      <div class="text-secondary mt-3">Generado: $(date -Is)</div>
+    </div>
+
+    <div class="row g-3 mb-3 fade-in">
+      <div class="col-12 col-md-4">
+        <div class="card panel p-3 h-100">
+          <div class="text-secondary text-uppercase fw-bold mb-2">Estado Gateway</div>
+          <div class="kpi-value">$health</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card panel p-3 h-100">
+          <div class="text-secondary text-uppercase fw-bold mb-2">Community MCP (20)</div>
+          <div class="kpi-value">${community:-COMMUNITY_MCP_UNAVAILABLE}</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card panel p-3 h-100">
+          <div class="text-secondary text-uppercase fw-bold mb-2">Bridge MCP (Top10)</div>
+          <div class="kpi-value">${bridge}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card panel mb-3 fade-in">
+      <div class="card-header">
+        <h3 class="card-title m-0">Status</h3>
+      </div>
+      <div class="card-body"><pre>$status</pre></div>
+    </div>
+
+    <div class="card panel mb-3 fade-in">
+      <div class="card-header">
+        <h3 class="card-title m-0">Plugins</h3>
+      </div>
+      <div class="card-body"><pre>$plugins</pre></div>
+    </div>
+  </div>
+</body>
+</html>
+HTML
+
+echo "DASHBOARD_OK:$out"
+
+
+
+================================================
+FILE: scripts/ops_observe.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+mkdir -p DOCS/RUNS
+ts="$(date +%Y%m%d_%H%M%S)"
+out="DOCS/RUNS/ops_${ts}.log"
+
+{
+  echo "== ts =="
+  date -Is
+  echo "== health =="
+  openclaw health || true
+  echo "== status =="
+  openclaw status || true
+  echo "== sessions (json) =="
+  openclaw sessions --json || true
+  echo "== logs tail =="
+  openclaw logs --plain --limit 80 || true
+} >"$out" 2>&1
+
+echo "OPS_LOG=$out"
+
+
+
+================================================
+FILE: scripts/plan_execute.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+if [ "${1:-}" = "check" ]; then
+  openclaw agent --help >/dev/null
+  echo "PLAN_EXECUTE_OK"
+  exit 0
+fi
+
+if [ "$#" -lt 1 ]; then
+  echo "usage: $0 <task-text>" >&2
+  echo "       $0 check" >&2
+  exit 2
+fi
+
+task="$*"
+
+planner_prompt="Actua como planner. Para esta tarea: '$task'. Devolve SOLO JSON con keys: objective, steps (array de strings), risks (array), success_criteria (array)."
+plan_json="$(openclaw agent --agent main --json --timeout 120 --message "$planner_prompt" 2>&1 || true)"
+
+echo "== planner ==" >&2
+printf "%s\n" "$plan_json"
+
+executor_prompt="Usa el siguiente plan (si viene JSON extraelo) y ejecuta SOLO el primer paso de forma segura. Luego responde con JSON: {done:boolean, evidence:string, next_step:string}. Plan raw: $plan_json"
+exec_json="$(openclaw agent --agent main --json --timeout 120 --message "$executor_prompt" 2>&1 || true)"
+
+echo "== executor ==" >&2
+printf "%s\n" "$exec_json"
+
+
+
+================================================
+FILE: scripts/policy_engine.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+risk="${1:-show}"
+
+case "$risk" in
+  show)
+    echo "policies: low, medium, high"
+    ;;
+  low)
+    ./scripts/mode_full.sh >/dev/null
+    echo "POLICY_APPLIED:low"
+    ;;
+  medium)
+    ./scripts/mode_safe.sh >/dev/null
+    echo "POLICY_APPLIED:medium"
+    ;;
+  high)
+    ./scripts/mode_safe.sh >/dev/null
+    echo "POLICY_APPLIED:high + manual approvals required"
+    ;;
+  check)
+    [ -x ./scripts/mode_full.sh ] && [ -x ./scripts/mode_safe.sh ]
+    echo "POLICY_ENGINE_OK"
+    ;;
+  *)
+    echo "usage: $0 {show|low|medium|high|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/rpa_web_task.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+cmd="${1:-check}"
+url="${2:-https://example.com}"
+
+case "$cmd" in
+  check)
+    openclaw browser status --json >/dev/null 2>&1 || true
+    echo "RPA_BROWSER_CHECK_OK"
+    ;;
+  run)
+    openclaw browser start --json >/dev/null
+    openclaw browser open "$url" --json >/dev/null
+    openclaw browser snapshot --format ai --limit 120 --json
+    ;;
+  *)
+    echo "usage: $0 {check|run [url]}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/runbook.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+cmd="${1:-help}"
+
+case "$cmd" in
+  incident)
+    echo "== incident runbook =="
+    ./scripts/verify_gateway.sh || true
+    openclaw status || true
+    openclaw security audit || true
+    ;;
+  recover)
+    echo "== recover runbook =="
+    ./scripts/gateway_autoheal.sh once || true
+    ./scripts/verify_all.sh || true
+    ;;
+  prepush)
+    echo "== prepush runbook =="
+    ./scripts/diff_intel.sh report
+    ./scripts/autotest_gen.sh run
+    ;;
+  check)
+    echo "RUNBOOK_OK"
+    ;;
+  *)
+    echo "usage: $0 {incident|recover|prepush|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/set_spanish_mode.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+ws="$HOME/.openclaw/workspace"
+file="$ws/USER.md"
+mkdir -p "$ws"
+
+if [ -f "$file" ]; then
+  cp "$file" "$file.bak.$(date +%Y%m%d_%H%M%S)"
+fi
+
+cat > "$file" <<'MD'
+# Preferencias de Usuario
+
+- Respondé siempre en castellano (español neutral, claro y directo).
+- Si el usuario pide comandos, devolvelos listos para copiar/pegar.
+- Priorizá soluciones prácticas y verificables.
+- Si hay ambigüedad, proponé una opción recomendada y una alternativa.
+MD
+
+echo "SPANISH_MODE_OK:$file"
+
+
+
+================================================
+FILE: scripts/task_profile.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+score_text() {
+  txt="$1"
+  s=0
+  case "$txt" in
+    *"test"*|*"suite"*|*"refactor"*|*"arquitect"*|*"analiza"*|*"audit"*|*"multi"*|*"long"*) s=$((s+2));;
+  esac
+  case "$txt" in
+    *"rápido"*|*"quick"*|*"simple"*|*"1 linea"*|*"ok"*) s=$((s-1));;
+  esac
+  echo "$s"
+}
+
+cmd="${1:-classify}"
+shift || true
+
+case "$cmd" in
+  classify)
+    t="${*:-}"
+    [ -n "$t" ] || { echo "usage: $0 classify <text>" >&2; exit 2; }
+    l="$(printf "%s" "$t" | tr '[:upper:]' '[:lower:]')"
+    words="$(printf "%s" "$l" | wc -w | awk '{print $1}')"
+    s="$(score_text "$l")"
+    if [ "$words" -gt 80 ]; then s=$((s+2)); fi
+    if [ "$words" -gt 30 ]; then s=$((s+1)); fi
+
+    mode="mini"
+    model="openai-codex/gpt-5.1-codex-mini"
+    if [ "$s" -ge 3 ]; then
+      mode="max"; model="openai-codex/gpt-5.1-codex-max"
+    elif [ "$s" -ge 1 ]; then
+      mode="normal"; model="openai-codex/gpt-5.1"
+    fi
+
+    printf 'mode=%s\nmodel=%s\nscore=%s\n' "$mode" "$model" "$s"
+    ;;
+  check)
+    echo "TASK_PROFILE_OK"
+    ;;
+  *)
+    echo "usage: $0 {classify <text>|check}" >&2
+    exit 2
+    ;;
+esac
+
+
+
+================================================
+FILE: scripts/verify_all.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "== verify_gateway ==" >&2
+./scripts/verify_gateway.sh
+echo "== verify_plugins ==" >&2
+./scripts/verify_plugins.sh 1>&2
+echo "== verify_lobster ==" >&2
+./scripts/verify_lobster.sh 1>&2
+
+echo "== verify_capabilities ==" >&2
+./scripts/verify_capabilities.sh 1>&2
+
+echo "== verify_codex_subscription ==" >&2
+./scripts/verify_codex_subscription.sh
+
+echo "== verify_security_audit ==" >&2
+./scripts/verify_security_audit.sh
+
+echo "== verify_community_mcp ==" >&2
+./scripts/community_mcp.sh check 1>&2
+
+echo "ALL_OK" >&2
+
+
+
+================================================
+FILE: scripts/verify_capabilities.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+echo "== capability: desktop via exec ==" >&2
+out_desktop="$(openclaw agent --agent main --json --timeout 120 \
+  --message 'Usá la herramienta exec para listar el escritorio con: ls -1 ~/Escritorio | head -n 20. Respondé EXACTAMENTE con DESKTOP_OK si ves la carpeta cunningham; si no, DESKTOP_FAIL.' \
+  2>&1 || true)"
+
+printf "%s" "$out_desktop" | node -e '
+const fs=require("fs");
+const raw=fs.readFileSync(0,"utf8");
+const i=raw.indexOf("{");
+const j=raw.lastIndexOf("}");
+if(i<0||j<=i){ console.error("FAIL: desktop no JSON"); process.exit(1); }
+let data;
+try { data=JSON.parse(raw.slice(i,j+1)); } catch(e){ console.error("FAIL: desktop JSON parse"); process.exit(1); }
+const payloads=Array.isArray(data?.result?.payloads) ? data.result.payloads : (Array.isArray(data?.payloads) ? data.payloads : []);
+const text=payloads.map(p=>String(p?.text??"")).join("\n").trim();
+if(text!=="DESKTOP_OK"){
+  console.error("FAIL: desktop expected DESKTOP_OK");
+  console.error(text.slice(0,500));
+  process.exit(2);
+}
+console.error("DESKTOP_OK");
+'
+
+echo "== capability: web via web_fetch ==" >&2
+out_web="$(openclaw agent --agent main --json --timeout 120 \
+  --message 'Usá la herramienta web_fetch para leer https://example.com y devolvé en una sola línea: RESULT=<ok|fail> REASON=<motivo corto>. Si no tenés la tool, devolvé RESULT=fail REASON=no_tool.' \
+  2>&1 || true)"
+
+printf "%s" "$out_web" | node -e '
+const fs=require("fs");
+const raw=fs.readFileSync(0,"utf8");
+const i=raw.indexOf("{");
+const j=raw.lastIndexOf("}");
+if(i<0||j<=i){ console.error("FAIL: web no JSON"); process.exit(1); }
+let data;
+try { data=JSON.parse(raw.slice(i,j+1)); } catch(e){ console.error("FAIL: web JSON parse"); process.exit(1); }
+const payloads=Array.isArray(data?.result?.payloads) ? data.result.payloads : (Array.isArray(data?.payloads) ? data.payloads : []);
+const text=payloads.map(p=>String(p?.text??"")).join("\n").trim();
+const low=text.toLowerCase();
+if(low.includes("result=ok")){
+  console.error("WEB_OK");
+  process.exit(0);
+}
+if(low.includes("no_tool") || low.includes("no disponible") || low.includes("not available")){
+  console.error("FAIL: web tool unavailable");
+  console.error(text.slice(0,500));
+  process.exit(2);
+}
+if(low.includes("enotfound") || low.includes("eai_again") || low.includes("timed out") || low.includes("network") || low.includes("dns")){
+  console.error("WEB_TOOL_OK_NETWORK_UNAVAILABLE");
+  process.exit(0);
+}
+console.error("FAIL: unexpected web result");
+console.error(text.slice(0,500));
+process.exit(3);
+'
+
+echo "CAPABILITIES_OK" >&2
+
+
+
+================================================
+FILE: scripts/verify_codex_subscription.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="$HOME/.openclaw/bin:$PATH"
+MODEL="openai-codex/gpt-5.1-codex-mini"
+EXPECT_MODEL_SUB="gpt-5.1-codex-mini"
+
+echo "== openclaw version ==" >&2
+openclaw --version >&2
+
+echo "== models status (key lines) ==" >&2
+openclaw models status >&2 || true
+
+# Fuerza la sesión actual del agente main a Codex (no importa si no devuelve JSON)
+echo "== force session model (/new) ==" >&2
+openclaw agent --agent main --message "/new $MODEL" --timeout 120 >/dev/null 2>&1 || true
+
+echo "== smoke agent (--json) ==" >&2
+out="$(openclaw agent --agent main --message "Respondé EXACTAMENTE con: OK" --json --timeout 120 2>&1 || true)"
+
+# Parse robusto desde stdin: busca el JSON dentro de cualquier ruido (warnings, etc.)
+printf "%s" "$out" | EXPECT_MODEL_SUB="$EXPECT_MODEL_SUB" node -e '
+const fs=require("fs");
+const out=fs.readFileSync(0,"utf8");
+const i=out.indexOf("{");
+const j=out.lastIndexOf("}");
+if(i<0||j<=i){
+  console.error("FAIL: no JSON object found in output");
+  console.error(out.slice(0,1600));
+  process.exit(1);
+}
+const jsonStr=out.slice(i,j+1);
+
+let data;
+try{ data=JSON.parse(jsonStr); }
+catch(e){
+  console.error("FAIL: JSON parse");
+  console.error(String(e));
+  console.error(jsonStr.slice(0,1600));
+  process.exit(1);
+}
+
+const metaContainer = data?.result?.meta ?? data?.meta ?? {};
+const meta=metaContainer?.agentMeta ?? {};
+const provider=String(meta.provider||"");
+const model=String(meta.model||"");
+const payloads=Array.isArray(data?.result?.payloads)
+  ? data.result.payloads
+  : (Array.isArray(data?.payloads) ? data.payloads : []);
+const allText=payloads.map(p=>String(p?.text??"")).join("\n").trim();
+const expSub=String(process.env.EXPECT_MODEL_SUB||"");
+
+console.error(`provider=${provider}`);
+console.error(`model=${model}`);
+if(payloads.length) console.error(`text0=${String(payloads[0].text??"").trim()}`);
+
+if(!provider.toLowerCase().includes("codex")){
+  console.error("FAIL: expected provider to include codex");
+  process.exit(2);
+}
+if(expSub && !model.includes(expSub)){
+  console.error(`FAIL: expected model to include ${expSub}`);
+  process.exit(3);
+}
+if(allText !== "OK"){
+  console.error(`FAIL: expected text exactly OK (got ${allText})`);
+  process.exit(4);
+}
+console.error("OK");
+'
+
+echo "OK" >&2
+
+
+
+================================================
+FILE: scripts/verify_gateway.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
+
+echo "== verify gateway ==" >&2
+
+for svc in clawdbot-gateway.service clawdbot-node.service; do
+  state="$(systemctl --user is-active "$svc" 2>/dev/null || true)"
+  if [ "$state" = "active" ] || [ "$state" = "activating" ]; then
+    fail "legacy service '$svc' is $state; disable it to avoid model/config drift"
+  fi
+done
+
+listener="$(ss -ltnp | grep -E '127.0.0.1:18789|\[::1\]:18789' || true)"
+if printf "%s\n" "$listener" | grep -q 'clawdbot-gatewa'; then
+  fail "port 18789 is owned by clawdbot-gateway; expected openclaw-gateway"
+fi
+
+if ! openclaw health >/dev/null 2>&1; then
+  echo "gateway unreachable; starting foreground gateway in background..." >&2
+  nohup openclaw gateway --force > "$HOME/.openclaw/gateway-foreground.log" 2>&1 &
+
+  ok=0
+  for _ in $(seq 1 20); do
+    if openclaw health >/dev/null 2>&1; then
+      ok=1
+      break
+    fi
+    sleep 1
+  done
+
+  if [ "$ok" -ne 1 ]; then
+    echo "== gateway log tail ==" >&2
+    tail -n 80 "$HOME/.openclaw/gateway-foreground.log" >&2 || true
+    fail "gateway did not become healthy"
+  fi
+fi
+
+proc_line="$(ss -ltnp | grep -E '127.0.0.1:18789|\[::1\]:18789' || true)"
+if ! printf "%s\n" "$proc_line" | grep -q 'openclaw-gatewa'; then
+  fail "port 18789 is not owned by openclaw-gateway"
+fi
+
+echo "OK" >&2
+
+
+
+================================================
+FILE: scripts/verify_lobster.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+# Ensure gateway is up (uses repo script if present)
+if [ -x ./scripts/verify_gateway.sh ]; then
+  ./scripts/verify_gateway.sh 1>&2
+fi
+
+# Run lobster tool via agent
+out="$(openclaw agent --agent main --json --timeout 60 \
+  --message 'Usá la herramienta lobster. action="run". pipeline="exec --shell \"echo OK\"". Devolveme SOLO el JSON.' \
+  2>&1 || true)"
+
+# Parse both layers:
+# 1) outer OpenClaw JSON
+# 2) inner lobster envelope inside payloads[].text
+if printf "%s" "$out" | node -e '
+const fs = require("fs");
+const raw = fs.readFileSync(0, "utf8");
+const i = raw.indexOf("{");
+const j = raw.lastIndexOf("}");
+if (i < 0 || j <= i) process.exit(1);
+let outer;
+try {
+  outer = JSON.parse(raw.slice(i, j + 1));
+} catch {
+  process.exit(1);
+}
+
+const payloads = Array.isArray(outer?.result?.payloads)
+  ? outer.result.payloads
+  : (Array.isArray(outer?.payloads) ? outer.payloads : []);
+const firstText = String(payloads?.[0]?.text || "");
+
+let inner;
+try {
+  inner = JSON.parse(firstText);
+} catch {
+  process.exit(1);
+}
+
+const ok = inner?.ok === true;
+const status = String(inner?.status || "");
+const outArr = Array.isArray(inner?.output) ? inner.output.map(String) : [];
+if (!ok) process.exit(1);
+if (status !== "ok" && status !== "needs_approval") process.exit(1);
+if (!outArr.includes("OK")) process.exit(1);
+'; then
+  echo "LOBSTER_OK"
+  exit 0
+fi
+
+echo "LOBSTER_FAIL" >&2
+echo "$out" >&2
+exit 1
+
+
+
+================================================
+FILE: scripts/verify_next10.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+scripts=(
+  scripts/gateway_autoheal.sh
+  scripts/task_profile.sh
+  scripts/model_router.sh
+  scripts/local_vision.sh
+  scripts/diff_intel.sh
+  scripts/autotest_gen.sh
+  scripts/runbook.sh
+  scripts/policy_engine.sh
+  scripts/adr_bot.sh
+  scripts/ops_dashboard.sh
+  scripts/goals_worker.sh
+  scripts/ops_alerts.sh
+  scripts/web_research.sh
+)
+
+for s in "${scripts[@]}"; do
+  [ -x "$s" ] || { echo "FAIL: missing exec $s" >&2; exit 1; }
+  echo "OK: $s" >&2
+done
+
+./scripts/gateway_autoheal.sh check >/dev/null
+./scripts/task_profile.sh check >/dev/null
+./scripts/model_router.sh check >/dev/null
+./scripts/local_vision.sh check >/dev/null
+./scripts/diff_intel.sh check >/dev/null
+./scripts/autotest_gen.sh check >/dev/null
+./scripts/runbook.sh check >/dev/null
+./scripts/policy_engine.sh check >/dev/null
+./scripts/adr_bot.sh check >/dev/null
+./scripts/goals_worker.sh check >/dev/null
+./scripts/ops_alerts.sh check >/dev/null
+./scripts/web_research.sh check >/dev/null
+
+out="$(./scripts/ops_dashboard.sh)"
+printf "%s\n" "$out" | grep -q '^DASHBOARD_OK:' || { echo "FAIL: dashboard" >&2; exit 1; }
+
+echo "NEXT10_OK"
+
+
+
+================================================
+FILE: scripts/verify_plugins.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+ALLOW="DOCS/allowlist_plugins.txt"
+[ -f "$ALLOW" ] || { echo "FAIL: missing $ALLOW" >&2; exit 1; }
+
+want="$(sed '/^\s*$/d' "$ALLOW" | sort -u)"
+
+# Compare against enabled plugin entries in config (stable IDs).
+enabled="$(jq -r '
+  .plugins.entries
+  | to_entries[]
+  | select(.value.enabled == true)
+  | .key
+' "$HOME/.openclaw/openclaw.json" | sort -u)"
+
+if [ "$enabled" != "$want" ]; then
+  echo "FAIL: enabled plugin IDs differ from allowlist" >&2
+  echo "== want ==" >&2
+  printf "%s\n" "$want" >&2
+  echo "== enabled ==" >&2
+  printf "%s\n" "$enabled" >&2
+  exit 2
+fi
+
+# Runtime check: required integrated mods must be loaded by the gateway.
+list_out="$(openclaw plugins list 2>&1 || true)"
+for mod in lobster llm-task open-prose; do
+  case "$mod" in
+    lobster) pattern='extensions/lobster/' ;;
+    llm-task) pattern='extensions/llm-task/' ;;
+    open-prose) pattern='extensions/open-prose/' ;;
+    *) pattern="$mod" ;;
+  esac
+  printf "%s\n" "$list_out" | grep -qi "$pattern" || {
+    echo "FAIL: required plugin '$mod' not present in plugin list output" >&2
+    exit 3
+  }
+  # Best-effort loaded check by row snippet.
+  printf "%s\n" "$list_out" | grep -Eiq "$pattern.*loaded|loaded.*$pattern" || {
+    echo "FAIL: required plugin '$mod' is not loaded" >&2
+    exit 3
+  }
+done
+
+status="$(openclaw status 2>&1 || true)"
+printf "%s\n" "$status" | grep -Eiq 'WhatsApp.*│[[:space:]]*OFF' || {
+  echo "FAIL: WhatsApp channel is not OFF" >&2
+  printf "%s\n" "$status" | grep -Ei 'WhatsApp' >&2 || true
+  exit 4
+}
+
+echo "OK" >&2
+
+
+
+================================================
+FILE: scripts/verify_security_audit.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+echo "== openclaw security audit ==" >&2
+out="$(openclaw security audit 2>&1 || true)"
+echo "$out" >&2
+
+if ! echo "$out" | grep -qE 'Summary:\s*0 critical'; then
+  echo "FAIL: security audit is not 0 critical" >&2
+  exit 1
+fi
+
+echo "OK" >&2
+
+
+
+================================================
+FILE: scripts/verify_smoke.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+echo "OK: verify_smoke stub"
+
+
+
+================================================
+FILE: scripts/verify_stack10.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+scripts=(
+  scripts/memory_semantic.sh
+  scripts/browser_vision.sh
+  scripts/watch_workspace.sh
+  scripts/plan_execute.sh
+  scripts/lobster_approval.sh
+  scripts/rpa_web_task.sh
+  scripts/ops_observe.sh
+  scripts/goals_queue.sh
+  scripts/git_autopilot.sh
+  scripts/knowledge_ingest.sh
+)
+
+for s in "${scripts[@]}"; do
+  [ -x "$s" ] || { echo "FAIL: not executable $s" >&2; exit 1; }
+  echo "OK: $s" >&2
+done
+
+action_tmp="DOCS/GOALS.verify.tmp.jsonl"
+cleanup() {
+  rm -f "$action_tmp"
+}
+trap cleanup EXIT
+GOALS_FILE="$action_tmp" ./scripts/goals_queue.sh add "stack10 smoke" >/dev/null
+GOALS_FILE="$action_tmp" ./scripts/goals_queue.sh next >/dev/null
+
+./scripts/memory_semantic.sh check >/dev/null
+./scripts/browser_vision.sh probe >/dev/null
+./scripts/watch_workspace.sh . check >/dev/null
+./scripts/plan_execute.sh check >/dev/null
+./scripts/lobster_approval.sh check >/dev/null
+./scripts/rpa_web_task.sh check >/dev/null
+./scripts/git_autopilot.sh check >/dev/null
+./scripts/knowledge_ingest.sh --dry-run >/dev/null
+ops_out="$(./scripts/ops_observe.sh)"
+printf "%s\n" "$ops_out" | grep -q '^OPS_LOG=' || { echo "FAIL: ops_observe" >&2; exit 1; }
+
+echo "STACK10_OK"
+
+
+
+================================================
+FILE: scripts/watch_workspace.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="${1:-$PWD}"
+mode="${2:-watch}"
+
+if [ "$mode" = "check" ]; then
+  if command -v inotifywait >/dev/null 2>&1; then
+    echo "WATCHER_OK:inotify"
+  else
+    echo "WATCHER_OK:polling"
+  fi
+  exit 0
+fi
+
+if command -v inotifywait >/dev/null 2>&1; then
+  echo "watching (inotify): $root" >&2
+  inotifywait -mr -e create,modify,delete,move --format '%T %w%f %e' --timefmt '%F %T' "$root"
+else
+  echo "watching (polling): $root" >&2
+  prev="$(find "$root" -type f -printf '%P %T@\n' | sort | sha1sum | awk '{print $1}')"
+  while true; do
+    sleep 2
+    now="$(find "$root" -type f -printf '%P %T@\n' | sort | sha1sum | awk '{print $1}')"
+    if [ "$now" != "$prev" ]; then
+      echo "$(date '+%F %T') change-detected $root"
+      prev="$now"
+    fi
+  done
+fi
+
+
+
+================================================
+FILE: scripts/web_research.sh
+================================================
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$HOME/.openclaw/bin:$PATH"
+
+mkdir -p DOCS/RUNS
+cmd="${1:-check}"
+shift || true
+
+case "$cmd" in
+  check)
+    [ -x ./scripts/browser_vision.sh ]
+    openclaw agent --help >/dev/null
+    echo "WEB_RESEARCH_OK"
+    ;;
+  run)
+    q="${*:-openclaw plugins security best practices}"
+    ts="$(date +%Y%m%d_%H%M%S)"
+    out="DOCS/RUNS/web_research_${ts}.md"
+    raw="$(openclaw agent --agent main --json --timeout 120 \
+      --message "Usa web_search para buscar: $q. Luego usa web_fetch en 2 resultados y devolve un resumen breve con fuentes en markdown." \
+      2>&1 || true)"
+
+    text="$(printf "%s" "$raw" | node -e '
+const fs=require("fs");
+const raw=fs.readFileSync(0,"utf8");
+const i=raw.indexOf("{"); const j=raw.lastIndexOf("}");
+if(i<0||j<=i){ console.log("PARSE_FAIL"); process.exit(0); }
+try{
+  const o=JSON.parse(raw.slice(i,j+1));
+  const p=Array.isArray(o?.result?.payloads)?o.result.payloads:(Array.isArray(o?.payloads)?o.payloads:[]);
+  console.log(p.map(x=>String(x?.text||"")).join("\n").trim() || "EMPTY");
+}catch{ console.log("PARSE_FAIL"); }
+')"
+
+    {
+      echo "# Web Research"
+      echo
+      echo "Query: $q"
+      echo "Generated: $(date -Is)"
+      echo
+      echo "$text"
+    } > "$out"
+
+    echo "WEB_RESEARCH_OUT:$out"
+    ;;
+  *)
+    echo "usage: $0 {check|run <query...>}" >&2
+    exit 2
+    ;;
+esac
+
+

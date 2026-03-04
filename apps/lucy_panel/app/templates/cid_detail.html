@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CID {{ cid }}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>Correlation ID: {{ cid }}</h1>
+    <p><a href="/">Back</a></p>
+    <p class="muted">Status: {{ status }}</p>
+
+    <section class="card">
+      <h2>ACK</h2>
+      {% if ack %}
+      <pre>{{ ack | tojson(indent=2) }}</pre>
+      {% else %}
+      <p class="muted">No cached ACK for this CID.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Inbox</h2>
+      <p class="muted">{{ inbox_file or "not found" }}</p>
+      {% if inbox %}<pre>{{ inbox | tojson(indent=2) }}</pre>{% else %}<p class="muted">pending/not found</p>{% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Outbox</h2>
+      <p class="muted">{{ outbox_file or "not found" }}</p>
+      {% if outbox %}<pre>{{ outbox | tojson(indent=2) }}</pre>{% else %}<p class="muted">pending/not found</p>{% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Deadletter</h2>
+      <p class="muted">{{ deadletter_file or "not found" }}</p>
+      {% if deadletter %}<pre>{{ deadletter | tojson(indent=2) }}</pre>{% else %}<p class="muted">none</p>{% endif %}
+    </section>
+  </main>
+</body>
+</html>

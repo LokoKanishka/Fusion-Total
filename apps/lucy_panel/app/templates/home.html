@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lucy Panel</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>Lucy UI Panel</h1>
+    <p class="muted">Gateway: {{ gateway_url }}</p>
+
+    {% if error %}
+      <section class="card error">
+        <h2>Error</h2>
+        <pre>{{ error }}</pre>
+      </section>
+    {% endif %}
+
+    <section class="card">
+      <h2>Send Request</h2>
+      <form method="post" action="/send" class="stack">
+        <label>Text
+          <textarea name="text" rows="4" required placeholder="Ask Lucy something..."></textarea>
+        </label>
+        <div class="row">
+          <label>Kind
+            <input type="text" name="kind" value="text" />
+          </label>
+          <label>Source
+            <input type="text" name="source" value="ui_panel" />
+          </label>
+        </div>
+        <button type="submit">Send to Gateway</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Find By Correlation ID</h2>
+      <form method="post" action="/cid_lookup" class="row">
+        <input type="text" name="cid" placeholder="cid_..." required />
+        <button type="submit">Open</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Smoke E2E</h2>
+      <form method="post" action="/ops/smoke" class="row">
+        <select name="which">
+          <option value="both">webhook_smoke + gateway_e2e</option>
+          <option value="webhook_smoke">webhook_smoke</option>
+          <option value="gateway_e2e">gateway_e2e</option>
+        </select>
+        <button type="submit">Run Smoke</button>
+      </form>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Inbox</h2>
+        <ul>{% for row in inbox %}<li><a href="/cid/{{ row.cid }}">{{ row.name }}</a></li>{% else %}<li class="muted">empty</li>{% endfor %}</ul>
+        <a href="/browse/inbox">Browse inbox</a>
+      </article>
+      <article class="card">
+        <h2>Outbox</h2>
+        <ul>{% for row in outbox %}<li><a href="/cid/{{ row.cid }}">{{ row.name }}</a></li>{% else %}<li class="muted">empty</li>{% endfor %}</ul>
+        <a href="/browse/outbox">Browse outbox</a>
+      </article>
+      <article class="card">
+        <h2>Deadletter</h2>
+        <ul>{% for row in deadletter %}<li><a href="/cid/{{ row.cid }}">{{ row.name }}</a></li>{% else %}<li class="muted">empty</li>{% endfor %}</ul>
+        <a href="/browse/deadletter">Browse deadletter</a>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
