@@ -123,6 +123,7 @@ Variables útiles (opcionales):
 - `scripts/host_audit_full.sh` — snapshot de host.
 - `scripts/n8n_observability_snapshot.sh` — snapshot de ejecuciones n8n + métricas de routing/MCP.
 - `scripts/n8n_route_probe.sh` — prueba rápida de ruteo por perfil (modelo + MCP) sobre webhooks reales.
+- `scripts/n8n_approval_probe.sh` — validación de aprobación humana obligatoria para acciones MCP write/sensitive.
 
 ## Memoria de ajustes STT
 - Workflow: `DOCS/STT_MEMORY_WORKFLOW.md`

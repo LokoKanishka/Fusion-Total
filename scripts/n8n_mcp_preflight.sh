@@ -10,6 +10,7 @@ EXPECT_CLOUD_MODEL="${EXPECT_CLOUD_MODEL:-openai-codex/gpt-5.1-codex-mini}"
 EXPECT_LOCAL_MODEL="${EXPECT_LOCAL_MODEL:-qwen2.5-coder:14b-instruct-q8_0}"
 ROUTING_CONFIG="${ROUTING_CONFIG:-config/n8n_flow_routing.json}"
 MCP_CONFIG="${MCP_CONFIG:-config/n8n_mcp_matrix.json}"
+MCP_ACTION_POLICY_CONFIG="${MCP_ACTION_POLICY_CONFIG:-config/mcp_action_policies.json}"
 
 need_bin() {
   local bin="$1"
@@ -45,6 +46,10 @@ if [[ ! -f "$MCP_CONFIG" ]]; then
   echo "PREFLIGHT_FAIL missing_mcp_config file=$MCP_CONFIG" >&2
   exit 8
 fi
+if [[ ! -f "$MCP_ACTION_POLICY_CONFIG" ]]; then
+  echo "PREFLIGHT_FAIL missing_mcp_action_policy_config file=$MCP_ACTION_POLICY_CONFIG" >&2
+  exit 9
+fi
 
 if ! rg -n "^DIRECT_CHAT_CLOUD_MODELS=${EXPECT_CLOUD_MODEL}$" "$DC_ENV_FILE" >/dev/null; then
   echo "PREFLIGHT_FAIL cloud_model_mismatch expected=$EXPECT_CLOUD_MODEL file=$DC_ENV_FILE" >&2
@@ -57,6 +62,7 @@ fi
 echo "PREFLIGHT_OK model_lock cloud=${EXPECT_CLOUD_MODEL} local=${EXPECT_LOCAL_MODEL}"
 echo "PREFLIGHT_OK routing_config file=${ROUTING_CONFIG}"
 echo "PREFLIGHT_OK mcp_config file=${MCP_CONFIG}"
+echo "PREFLIGHT_OK mcp_action_policy_config file=${MCP_ACTION_POLICY_CONFIG}"
 
 if command -v mcporter >/dev/null 2>&1; then
   if ./scripts/community_mcp_bridge.sh check >/dev/null; then

@@ -52,16 +52,45 @@ DEFAULT_MCP_PROFILE_MATRIX = {
         "notes": "research",
     },
     "ops_automation": {
-        "approval_mode": "always_for_sensitive",
+        "approval_mode": "always_for_writes",
         "servers": ["community-n8n", "community-github", "community-cloudflare"],
         "sensitive_tools": ["workflow_update", "workflow_delete", "repo_push", "deploy"],
         "notes": "automation",
     },
     "dev_build": {
-        "approval_mode": "always_for_sensitive",
+        "approval_mode": "always_for_writes",
         "servers": ["community-github", "community-browserbase", "community-n8n"],
         "sensitive_tools": ["repo_push", "workflow_publish", "browser_run_with_credentials"],
         "notes": "build",
+    },
+}
+
+DEFAULT_ACTION_POLICIES = {
+    "default_requirements": {
+        "read": "none",
+        "write": "human_approval",
+        "sensitive": "human_approval",
+    },
+    "action_rules": {
+        "workflow_list": "read",
+        "workflow_get": "read",
+        "workflow_run": "write",
+        "workflow_create": "write",
+        "workflow_update": "write",
+        "workflow_publish": "sensitive",
+        "workflow_delete": "sensitive",
+        "repo_read": "read",
+        "repo_search": "read",
+        "repo_push": "sensitive",
+        "deploy": "sensitive",
+        "notion_read": "read",
+        "notion_write": "write",
+        "credential_read": "sensitive",
+        "credential_write": "sensitive",
+    },
+    "keyword_fallback": {
+        "sensitive": ["delete", "destroy", "drop", "credential", "secret", "token", "billing", "publish", "deploy", "push"],
+        "write": ["create", "update", "write", "patch", "edit", "insert", "append", "run"],
     },
 }
 
@@ -72,6 +101,7 @@ const crypto = require('crypto');
 
 const ROUTING_PROFILES = __ROUTING_PROFILES__;
 const MCP_PROFILE_MATRIX = __MCP_PROFILE_MATRIX__;
+const ACTION_POLICIES = __ACTION_POLICIES__;
 const MODEL_ALLOWLIST = [
   'openai-codex/gpt-5.1-codex-mini',
   'qwen2.5-coder:14b-instruct-q8_0',
@@ -185,6 +215,79 @@ function resolveMcpPolicy(meta, route) {
   };
 }
 
+function normalizeActionList(meta) {
+  const raw = meta.mcp_actions || meta.actions;
+  if (Array.isArray(raw)) {
+    return raw.map((v) => cleanString(v).toLowerCase()).filter(Boolean);
+  }
+  if (typeof raw === 'string') {
+    return raw
+      .split(',')
+      .map((v) => cleanString(v).toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function classifyAction(action) {
+  const rules = isObject(ACTION_POLICIES.action_rules) ? ACTION_POLICIES.action_rules : {};
+  if (typeof rules[action] === 'string') {
+    const level = cleanString(rules[action]).toLowerCase();
+    if (['read', 'write', 'sensitive'].includes(level)) return level;
+  }
+  const fallback = isObject(ACTION_POLICIES.keyword_fallback) ? ACTION_POLICIES.keyword_fallback : {};
+  const sensitiveKeywords = Array.isArray(fallback.sensitive) ? fallback.sensitive : [];
+  const writeKeywords = Array.isArray(fallback.write) ? fallback.write : [];
+  for (const kw of sensitiveKeywords) {
+    const k = cleanString(kw).toLowerCase();
+    if (k && action.includes(k)) return 'sensitive';
+  }
+  for (const kw of writeKeywords) {
+    const k = cleanString(kw).toLowerCase();
+    if (k && action.includes(k)) return 'write';
+  }
+  return 'read';
+}
+
+function requiresHumanApproval(level, approvalMode) {
+  const mode = cleanString(approvalMode).toLowerCase();
+  if (level === 'read') return false;
+  if (mode === 'none') return false;
+  if (mode === 'always_for_sensitive') return level === 'sensitive';
+  if (mode === 'always_for_writes' || mode === 'manual_for_writes') return level === 'write' || level === 'sensitive';
+  if (mode === 'read_only') return level !== 'read';
+  return level === 'write' || level === 'sensitive';
+}
+
+function evaluateMcpApproval(meta, mcpPolicy) {
+  const actions = normalizeActionList(meta);
+  const approvalToken = cleanString(meta.approval_token || meta.human_approval_token);
+  const approvedBy = cleanString(meta.approved_by || meta.human_approved_by);
+  const actionEntries = actions.map((action) => {
+    const level = classifyAction(action);
+    return {
+      action,
+      level,
+      requires_approval: requiresHumanApproval(level, mcpPolicy.approval_mode),
+    };
+  });
+  let highestLevel = 'read';
+  if (actionEntries.some((x) => x.level === 'sensitive')) highestLevel = 'sensitive';
+  else if (actionEntries.some((x) => x.level === 'write')) highestLevel = 'write';
+  const requiresApproval = actionEntries.some((x) => x.requires_approval);
+  const hasApproval = Boolean(approvalToken && approvedBy);
+  const blocked = requiresApproval && !hasApproval;
+  return {
+    actions: actionEntries,
+    highest_level: highestLevel,
+    requires_human_approval: requiresApproval,
+    approved: !requiresApproval || hasApproval,
+    blocked,
+    approved_by: approvedBy,
+    approval_token_present: Boolean(approvalToken),
+  };
+}
+
 function appendGatewayMetric(ev) {
   try {
     const metricsDir = '/data/lucy_ipc/metrics';
@@ -204,10 +307,12 @@ const meta = isObject(body.meta) ? body.meta : {};
 const routeProfile = inferProfile(body, meta);
 const route = resolveRoute(routeProfile);
 const mcpPolicy = resolveMcpPolicy(meta, route);
+const mcpApproval = evaluateMcpApproval(meta, mcpPolicy);
 const enrichedMeta = {
   ...meta,
   routing: route,
   mcp: mcpPolicy,
+  mcp_approval: mcpApproval,
   ingress: {
     gateway: 'Lucy_Gateway_v1',
     received_ts: receivedTs
@@ -237,7 +342,8 @@ const envelope = {
   source_ip: sourceIp,
   status: 'accepted',
   routing: route,
-  mcp: mcpPolicy
+  mcp: mcpPolicy,
+  mcp_approval: mcpApproval
 };
 
 const errors = [];
@@ -246,6 +352,9 @@ if (typeof normalizedPayload.source !== 'string' || !normalizedPayload.source.tr
 if (typeof normalizedPayload.ts !== 'string' || Number.isNaN(Date.parse(normalizedPayload.ts))) errors.push('ts must be RFC3339 date-time');
 if (Object.prototype.hasOwnProperty.call(normalizedPayload, 'text') && typeof normalizedPayload.text !== 'string') errors.push('text must be string');
 if (Object.prototype.hasOwnProperty.call(normalizedPayload, 'meta') && !isObject(normalizedPayload.meta)) errors.push('meta must be object');
+if (mcpApproval.blocked) {
+  errors.push('human_approval_required_for_mcp_actions');
+}
 
 const inboxPath = path.join(inboxDir, `${correlationId}.json`);
 const deadletterPath = path.join(deadletterDir, `${correlationId}.json`);
@@ -302,6 +411,9 @@ appendGatewayMetric({
   fallback_model: route.fallback_model,
   backend: route.backend,
   mcp_profile: mcpPolicy.profile,
+  mcp_highest_action_level: mcpApproval.highest_level,
+  mcp_requires_human_approval: mcpApproval.requires_human_approval,
+  mcp_approval_blocked: mcpApproval.blocked,
   source: cleanString(normalizedPayload.source),
   kind: cleanString(normalizedPayload.kind)
 });
@@ -333,10 +445,12 @@ def load_json_or_fallback(path: Path, fallback: dict) -> dict:
 def build_code_js(repo_root: Path) -> str:
     routing = load_json_or_fallback(repo_root / "config" / "n8n_flow_routing.json", DEFAULT_ROUTING_PROFILES)
     mcp_matrix = load_json_or_fallback(repo_root / "config" / "n8n_mcp_matrix.json", DEFAULT_MCP_PROFILE_MATRIX)
+    action_policies = load_json_or_fallback(repo_root / "config" / "mcp_action_policies.json", DEFAULT_ACTION_POLICIES)
     return (
         CODE_JS_TEMPLATE
         .replace("__ROUTING_PROFILES__", json.dumps(routing, ensure_ascii=False, separators=(",", ":")))
         .replace("__MCP_PROFILE_MATRIX__", json.dumps(mcp_matrix, ensure_ascii=False, separators=(",", ":")))
+        .replace("__ACTION_POLICIES__", json.dumps(action_policies, ensure_ascii=False, separators=(",", ":")))
     )
 
 

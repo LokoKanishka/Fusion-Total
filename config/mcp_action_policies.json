@@ -1,0 +1,49 @@
+{
+  "default_requirements": {
+    "read": "none",
+    "write": "human_approval",
+    "sensitive": "human_approval"
+  },
+  "action_rules": {
+    "workflow_list": "read",
+    "workflow_get": "read",
+    "workflow_validate": "read",
+    "workflow_run": "write",
+    "workflow_create": "write",
+    "workflow_update": "write",
+    "workflow_publish": "sensitive",
+    "workflow_delete": "sensitive",
+    "repo_read": "read",
+    "repo_search": "read",
+    "repo_push": "sensitive",
+    "deploy": "sensitive",
+    "notion_read": "read",
+    "notion_write": "write",
+    "credential_read": "sensitive",
+    "credential_write": "sensitive"
+  },
+  "keyword_fallback": {
+    "sensitive": [
+      "delete",
+      "destroy",
+      "drop",
+      "credential",
+      "secret",
+      "token",
+      "billing",
+      "publish",
+      "deploy",
+      "push"
+    ],
+    "write": [
+      "create",
+      "update",
+      "write",
+      "patch",
+      "edit",
+      "insert",
+      "append",
+      "run"
+    ]
+  }
+}

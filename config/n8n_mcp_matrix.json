@@ -21,7 +21,7 @@
     "notes": "Investigacion + notas, sin operaciones destructivas"
   },
   "ops_automation": {
-    "approval_mode": "always_for_sensitive",
+    "approval_mode": "always_for_writes",
     "servers": [
       "community-n8n",
       "community-github",
@@ -36,7 +36,7 @@
     "notes": "Operacion de flujos y repos con aprobacion para acciones sensibles"
   },
   "dev_build": {
-    "approval_mode": "always_for_sensitive",
+    "approval_mode": "always_for_writes",
     "servers": [
       "community-github",
       "community-browserbase",

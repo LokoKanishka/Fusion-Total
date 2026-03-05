@@ -106,6 +106,9 @@ gw_status = Counter()
 gw_profile = Counter()
 gw_model = Counter()
 gw_mcp = Counter()
+gw_action_level = Counter()
+gw_approval_required = Counter()
+gw_approval_blocked = Counter()
 
 if metrics_path.exists():
     for line in metrics_path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -124,6 +127,9 @@ if metrics_path.exists():
         gw_profile[str(ev.get("route_profile") or "unknown")] += 1
         gw_model[str(ev.get("model") or "unknown")] += 1
         gw_mcp[str(ev.get("mcp_profile") or "unknown")] += 1
+        gw_action_level[str(ev.get("mcp_highest_action_level") or "unknown")] += 1
+        gw_approval_required[str(bool(ev.get("mcp_requires_human_approval"))).lower()] += 1
+        gw_approval_blocked[str(bool(ev.get("mcp_approval_blocked"))).lower()] += 1
 
 print(f"GATEWAY_EVENTS_TOTAL={gw_total}")
 for status, count in sorted(gw_status.items()):
@@ -134,4 +140,10 @@ for model, count in sorted(gw_model.items()):
     print(f"GATEWAY_MODEL name={model} count={count}")
 for mcp, count in sorted(gw_mcp.items()):
     print(f"GATEWAY_MCP_PROFILE name={mcp} count={count}")
+for level, count in sorted(gw_action_level.items()):
+    print(f"GATEWAY_MCP_ACTION_LEVEL name={level} count={count}")
+for key, count in sorted(gw_approval_required.items()):
+    print(f"GATEWAY_MCP_APPROVAL_REQUIRED value={key} count={count}")
+for key, count in sorted(gw_approval_blocked.items()):
+    print(f"GATEWAY_MCP_APPROVAL_BLOCKED value={key} count={count}")
 PY

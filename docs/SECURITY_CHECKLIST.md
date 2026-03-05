@@ -26,3 +26,4 @@ Antes de integrar:
 - En gateway n8n, mantener routing/modelos y matriz MCP bajo archivo controlado:
   - `config/n8n_flow_routing.json`
   - `config/n8n_mcp_matrix.json`
+  - `config/mcp_action_policies.json` (read/write/sensitive + aprobación humana)

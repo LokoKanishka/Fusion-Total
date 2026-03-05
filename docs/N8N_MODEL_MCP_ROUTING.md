@@ -8,6 +8,7 @@
 ## Configuración base
 - Routing de perfiles: `config/n8n_flow_routing.json`
 - Matriz MCP por perfil: `config/n8n_mcp_matrix.json`
+- Política por acción MCP: `config/mcp_action_policies.json`
 - Aplicación al workflow: `./scripts/n8n_patch_lucy_gateway_v1.sh`
 
 ## Perfiles de routing
@@ -31,6 +32,21 @@ El gateway agrega en `payload.meta`:
 También lo replica en el envelope top-level:
 - `routing`
 - `mcp`
+- `mcp_approval`
+
+## Aprobación humana por tipo de operación
+- El gateway clasifica acciones MCP en `read`, `write`, `sensitive`.
+- Entrada esperada para evaluación:
+  - `meta.mcp_actions` (lista o CSV)
+  - `meta.approved_by`
+  - `meta.approval_token`
+- Regla activa:
+  - `read`: no requiere aprobación.
+  - `write`/`sensitive`: aprobación humana obligatoria según `approval_mode`.
+- Si falta aprobación en una acción que la requiere:
+  - ACK `ok=false`
+  - `reason=human_approval_required_for_mcp_actions`
+  - evento a deadletter.
 
 ## Observabilidad
 - Métricas por evento en `ipc/metrics/lucy_gateway_events.jsonl`.
@@ -42,4 +58,5 @@ También lo replica en el envelope top-level:
 ## Validaciones rápidas
 - `./scripts/n8n_mcp_preflight.sh`
 - `./scripts/n8n_gateway_e2e.sh`
+- `./scripts/n8n_approval_probe.sh`
 - `./scripts/webhook_smoke.sh`
