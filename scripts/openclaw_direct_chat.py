@@ -10093,6 +10093,44 @@ class Handler(BaseHTTPRequestHandler):
             return self._call_ollama(payload)
         return self._call_gateway(payload)
 
+    def _n8n_panel_inline_reply(self, message: str) -> str | None:
+        text = str(message or "").strip()
+        if not text:
+            return None
+        t = text.lower()
+        asks_workflow_list = (
+            any(k in t for k in ("flujo", "flujos", "workflow", "workflows"))
+            and any(k in t for k in ("lista", "listar", "ver", "mostra", "mostrar", "cuáles", "cuales", "hay"))
+        )
+        asks_n8n_status = any(k in t for k in ("estado n8n", "status n8n", "salud n8n", "auth n8n", "conexion n8n", "conexión n8n"))
+        if not (asks_workflow_list or asks_n8n_status):
+            return None
+
+        status = self._n8n_status_payload()
+        lines = [
+            "Estado n8n API:",
+            f"- health_http: {status.get('health_http', 0)}",
+            f"- auth_ok: {bool(status.get('api_auth_ok', False))}",
+        ]
+        if asks_workflow_list and bool(status.get("api_auth_ok", False)):
+            try:
+                wf = self._n8n_workflows_payload(limit=40)
+                workflows = wf.get("workflows") if isinstance(wf, dict) else []
+                workflows = workflows if isinstance(workflows, list) else []
+                lines.append(f"- workflows: {len(workflows)}")
+                for item in workflows[:40]:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get("name", "")).strip() or "workflow"
+                    wid = str(item.get("id", "")).strip()
+                    active = bool(item.get("active", False))
+                    lines.append(f"  - {name} | {'activo' if active else 'inactivo'} | id:{wid}")
+            except Exception as e:
+                lines.append(f"- error_listado: {e}")
+        elif asks_workflow_list:
+            lines.append("- no pude listar workflows: auth n8n API no válida")
+        return "\n".join(lines)
+
     def do_POST(self):
         if self.path == "/api/reader/rescan":
             try:
@@ -10490,6 +10528,19 @@ class Handler(BaseHTTPRequestHandler):
             _mark_ui_session_active(session_id)
             allowed_tools = _extract_allowed_tools(payload)
             source_tag = str(payload.get("source", "")).strip().lower()
+            if source_tag == "ui_n8n_panel":
+                inline_n8n = self._n8n_panel_inline_reply(message)
+                if inline_n8n:
+                    self._json(
+                        200,
+                        {
+                            "reply": inline_n8n,
+                            "source": "n8n_panel_inline",
+                            "model": "n8n-api-client",
+                            "model_backend": "local",
+                        },
+                    )
+                    return
             voice_item_ts = 0.0
             if "voice_item_ts" in payload:
                 try:
