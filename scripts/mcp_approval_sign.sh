@@ -8,6 +8,8 @@ CORRELATION_ID=""
 LEVEL=""
 ACTIONS=""
 SCOPE=""
+TICKET=""
+JUSTIFICATION=""
 SECRET="${MCP_APPROVAL_HMAC_SECRET:-fusion-local-approval-hmac-secret}"
 
 while [[ $# -gt 0 ]]; do
@@ -19,6 +21,8 @@ while [[ $# -gt 0 ]]; do
     --level) LEVEL="${2:-}"; shift 2 ;;
     --actions) ACTIONS="${2:-}"; shift 2 ;;
     --scope) SCOPE="${2:-}"; shift 2 ;;
+    --ticket) TICKET="${2:-}"; shift 2 ;;
+    --justification) JUSTIFICATION="${2:-}"; shift 2 ;;
     --secret) SECRET="${2:-}"; shift 2 ;;
     -h|--help)
       cat <<'EOF'
@@ -31,6 +35,8 @@ Usage:
     --level <write|sensitive> \
     --actions <csv_actions> \
     --scope <csv_scope> \
+    [--ticket <change_ticket>] \
+    [--justification <text>] \
     [--secret <hmac_secret>]
 EOF
       exit 0
@@ -47,12 +53,12 @@ if [[ -z "$APPROVED_BY" || -z "$APPROVAL_TOKEN" || -z "$APPROVAL_TS" || -z "$COR
   exit 2
 fi
 
-python3 - <<'PY' "$APPROVED_BY" "$APPROVAL_TOKEN" "$APPROVAL_TS" "$CORRELATION_ID" "$LEVEL" "$ACTIONS" "$SCOPE" "$SECRET"
+python3 - <<'PY' "$APPROVED_BY" "$APPROVAL_TOKEN" "$APPROVAL_TS" "$CORRELATION_ID" "$LEVEL" "$ACTIONS" "$SCOPE" "$TICKET" "$JUSTIFICATION" "$SECRET"
 import hashlib
 import hmac
 import sys
 
-approved_by, approval_token, approval_ts, cid, level, actions_csv, scope_csv, secret = sys.argv[1:]
+approved_by, approval_token, approval_ts, cid, level, actions_csv, scope_csv, ticket, justification, secret = sys.argv[1:]
 actions = sorted([x.strip().lower() for x in actions_csv.split(",") if x.strip()])
 scope = sorted([x.strip().lower() for x in scope_csv.split(",") if x.strip()])
 canonical = "\n".join([
@@ -63,6 +69,8 @@ canonical = "\n".join([
     level.strip(),
     ",".join(actions),
     ",".join(scope),
+    ticket.strip(),
+    justification.strip(),
 ])
 sig = hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
 print(sig)

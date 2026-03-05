@@ -98,9 +98,10 @@ DEFAULT_ACTION_POLICIES = {
 DEFAULT_APPROVAL_POLICY = {
     "required_fields": {
         "write": ["approved_by", "approval_token", "approval_ts", "approval_scope"],
-        "sensitive": ["approved_by", "approval_token", "approval_ts", "approval_scope", "approval_justification"],
+        "sensitive": ["approved_by", "approval_token", "approval_ts", "approval_scope", "approval_justification", "approval_change_ticket"],
     },
     "token_pattern": r"^[A-Za-z0-9._:-]{8,128}$",
+    "ticket_pattern": r"^(CHG|INC|TASK)-[A-Za-z0-9_-]{3,64}$",
     "max_age_seconds": {
         "write": 1800,
         "sensitive": 900,
@@ -312,6 +313,17 @@ function isTokenValid(token) {
   }
 }
 
+function isTicketValid(ticket) {
+  const pattern = cleanString(APPROVAL_POLICY.ticket_pattern);
+  if (!pattern) return !!ticket;
+  try {
+    const re = new RegExp(pattern);
+    return re.test(ticket);
+  } catch (_) {
+    return !!ticket;
+  }
+}
+
 function requiredFieldsForLevel(level) {
   const req = isObject(APPROVAL_POLICY.required_fields) ? APPROVAL_POLICY.required_fields : {};
   const fields = req[level];
@@ -351,6 +363,8 @@ function signatureCanonicalString(params) {
     cleanString(params.level),
     actions.join(','),
     scope.join(','),
+    cleanString(params.approvalChangeTicket),
+    cleanString(params.approvalJustification),
   ].join('\n');
 }
 
@@ -406,6 +420,7 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
   const approvedBy = cleanString(meta.approved_by || meta.human_approved_by);
   const approvalTs = cleanString(meta.approval_ts || meta.human_approval_ts);
   const approvalJustification = cleanString(meta.approval_justification || meta.human_approval_justification);
+  const approvalChangeTicket = cleanString(meta.approval_change_ticket || meta.change_ticket || meta.ticket_id);
   const sigField = cleanString(hmacConfig().field) || 'approval_sig';
   const approvalSig = cleanString(meta[sigField] || meta.approval_sig || meta.human_approval_sig);
   const scope = normalizeScope(meta);
@@ -435,7 +450,9 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
       if (f === 'approval_ts' && !approvalTs) reasons.push('missing_approval_ts');
       if (f === 'approval_scope' && scope.length === 0) reasons.push('missing_approval_scope');
       if (f === 'approval_justification' && !approvalJustification) reasons.push('missing_approval_justification');
+      if (f === 'approval_change_ticket' && !approvalChangeTicket) reasons.push('missing_approval_change_ticket');
     }
+    if (approvalChangeTicket && !isTicketValid(approvalChangeTicket)) reasons.push('invalid_approval_change_ticket_format');
 
     const approvalMs = parseIsoToMs(approvalTs);
     const nowMs = parseIsoToMs(receivedTs);
@@ -464,6 +481,8 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
       level: highestLevel,
       actions: actionEntries.map((x) => x.action),
       scope,
+      approvalChangeTicket,
+      approvalJustification,
     });
     if (sigCheck.required && !sigCheck.ok) {
       reasons.push(sigCheck.reason || 'invalid_approval_sig');
@@ -483,6 +502,8 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
     approval_sig_present: Boolean(approvalSig),
     approval_ts: approvalTs,
     approval_scope: scope,
+    approval_change_ticket: approvalChangeTicket,
+    approval_change_ticket_present: Boolean(approvalChangeTicket),
     approval_justification_present: Boolean(approvalJustification),
     reasons,
   };
@@ -617,6 +638,7 @@ appendGatewayMetric({
   mcp_highest_action_level: mcpApproval.highest_level,
   mcp_requires_human_approval: mcpApproval.requires_human_approval,
   mcp_approval_blocked: mcpApproval.blocked,
+  mcp_approval_change_ticket_present: mcpApproval.approval_change_ticket_present,
   mcp_approval_reasons: Array.isArray(mcpApproval.reasons) ? mcpApproval.reasons : [],
   source: cleanString(normalizedPayload.source),
   kind: cleanString(normalizedPayload.kind)

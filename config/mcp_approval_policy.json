@@ -11,10 +11,12 @@
       "approval_token",
       "approval_ts",
       "approval_scope",
-      "approval_justification"
+      "approval_justification",
+      "approval_change_ticket"
     ]
   },
   "token_pattern": "^[A-Za-z0-9._:-]{8,128}$",
+  "ticket_pattern": "^(CHG|INC|TASK)-[A-Za-z0-9_-]{3,64}$",
   "max_age_seconds": {
     "write": 1800,
     "sensitive": 900

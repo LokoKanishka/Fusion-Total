@@ -44,12 +44,14 @@ También lo replica en el envelope top-level:
   - `meta.approval_ts`
   - `meta.approval_scope`
   - para `sensitive`: `meta.approval_justification`
+  - para `sensitive`: `meta.approval_change_ticket` (ej: `CHG-2026-002`)
   - para `write/sensitive`: `meta.approval_sig` (HMAC SHA256)
 - Regla activa:
   - `read`: no requiere aprobación.
   - `write`/`sensitive`: aprobación humana obligatoria según `approval_mode`.
 - Reglas adicionales:
   - token con formato válido (`token_pattern`).
+  - ticket con formato válido (`ticket_pattern`) para `sensitive`.
   - ventana temporal máxima (`max_age_seconds`) por nivel.
   - `approval_scope` debe cubrir las acciones solicitadas.
   - `approval_sig` debe verificar contra `MCP_APPROVAL_HMAC_SECRET`.
@@ -82,5 +84,6 @@ MCP_APPROVAL_HMAC_SECRET='fusion-local-approval-hmac-secret' \
   --cid cid_demo_001 \
   --level write \
   --actions workflow_update \
-  --scope workflow_update
+  --scope workflow_update \
+  --ticket CHG-2026-010
 ```
