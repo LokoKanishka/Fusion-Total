@@ -44,6 +44,7 @@ También lo replica en el envelope top-level:
   - `meta.approval_ts`
   - `meta.approval_scope`
   - para `sensitive`: `meta.approval_justification`
+  - para `write/sensitive`: `meta.approval_sig` (HMAC SHA256)
 - Regla activa:
   - `read`: no requiere aprobación.
   - `write`/`sensitive`: aprobación humana obligatoria según `approval_mode`.
@@ -51,6 +52,7 @@ También lo replica en el envelope top-level:
   - token con formato válido (`token_pattern`).
   - ventana temporal máxima (`max_age_seconds`) por nivel.
   - `approval_scope` debe cubrir las acciones solicitadas.
+  - `approval_sig` debe verificar contra `MCP_APPROVAL_HMAC_SECRET`.
 - Si falta aprobación en una acción que la requiere:
   - ACK `ok=false`
   - `reason=human_approval_required_for_mcp_actions`
@@ -68,3 +70,17 @@ También lo replica en el envelope top-level:
 - `./scripts/n8n_gateway_e2e.sh`
 - `./scripts/n8n_approval_probe.sh`
 - `./scripts/webhook_smoke.sh`
+
+## Firma de aprobación (HMAC)
+Generar `approval_sig` local:
+```bash
+MCP_APPROVAL_HMAC_SECRET='fusion-local-approval-hmac-secret' \
+./scripts/mcp_approval_sign.sh \
+  --approved-by diego \
+  --token tok_local_001 \
+  --ts 2026-03-05T04:00:00Z \
+  --cid cid_demo_001 \
+  --level write \
+  --actions workflow_update \
+  --scope workflow_update
+```

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -105,6 +106,13 @@ DEFAULT_APPROVAL_POLICY = {
         "sensitive": 900,
     },
     "require_scope_match": True,
+    "hmac": {
+        "enabled": True,
+        "algorithm": "sha256",
+        "secret_env_var": "MCP_APPROVAL_HMAC_SECRET",
+        "field": "approval_sig",
+        "require_for_levels": ["write", "sensitive"],
+    },
 }
 
 CODE_JS_TEMPLATE = r'''
@@ -116,6 +124,7 @@ const ROUTING_PROFILES = __ROUTING_PROFILES__;
 const MCP_PROFILE_MATRIX = __MCP_PROFILE_MATRIX__;
 const ACTION_POLICIES = __ACTION_POLICIES__;
 const APPROVAL_POLICY = __APPROVAL_POLICY__;
+const PATCH_HMAC_SECRET = __PATCH_HMAC_SECRET__;
 const MODEL_ALLOWLIST = [
   'openai-codex/gpt-5.1-codex-mini',
   'qwen2.5-coder:14b-instruct-q8_0',
@@ -319,12 +328,86 @@ function maxAgeSecondsForLevel(level) {
   return level === 'sensitive' ? 900 : 1800;
 }
 
-function evaluateMcpApproval(meta, mcpPolicy, receivedTs) {
+function hmacConfig() {
+  const conf = isObject(APPROVAL_POLICY.hmac) ? APPROVAL_POLICY.hmac : {};
+  const enabled = conf.enabled !== false;
+  const algorithm = cleanString(conf.algorithm).toLowerCase() || 'sha256';
+  const secretEnvVar = cleanString(conf.secret_env_var) || 'MCP_APPROVAL_HMAC_SECRET';
+  const field = cleanString(conf.field) || 'approval_sig';
+  const requireForLevels = Array.isArray(conf.require_for_levels)
+    ? conf.require_for_levels.map((v) => cleanString(v).toLowerCase()).filter(Boolean)
+    : ['write', 'sensitive'];
+  return { enabled, algorithm, secretEnvVar, field, requireForLevels };
+}
+
+function signatureCanonicalString(params) {
+  const actions = Array.isArray(params.actions) ? [...params.actions].sort() : [];
+  const scope = Array.isArray(params.scope) ? [...params.scope].sort() : [];
+  return [
+    cleanString(params.approvedBy),
+    cleanString(params.approvalToken),
+    cleanString(params.approvalTs),
+    cleanString(params.correlationId),
+    cleanString(params.level),
+    actions.join(','),
+    scope.join(','),
+  ].join('\n');
+}
+
+function getEnvVar(name) {
+  const key = cleanString(name);
+  if (!key) return '';
+  try {
+    if (typeof $env !== 'undefined' && $env && typeof $env === 'object') {
+      const v = $env[key];
+      if (v !== undefined && v !== null) return String(v);
+    }
+  } catch (_) {
+    // ignore
+  }
+  return '';
+}
+
+function verifyApprovalSignature(params) {
+  const conf = hmacConfig();
+  if (!conf.enabled || !conf.requireForLevels.includes(params.level)) {
+    return { required: false, ok: true, reason: '', provided: false };
+  }
+  const providedSig = cleanString(params.approvalSig || '');
+  if (!providedSig) {
+    return { required: true, ok: false, reason: 'missing_approval_sig', provided: false };
+  }
+  if (conf.algorithm !== 'sha256') {
+    return { required: true, ok: false, reason: 'unsupported_hmac_algorithm', provided: true };
+  }
+  const secret = cleanString(getEnvVar(conf.secretEnvVar) || PATCH_HMAC_SECRET);
+  if (!secret) {
+    return { required: true, ok: false, reason: 'missing_hmac_secret_server', provided: true };
+  }
+  const canonical = signatureCanonicalString(params);
+  const expectedSig = crypto.createHmac('sha256', secret).update(canonical, 'utf8').digest('hex');
+  const a = Buffer.from(providedSig, 'utf8');
+  const b = Buffer.from(expectedSig, 'utf8');
+  if (a.length !== b.length) {
+    return { required: true, ok: false, reason: 'invalid_approval_sig', provided: true };
+  }
+  const ok = crypto.timingSafeEqual(a, b);
+  return {
+    required: true,
+    ok,
+    reason: ok ? '' : 'invalid_approval_sig',
+    provided: true,
+  };
+}
+
+function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
   const actions = normalizeActionList(meta);
   const approvalToken = cleanString(meta.approval_token || meta.human_approval_token);
   const approvedBy = cleanString(meta.approved_by || meta.human_approved_by);
   const approvalTs = cleanString(meta.approval_ts || meta.human_approval_ts);
   const approvalJustification = cleanString(meta.approval_justification || meta.human_approval_justification);
+  const sigField = cleanString(hmacConfig().field) || 'approval_sig';
+  const approvalSig = cleanString(meta[sigField] || meta.approval_sig || meta.human_approval_sig);
   const scope = normalizeScope(meta);
   const actionEntries = actions.map((action) => {
     const level = classifyAction(action);
@@ -371,6 +454,20 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs) {
         if (!scope.includes(entry.action)) reasons.push(`scope_missing:${entry.action}`);
       }
     }
+
+    const sigCheck = verifyApprovalSignature({
+      approvalSig,
+      approvedBy,
+      approvalToken,
+      approvalTs,
+      correlationId,
+      level: highestLevel,
+      actions: actionEntries.map((x) => x.action),
+      scope,
+    });
+    if (sigCheck.required && !sigCheck.ok) {
+      reasons.push(sigCheck.reason || 'invalid_approval_sig');
+    }
   }
 
   if (requiresApproval && reasons.length > 0) hasApproval = false;
@@ -383,6 +480,7 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs) {
     blocked,
     approved_by: approvedBy,
     approval_token_present: Boolean(approvalToken),
+    approval_sig_present: Boolean(approvalSig),
     approval_ts: approvalTs,
     approval_scope: scope,
     approval_justification_present: Boolean(approvalJustification),
@@ -409,7 +507,7 @@ const meta = isObject(body.meta) ? body.meta : {};
 const routeProfile = inferProfile(body, meta);
 const route = resolveRoute(routeProfile);
 const mcpPolicy = resolveMcpPolicy(meta, route);
-const mcpApproval = evaluateMcpApproval(meta, mcpPolicy, receivedTs);
+const mcpApproval = evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId);
 const enrichedMeta = {
   ...meta,
   routing: route,
@@ -553,12 +651,14 @@ def build_code_js(repo_root: Path) -> str:
     mcp_matrix = load_json_or_fallback(repo_root / "config" / "n8n_mcp_matrix.json", DEFAULT_MCP_PROFILE_MATRIX)
     action_policies = load_json_or_fallback(repo_root / "config" / "mcp_action_policies.json", DEFAULT_ACTION_POLICIES)
     approval_policy = load_json_or_fallback(repo_root / "config" / "mcp_approval_policy.json", DEFAULT_APPROVAL_POLICY)
+    patch_hmac_secret = os.getenv("MCP_APPROVAL_HMAC_SECRET", "fusion-local-approval-hmac-secret")
     return (
         CODE_JS_TEMPLATE
         .replace("__ROUTING_PROFILES__", json.dumps(routing, ensure_ascii=False, separators=(",", ":")))
         .replace("__MCP_PROFILE_MATRIX__", json.dumps(mcp_matrix, ensure_ascii=False, separators=(",", ":")))
         .replace("__ACTION_POLICIES__", json.dumps(action_policies, ensure_ascii=False, separators=(",", ":")))
         .replace("__APPROVAL_POLICY__", json.dumps(approval_policy, ensure_ascii=False, separators=(",", ":")))
+        .replace("__PATCH_HMAC_SECRET__", json.dumps(patch_hmac_secret, ensure_ascii=False))
     )
 
 

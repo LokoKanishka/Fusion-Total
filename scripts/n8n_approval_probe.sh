@@ -4,18 +4,66 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:5678}"
+SIGN_BIN="${SIGN_BIN:-./scripts/mcp_approval_sign.sh}"
 mkdir -p _tmp/n8n_approval_probe
+
+auto_sign_if_needed() {
+  local meta_json="$1"
+  local cid="$2"
+  local level="$3"
+  if [[ "$meta_json" != *"__AUTO_SIG__"* ]]; then
+    printf '%s' "$meta_json"
+    return 0
+  fi
+  local parsed
+  parsed="$(python3 - <<'PY' "$meta_json"
+import json,sys
+m=json.loads(sys.argv[1])
+approved_by=str(m.get("approved_by","")).strip()
+token=str(m.get("approval_token","")).strip()
+ts=str(m.get("approval_ts","")).strip()
+actions=m.get("mcp_actions",[])
+scope=m.get("approval_scope",[])
+if isinstance(actions,str):
+    actions=[x.strip() for x in actions.split(",") if x.strip()]
+if isinstance(scope,str):
+    scope=[x.strip() for x in scope.split(",") if x.strip()]
+print("\t".join([
+    approved_by,
+    token,
+    ts,
+    ",".join(actions),
+    ",".join(scope),
+]))
+PY
+)"
+  local approved_by token ats actions_csv scope_csv
+  IFS=$'\t' read -r approved_by token ats actions_csv scope_csv <<<"$parsed"
+  local sig
+  sig="$("$SIGN_BIN" \
+    --approved-by "$approved_by" \
+    --token "$token" \
+    --ts "$ats" \
+    --cid "$cid" \
+    --level "$level" \
+    --actions "$actions_csv" \
+    --scope "$scope_csv")"
+  meta_json="${meta_json//__AUTO_SIG__/$sig}"
+  printf '%s' "$meta_json"
+}
 
 post_case() {
   local name="$1"
   local meta_json="$2"
   local expect_ok="$3"
   local expect_reason_substr="${4:-}"
+  local sig_level="${5:-write}"
   local cid="cid_approval_${name}_$(date +%s%N | cut -c1-16)"
   local ts
   ts="$(date --iso-8601=seconds)"
   meta_json="${meta_json//__TS__/$ts}"
   meta_json="${meta_json//__CID__/$cid}"
+  meta_json="$(auto_sign_if_needed "$meta_json" "$cid" "$sig_level")"
   local req="_tmp/n8n_approval_probe/${name}_request.json"
   local res="_tmp/n8n_approval_probe/${name}_response.json"
 
@@ -30,8 +78,14 @@ post_case() {
 }
 JSON
 
-  local code
-  code="$(curl -sS -o "$res" -w '%{http_code}' -X POST "${BASE_URL}/webhook/lucy-input" -H 'content-type: application/json' --data-binary "@$req")"
+  local code=""
+  for _ in $(seq 1 20); do
+    code="$(curl -sS -o "$res" -w '%{http_code}' -X POST "${BASE_URL}/webhook/lucy-input" -H 'content-type: application/json' --data-binary "@$req" || true)"
+    if [[ "$code" == "200" ]]; then
+      break
+    fi
+    sleep 0.5
+  done
   if [[ "$code" != "200" ]]; then
     echo "APPROVAL_PROBE_FAIL case=$name http=$code"
     return 1
@@ -65,8 +119,10 @@ post_case \
 # Caso write con aprobación: debe pasar.
 post_case \
   "write_with_approval" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_update"],"approved_by":"diego","approval_token":"tok_local_001","approval_ts":"__TS__","approval_scope":["workflow_update"]}' \
-  "true"
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_update"],"approved_by":"diego","approval_token":"tok_local_001","approval_ts":"__TS__","approval_scope":["workflow_update"],"approval_sig":"__AUTO_SIG__"}' \
+  "true" \
+  "" \
+  "write"
 
 # Caso read: debe pasar sin aprobación.
 post_case \
@@ -77,14 +133,33 @@ post_case \
 # Caso sensitive con token pero sin justificación: debe bloquear.
 post_case \
   "sensitive_without_justification" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_002","approval_ts":"__TS__","approval_scope":["workflow_delete"]}' \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_002","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_sig":"__AUTO_SIG__"}' \
   "false" \
-  "missing_approval_justification"
+  "missing_approval_justification" \
+  "sensitive"
 
 # Caso sensitive con justificación: debe pasar.
 post_case \
   "sensitive_with_justification" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_003","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado por operacion programada"}' \
-  "true"
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_003","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado por operacion programada","approval_sig":"__AUTO_SIG__"}' \
+  "true" \
+  "" \
+  "sensitive"
+
+# Caso write con scope incorrecto: bloqueado.
+post_case \
+  "write_scope_mismatch" \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_update"],"approved_by":"diego","approval_token":"tok_local_004","approval_ts":"__TS__","approval_scope":["workflow_list"],"approval_sig":"__AUTO_SIG__"}' \
+  "false" \
+  "scope_missing:workflow_update" \
+  "write"
+
+# Caso sensitive expirado: bloqueado por ventana temporal.
+post_case \
+  "sensitive_expired" \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_005","approval_ts":"2026-01-01T00:00:00Z","approval_scope":["workflow_delete"],"approval_justification":"Cambio de emergencia","approval_sig":"__AUTO_SIG__"}' \
+  "false" \
+  "approval_expired" \
+  "sensitive"
 
 echo "N8N_APPROVAL_PROBE=PASS"

@@ -62,6 +62,7 @@ services:
       - LUCY_IPC_INBOX=/data/lucy_ipc/inbox
       - LUCY_IPC_DEADLETTER=/data/lucy_ipc/deadletter
       - NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto
+      - MCP_APPROVAL_HMAC_SECRET=${MCP_APPROVAL_HMAC_SECRET:-fusion-local-approval-hmac-secret}
       # Seguridad: n8n corre como root dentro del container para acceder a archivos del host
       # (Se puede ajustar PUID/PGID si es necesario, pero host mode simplifica esto)
     volumes:

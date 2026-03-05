@@ -28,3 +28,4 @@ Antes de integrar:
   - `config/n8n_mcp_matrix.json`
   - `config/mcp_action_policies.json` (read/write/sensitive + aprobación humana)
   - `config/mcp_approval_policy.json` (campos requeridos + expiración + scope)
+  - secreto runtime `MCP_APPROVAL_HMAC_SECRET` cargado en n8n para validar `approval_sig`.

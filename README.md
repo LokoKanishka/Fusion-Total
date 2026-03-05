@@ -124,6 +124,7 @@ Variables útiles (opcionales):
 - `scripts/n8n_observability_snapshot.sh` — snapshot de ejecuciones n8n + métricas de routing/MCP.
 - `scripts/n8n_route_probe.sh` — prueba rápida de ruteo por perfil (modelo + MCP) sobre webhooks reales.
 - `scripts/n8n_approval_probe.sh` — validación de aprobación humana obligatoria para acciones MCP write/sensitive.
+- `scripts/mcp_approval_sign.sh` — firma HMAC para `approval_sig` en aprobaciones MCP.
 
 ## Memoria de ajustes STT
 - Workflow: `DOCS/STT_MEMORY_WORKFLOW.md`

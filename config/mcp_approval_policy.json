@@ -19,5 +19,15 @@
     "write": 1800,
     "sensitive": 900
   },
-  "require_scope_match": true
+  "require_scope_match": true,
+  "hmac": {
+    "enabled": true,
+    "algorithm": "sha256",
+    "secret_env_var": "MCP_APPROVAL_HMAC_SECRET",
+    "field": "approval_sig",
+    "require_for_levels": [
+      "write",
+      "sensitive"
+    ]
+  }
 }

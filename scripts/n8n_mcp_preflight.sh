@@ -35,6 +35,15 @@ if [[ "$http_code" != "200" ]]; then
 fi
 echo "PREFLIGHT_OK n8n_health url=$N8N_URL"
 
+if docker ps --format '{{.Names}}' | grep -Fxq "lucy_brain_n8n"; then
+  secret_len="$(docker exec lucy_brain_n8n sh -lc 'printf %s "${MCP_APPROVAL_HMAC_SECRET:-}" | wc -c' 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ -z "$secret_len" || "$secret_len" -le 0 ]]; then
+    echo "PREFLIGHT_FAIL missing_hmac_secret_in_n8n_env MCP_APPROVAL_HMAC_SECRET" >&2
+    exit 11
+  fi
+  echo "PREFLIGHT_OK hmac_secret_present_in_n8n_env len=${secret_len}"
+fi
+
 if [[ ! -f "$DC_ENV_FILE" ]]; then
   echo "PREFLIGHT_FAIL missing_dc_env file=$DC_ENV_FILE" >&2
   exit 3
