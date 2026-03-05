@@ -9,6 +9,7 @@
 - Routing de perfiles: `config/n8n_flow_routing.json`
 - Matriz MCP por perfil: `config/n8n_mcp_matrix.json`
 - Política por acción MCP: `config/mcp_action_policies.json`
+- Política de aprobación MCP: `config/mcp_approval_policy.json`
 - Aplicación al workflow: `./scripts/n8n_patch_lucy_gateway_v1.sh`
 
 ## Perfiles de routing
@@ -40,9 +41,16 @@ También lo replica en el envelope top-level:
   - `meta.mcp_actions` (lista o CSV)
   - `meta.approved_by`
   - `meta.approval_token`
+  - `meta.approval_ts`
+  - `meta.approval_scope`
+  - para `sensitive`: `meta.approval_justification`
 - Regla activa:
   - `read`: no requiere aprobación.
   - `write`/`sensitive`: aprobación humana obligatoria según `approval_mode`.
+- Reglas adicionales:
+  - token con formato válido (`token_pattern`).
+  - ventana temporal máxima (`max_age_seconds`) por nivel.
+  - `approval_scope` debe cubrir las acciones solicitadas.
 - Si falta aprobación en una acción que la requiere:
   - ACK `ok=false`
   - `reason=human_approval_required_for_mcp_actions`

@@ -1,0 +1,23 @@
+{
+  "required_fields": {
+    "write": [
+      "approved_by",
+      "approval_token",
+      "approval_ts",
+      "approval_scope"
+    ],
+    "sensitive": [
+      "approved_by",
+      "approval_token",
+      "approval_ts",
+      "approval_scope",
+      "approval_justification"
+    ]
+  },
+  "token_pattern": "^[A-Za-z0-9._:-]{8,128}$",
+  "max_age_seconds": {
+    "write": 1800,
+    "sensitive": 900
+  },
+  "require_scope_match": true
+}

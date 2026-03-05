@@ -14,6 +14,8 @@ post_case() {
   local cid="cid_approval_${name}_$(date +%s%N | cut -c1-16)"
   local ts
   ts="$(date --iso-8601=seconds)"
+  meta_json="${meta_json//__TS__/$ts}"
+  meta_json="${meta_json//__CID__/$cid}"
   local req="_tmp/n8n_approval_probe/${name}_request.json"
   local res="_tmp/n8n_approval_probe/${name}_response.json"
 
@@ -63,13 +65,26 @@ post_case \
 # Caso write con aprobación: debe pasar.
 post_case \
   "write_with_approval" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_update"],"approved_by":"diego","approval_token":"tok_local_001"}' \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_update"],"approved_by":"diego","approval_token":"tok_local_001","approval_ts":"__TS__","approval_scope":["workflow_update"]}' \
   "true"
 
 # Caso read: debe pasar sin aprobación.
 post_case \
   "read_without_approval" \
   '{"mcp_profile":"safe_readonly","mcp_actions":["workflow_list"]}' \
+  "true"
+
+# Caso sensitive con token pero sin justificación: debe bloquear.
+post_case \
+  "sensitive_without_justification" \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_002","approval_ts":"__TS__","approval_scope":["workflow_delete"]}' \
+  "false" \
+  "missing_approval_justification"
+
+# Caso sensitive con justificación: debe pasar.
+post_case \
+  "sensitive_with_justification" \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_003","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado por operacion programada"}' \
   "true"
 
 echo "N8N_APPROVAL_PROBE=PASS"

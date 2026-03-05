@@ -52,6 +52,7 @@ Repo: Fusion Total (este repositorio)
 Licencia: N/A (código local)
 Pin (tag/commit): configurado por archivos versionados `config/n8n_flow_routing.json` y `config/n8n_mcp_matrix.json`
 Qué aporta: ruteo por perfil de flujo (automation/coding/research/voice/default), selección de modelo permitida (`5.1 mini` / `14b`) e inyección de política MCP en envelope IPC, con aprobación humana obligatoria para operaciones MCP write/sensitive vía `config/mcp_action_policies.json`
+Qué refuerza: doble control de aprobación (`approval_token` + `approval_ts` + `approval_scope`, y justificación para `sensitive`) vía `config/mcp_approval_policy.json`
 Riesgo / superficie: decisiones de routing incorrectas pueden afectar costos/latencia; requiere mantener allowlist de modelos y perfiles MCP auditados
 Resultado de smoke test: `./scripts/n8n_route_probe.sh` + `./scripts/n8n_approval_probe.sh` + `./scripts/n8n_gateway_e2e.sh` + `./scripts/n8n_mcp_preflight.sh` => PASS
 Fecha: 2026-03-05

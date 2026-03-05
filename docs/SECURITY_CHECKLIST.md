@@ -27,3 +27,4 @@ Antes de integrar:
   - `config/n8n_flow_routing.json`
   - `config/n8n_mcp_matrix.json`
   - `config/mcp_action_policies.json` (read/write/sensitive + aprobación humana)
+  - `config/mcp_approval_policy.json` (campos requeridos + expiración + scope)

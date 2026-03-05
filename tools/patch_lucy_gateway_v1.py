@@ -94,6 +94,19 @@ DEFAULT_ACTION_POLICIES = {
     },
 }
 
+DEFAULT_APPROVAL_POLICY = {
+    "required_fields": {
+        "write": ["approved_by", "approval_token", "approval_ts", "approval_scope"],
+        "sensitive": ["approved_by", "approval_token", "approval_ts", "approval_scope", "approval_justification"],
+    },
+    "token_pattern": r"^[A-Za-z0-9._:-]{8,128}$",
+    "max_age_seconds": {
+        "write": 1800,
+        "sensitive": 900,
+    },
+    "require_scope_match": True,
+}
+
 CODE_JS_TEMPLATE = r'''
 const fs = require('fs');
 const path = require('path');
@@ -102,6 +115,7 @@ const crypto = require('crypto');
 const ROUTING_PROFILES = __ROUTING_PROFILES__;
 const MCP_PROFILE_MATRIX = __MCP_PROFILE_MATRIX__;
 const ACTION_POLICIES = __ACTION_POLICIES__;
+const APPROVAL_POLICY = __APPROVAL_POLICY__;
 const MODEL_ALLOWLIST = [
   'openai-codex/gpt-5.1-codex-mini',
   'qwen2.5-coder:14b-instruct-q8_0',
@@ -259,10 +273,59 @@ function requiresHumanApproval(level, approvalMode) {
   return level === 'write' || level === 'sensitive';
 }
 
-function evaluateMcpApproval(meta, mcpPolicy) {
+function normalizeScope(meta) {
+  const raw = meta.approval_scope;
+  if (Array.isArray(raw)) {
+    return raw.map((v) => cleanString(v).toLowerCase()).filter(Boolean);
+  }
+  if (typeof raw === 'string') {
+    return raw.split(',').map((v) => cleanString(v).toLowerCase()).filter(Boolean);
+  }
+  return [];
+}
+
+function parseIsoToMs(value) {
+  const v = cleanString(value);
+  if (!v) return null;
+  const ms = Date.parse(v);
+  if (Number.isNaN(ms)) return null;
+  return ms;
+}
+
+function isTokenValid(token) {
+  const pattern = cleanString(APPROVAL_POLICY.token_pattern);
+  if (!pattern) return !!token;
+  try {
+    const re = new RegExp(pattern);
+    return re.test(token);
+  } catch (_) {
+    return !!token;
+  }
+}
+
+function requiredFieldsForLevel(level) {
+  const req = isObject(APPROVAL_POLICY.required_fields) ? APPROVAL_POLICY.required_fields : {};
+  const fields = req[level];
+  if (Array.isArray(fields)) {
+    return fields.map((v) => cleanString(v)).filter(Boolean);
+  }
+  return ['approved_by', 'approval_token'];
+}
+
+function maxAgeSecondsForLevel(level) {
+  const maxAge = isObject(APPROVAL_POLICY.max_age_seconds) ? APPROVAL_POLICY.max_age_seconds : {};
+  const v = Number(maxAge[level]);
+  if (Number.isFinite(v) && v > 0) return v;
+  return level === 'sensitive' ? 900 : 1800;
+}
+
+function evaluateMcpApproval(meta, mcpPolicy, receivedTs) {
   const actions = normalizeActionList(meta);
   const approvalToken = cleanString(meta.approval_token || meta.human_approval_token);
   const approvedBy = cleanString(meta.approved_by || meta.human_approved_by);
+  const approvalTs = cleanString(meta.approval_ts || meta.human_approval_ts);
+  const approvalJustification = cleanString(meta.approval_justification || meta.human_approval_justification);
+  const scope = normalizeScope(meta);
   const actionEntries = actions.map((action) => {
     const level = classifyAction(action);
     return {
@@ -275,7 +338,42 @@ function evaluateMcpApproval(meta, mcpPolicy) {
   if (actionEntries.some((x) => x.level === 'sensitive')) highestLevel = 'sensitive';
   else if (actionEntries.some((x) => x.level === 'write')) highestLevel = 'write';
   const requiresApproval = actionEntries.some((x) => x.requires_approval);
-  const hasApproval = Boolean(approvalToken && approvedBy);
+  const reasons = [];
+  let hasApproval = true;
+
+  if (requiresApproval) {
+    hasApproval = Boolean(approvalToken && approvedBy);
+    if (!approvedBy) reasons.push('missing_approved_by');
+    if (!approvalToken) reasons.push('missing_approval_token');
+    if (approvalToken && !isTokenValid(approvalToken)) reasons.push('invalid_approval_token_format');
+
+    const requiredFields = requiredFieldsForLevel(highestLevel);
+    for (const f of requiredFields) {
+      if (f === 'approval_ts' && !approvalTs) reasons.push('missing_approval_ts');
+      if (f === 'approval_scope' && scope.length === 0) reasons.push('missing_approval_scope');
+      if (f === 'approval_justification' && !approvalJustification) reasons.push('missing_approval_justification');
+    }
+
+    const approvalMs = parseIsoToMs(approvalTs);
+    const nowMs = parseIsoToMs(receivedTs);
+    if (approvalTs && approvalMs === null) reasons.push('invalid_approval_ts');
+    if (approvalMs !== null && nowMs !== null) {
+      const ageSec = Math.floor((nowMs - approvalMs) / 1000);
+      const maxAgeSec = maxAgeSecondsForLevel(highestLevel);
+      if (ageSec < 0) reasons.push('approval_ts_in_future');
+      if (ageSec > maxAgeSec) reasons.push('approval_expired');
+    }
+
+    const requireScopeMatch = Boolean(APPROVAL_POLICY.require_scope_match);
+    if (requireScopeMatch && scope.length > 0) {
+      for (const entry of actionEntries) {
+        if (!entry.requires_approval) continue;
+        if (!scope.includes(entry.action)) reasons.push(`scope_missing:${entry.action}`);
+      }
+    }
+  }
+
+  if (requiresApproval && reasons.length > 0) hasApproval = false;
   const blocked = requiresApproval && !hasApproval;
   return {
     actions: actionEntries,
@@ -285,6 +383,10 @@ function evaluateMcpApproval(meta, mcpPolicy) {
     blocked,
     approved_by: approvedBy,
     approval_token_present: Boolean(approvalToken),
+    approval_ts: approvalTs,
+    approval_scope: scope,
+    approval_justification_present: Boolean(approvalJustification),
+    reasons,
   };
 }
 
@@ -307,7 +409,7 @@ const meta = isObject(body.meta) ? body.meta : {};
 const routeProfile = inferProfile(body, meta);
 const route = resolveRoute(routeProfile);
 const mcpPolicy = resolveMcpPolicy(meta, route);
-const mcpApproval = evaluateMcpApproval(meta, mcpPolicy);
+const mcpApproval = evaluateMcpApproval(meta, mcpPolicy, receivedTs);
 const enrichedMeta = {
   ...meta,
   routing: route,
@@ -353,7 +455,10 @@ if (typeof normalizedPayload.ts !== 'string' || Number.isNaN(Date.parse(normaliz
 if (Object.prototype.hasOwnProperty.call(normalizedPayload, 'text') && typeof normalizedPayload.text !== 'string') errors.push('text must be string');
 if (Object.prototype.hasOwnProperty.call(normalizedPayload, 'meta') && !isObject(normalizedPayload.meta)) errors.push('meta must be object');
 if (mcpApproval.blocked) {
-  errors.push('human_approval_required_for_mcp_actions');
+  const detail = Array.isArray(mcpApproval.reasons) && mcpApproval.reasons.length
+    ? `:${mcpApproval.reasons.join(',')}`
+    : '';
+  errors.push(`human_approval_required_for_mcp_actions${detail}`);
 }
 
 const inboxPath = path.join(inboxDir, `${correlationId}.json`);
@@ -414,6 +519,7 @@ appendGatewayMetric({
   mcp_highest_action_level: mcpApproval.highest_level,
   mcp_requires_human_approval: mcpApproval.requires_human_approval,
   mcp_approval_blocked: mcpApproval.blocked,
+  mcp_approval_reasons: Array.isArray(mcpApproval.reasons) ? mcpApproval.reasons : [],
   source: cleanString(normalizedPayload.source),
   kind: cleanString(normalizedPayload.kind)
 });
@@ -446,11 +552,13 @@ def build_code_js(repo_root: Path) -> str:
     routing = load_json_or_fallback(repo_root / "config" / "n8n_flow_routing.json", DEFAULT_ROUTING_PROFILES)
     mcp_matrix = load_json_or_fallback(repo_root / "config" / "n8n_mcp_matrix.json", DEFAULT_MCP_PROFILE_MATRIX)
     action_policies = load_json_or_fallback(repo_root / "config" / "mcp_action_policies.json", DEFAULT_ACTION_POLICIES)
+    approval_policy = load_json_or_fallback(repo_root / "config" / "mcp_approval_policy.json", DEFAULT_APPROVAL_POLICY)
     return (
         CODE_JS_TEMPLATE
         .replace("__ROUTING_PROFILES__", json.dumps(routing, ensure_ascii=False, separators=(",", ":")))
         .replace("__MCP_PROFILE_MATRIX__", json.dumps(mcp_matrix, ensure_ascii=False, separators=(",", ":")))
         .replace("__ACTION_POLICIES__", json.dumps(action_policies, ensure_ascii=False, separators=(",", ":")))
+        .replace("__APPROVAL_POLICY__", json.dumps(approval_policy, ensure_ascii=False, separators=(",", ":")))
     )
 
 

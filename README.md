@@ -140,6 +140,9 @@ Controles operativos:
 - `scripts/compose_infra.sh` ejecuta ese guard automáticamente en `up/down/start/stop/restart`.
 - `./scripts/n8n_mcp_preflight.sh` valida aislamiento + salud de n8n + lock de modelos + estado del bridge MCP.
 - `./scripts/n8n_observability_snapshot.sh` resume salud de ejecuciones n8n + distribución de routing/MCP en ventana temporal.
+- Política MCP por acciones y aprobación temporal:
+  - `config/mcp_action_policies.json`
+  - `config/mcp_approval_policy.json`
 
 ## Reverse proxy y trusted proxies (gateway)
 - El gateway está configurado como **local-only** (`gateway.bind: loopback`) y autenticado por token.
