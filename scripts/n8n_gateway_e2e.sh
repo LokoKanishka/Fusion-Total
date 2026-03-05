@@ -34,7 +34,7 @@ JSON
     continue
   fi
 
-  if python3 - <<'PY' "$RES"
+if python3 - <<'PY' "$RES"
 import json
 import time
 import subprocess
@@ -72,6 +72,27 @@ for _ in range(30):
 if env is None:
     raise SystemExit(1)
 if env.get('correlation_id') != cid:
+    raise SystemExit(1)
+route = {}
+mcp = {}
+if isinstance(env, dict):
+    route = env.get('routing') or {}
+    mcp = env.get('mcp') or {}
+    payload = env.get('payload')
+    if not route and isinstance(payload, dict):
+        route = (payload.get('meta') or {}).get('routing') or {}
+    if not mcp and isinstance(payload, dict):
+        mcp = (payload.get('meta') or {}).get('mcp') or {}
+allowed_models = {
+    'openai-codex/gpt-5.1-codex-mini',
+    'qwen2.5-coder:14b-instruct-q8_0',
+}
+model = str(route.get('model') or '')
+if model and model not in allowed_models:
+    raise SystemExit(1)
+if model and not str(route.get('profile') or '').strip():
+    raise SystemExit(1)
+if model and not str(mcp.get('profile') or '').strip():
     raise SystemExit(1)
 print(f'GATEWAY_E2E=PASS correlation_id={cid}')
 PY

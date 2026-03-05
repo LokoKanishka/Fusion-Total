@@ -1,0 +1,37 @@
+{
+  "default": {
+    "model": "openai-codex/gpt-5.1-codex-mini",
+    "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+    "backend": "cloud",
+    "mcp_profile": "safe_readonly",
+    "description": "Ruta general para eventos no clasificados"
+  },
+  "automation": {
+    "model": "openai-codex/gpt-5.1-codex-mini",
+    "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+    "backend": "cloud",
+    "mcp_profile": "ops_automation",
+    "description": "Flujos de trabajo n8n y orquestacion"
+  },
+  "coding": {
+    "model": "qwen2.5-coder:14b-instruct-q8_0",
+    "fallback_model": "openai-codex/gpt-5.1-codex-mini",
+    "backend": "local",
+    "mcp_profile": "dev_build",
+    "description": "Generacion, debug y ajuste de codigo"
+  },
+  "research": {
+    "model": "openai-codex/gpt-5.1-codex-mini",
+    "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+    "backend": "cloud",
+    "mcp_profile": "research_readonly",
+    "description": "Busqueda y analisis con fuentes externas"
+  },
+  "voice": {
+    "model": "openai-codex/gpt-5.1-codex-mini",
+    "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+    "backend": "cloud",
+    "mcp_profile": "safe_readonly",
+    "description": "Eventos de voz priorizando latencia y estabilidad"
+  }
+}

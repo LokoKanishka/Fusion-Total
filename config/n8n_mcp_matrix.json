@@ -1,0 +1,52 @@
+{
+  "safe_readonly": {
+    "approval_mode": "manual_for_writes",
+    "servers": [
+      "community-cloudflare",
+      "community-exa",
+      "community-arxiv"
+    ],
+    "sensitive_tools": [],
+    "notes": "Solo lectura y consultas externas de bajo riesgo"
+  },
+  "research_readonly": {
+    "approval_mode": "manual_for_writes",
+    "servers": [
+      "community-cloudflare",
+      "community-exa",
+      "community-arxiv",
+      "community-notion"
+    ],
+    "sensitive_tools": [],
+    "notes": "Investigacion + notas, sin operaciones destructivas"
+  },
+  "ops_automation": {
+    "approval_mode": "always_for_sensitive",
+    "servers": [
+      "community-n8n",
+      "community-github",
+      "community-cloudflare"
+    ],
+    "sensitive_tools": [
+      "workflow_update",
+      "workflow_delete",
+      "repo_push",
+      "deploy"
+    ],
+    "notes": "Operacion de flujos y repos con aprobacion para acciones sensibles"
+  },
+  "dev_build": {
+    "approval_mode": "always_for_sensitive",
+    "servers": [
+      "community-github",
+      "community-browserbase",
+      "community-n8n"
+    ],
+    "sensitive_tools": [
+      "repo_push",
+      "workflow_publish",
+      "browser_run_with_credentials"
+    ],
+    "notes": "Construccion tecnica con guardrails de cambios"
+  }
+}

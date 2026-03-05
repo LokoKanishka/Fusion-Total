@@ -16,6 +16,16 @@ if [ -x "./scripts/community_mcp_bridge.sh" ]; then
   bridge="$(./scripts/community_mcp_bridge.sh check 2>/dev/null || echo COMMUNITY_MCP_BRIDGE_NOT_CONFIGURED)"
   bridge="$(printf "%s" "$bridge" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
 fi
+n8n_health_code="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5678/healthz 2>/dev/null || true)"
+n8n_health="DOWN"
+if [ "$n8n_health_code" = "200" ]; then
+  n8n_health="UP"
+fi
+n8n_obs="N8N_OBSERVABILITY_UNAVAILABLE"
+if [ -x "./scripts/n8n_observability_snapshot.sh" ]; then
+  n8n_obs="$(WINDOW_H=24 ./scripts/n8n_observability_snapshot.sh 2>/dev/null || echo N8N_OBSERVABILITY_FAILED)"
+fi
+n8n_obs="$(printf "%s" "$n8n_obs" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
 
 health_badge="bg-red-lt text-red"
 if [ "$health" = "UP" ]; then
@@ -118,6 +128,12 @@ cat > "$out" <<HTML
           <div class="kpi-value">${bridge}</div>
         </div>
       </div>
+      <div class="col-12 col-md-4">
+        <div class="card panel p-3 h-100">
+          <div class="text-secondary text-uppercase fw-bold mb-2">n8n (5678)</div>
+          <div class="kpi-value">${n8n_health}</div>
+        </div>
+      </div>
     </div>
 
     <div class="card panel mb-3 fade-in">
@@ -132,6 +148,13 @@ cat > "$out" <<HTML
         <h3 class="card-title m-0">Plugins</h3>
       </div>
       <div class="card-body"><pre>$plugins</pre></div>
+    </div>
+
+    <div class="card panel mb-3 fade-in">
+      <div class="card-header">
+        <h3 class="card-title m-0">n8n Observability</h3>
+      </div>
+      <div class="card-body"><pre>${n8n_obs}</pre></div>
     </div>
   </div>
 </body>

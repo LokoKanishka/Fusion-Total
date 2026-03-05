@@ -110,6 +110,7 @@ Variables útiles (opcionales):
 - `DOCS/DC_READER_GUARDRAILS_Y_BITACORA.md` — indice tecnico + reglas de no romper + bitacora viva de reader/voz/UI.
 - `docs/SECURITY_CHECKLIST.md` — checklist de seguridad.
 - `docs/INTEGRATIONS.md` — integraciones/pinning.
+- `docs/N8N_MODEL_MCP_ROUTING.md` — ruteo de modelo y matriz MCP para flujos n8n.
 - `DOCS/UX_SPANISH_VOICE.md` — guía de UX de voz.
 - `docs/LUCY_UI_PANEL.md` — panel funcional del gateway.
 
@@ -120,6 +121,8 @@ Variables útiles (opcionales):
 - `scripts/model_router.sh` — selección y fallback de modelo.
 - `scripts/verify_all.sh` — verificación general legacy.
 - `scripts/host_audit_full.sh` — snapshot de host.
+- `scripts/n8n_observability_snapshot.sh` — snapshot de ejecuciones n8n + métricas de routing/MCP.
+- `scripts/n8n_route_probe.sh` — prueba rápida de ruteo por perfil (modelo + MCP) sobre webhooks reales.
 
 ## Memoria de ajustes STT
 - Workflow: `DOCS/STT_MEMORY_WORKFLOW.md`
@@ -135,6 +138,7 @@ Controles operativos:
 - `./scripts/fusion_isolation_guard.sh check` valida aislamiento estricto del proyecto (sin mezclar puertos/n8n con otros stacks).
 - `scripts/compose_infra.sh` ejecuta ese guard automáticamente en `up/down/start/stop/restart`.
 - `./scripts/n8n_mcp_preflight.sh` valida aislamiento + salud de n8n + lock de modelos + estado del bridge MCP.
+- `./scripts/n8n_observability_snapshot.sh` resume salud de ejecuciones n8n + distribución de routing/MCP en ventana temporal.
 
 ## Reverse proxy y trusted proxies (gateway)
 - El gateway está configurado como **local-only** (`gateway.bind: loopback`) y autenticado por token.

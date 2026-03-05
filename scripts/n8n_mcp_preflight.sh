@@ -8,6 +8,8 @@ N8N_URL="${N8N_URL:-http://127.0.0.1:5678/healthz}"
 DC_ENV_FILE="${DC_ENV_FILE:-runtime/direct_chat.env}"
 EXPECT_CLOUD_MODEL="${EXPECT_CLOUD_MODEL:-openai-codex/gpt-5.1-codex-mini}"
 EXPECT_LOCAL_MODEL="${EXPECT_LOCAL_MODEL:-qwen2.5-coder:14b-instruct-q8_0}"
+ROUTING_CONFIG="${ROUTING_CONFIG:-config/n8n_flow_routing.json}"
+MCP_CONFIG="${MCP_CONFIG:-config/n8n_mcp_matrix.json}"
 
 need_bin() {
   local bin="$1"
@@ -35,6 +37,14 @@ if [[ ! -f "$DC_ENV_FILE" ]]; then
   echo "PREFLIGHT_FAIL missing_dc_env file=$DC_ENV_FILE" >&2
   exit 3
 fi
+if [[ ! -f "$ROUTING_CONFIG" ]]; then
+  echo "PREFLIGHT_FAIL missing_routing_config file=$ROUTING_CONFIG" >&2
+  exit 7
+fi
+if [[ ! -f "$MCP_CONFIG" ]]; then
+  echo "PREFLIGHT_FAIL missing_mcp_config file=$MCP_CONFIG" >&2
+  exit 8
+fi
 
 if ! rg -n "^DIRECT_CHAT_CLOUD_MODELS=${EXPECT_CLOUD_MODEL}$" "$DC_ENV_FILE" >/dev/null; then
   echo "PREFLIGHT_FAIL cloud_model_mismatch expected=$EXPECT_CLOUD_MODEL file=$DC_ENV_FILE" >&2
@@ -45,6 +55,8 @@ if ! rg -n "^DIRECT_CHAT_OLLAMA_MODELS=${EXPECT_LOCAL_MODEL}$" "$DC_ENV_FILE" >/
   exit 5
 fi
 echo "PREFLIGHT_OK model_lock cloud=${EXPECT_CLOUD_MODEL} local=${EXPECT_LOCAL_MODEL}"
+echo "PREFLIGHT_OK routing_config file=${ROUTING_CONFIG}"
+echo "PREFLIGHT_OK mcp_config file=${MCP_CONFIG}"
 
 if command -v mcporter >/dev/null 2>&1; then
   if ./scripts/community_mcp_bridge.sh check >/dev/null; then

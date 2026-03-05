@@ -18,9 +18,25 @@ case "$cmd" in
   check)
     [ -x ./scripts/verify_gateway.sh ]
     [ -x ./scripts/verify_all.sh ]
+    [ -x ./scripts/fusion_isolation_guard.sh ]
+    [ -x ./scripts/n8n_mcp_preflight.sh ]
+    [ -x ./scripts/n8n_observability_snapshot.sh ]
     echo "OPS_ALERTS_OK"
     ;;
   run)
+    if ! ./scripts/fusion_isolation_guard.sh check >/dev/null 2>&1; then
+      notify "Fusion isolation guard failed"
+    fi
+    n8n_code="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5678/healthz 2>/dev/null || true)"
+    if [[ "$n8n_code" != "200" ]]; then
+      notify "n8n healthz failed (http=$n8n_code)"
+    fi
+    if ! ./scripts/n8n_mcp_preflight.sh >/dev/null 2>&1; then
+      notify "n8n+mcp preflight failed"
+    fi
+    if ! WINDOW_H=1 ./scripts/n8n_observability_snapshot.sh >/dev/null 2>&1; then
+      notify "n8n observability snapshot failed"
+    fi
     if ! ./scripts/verify_gateway.sh >/dev/null 2>&1; then
       notify "Gateway failed health check"
     fi

@@ -23,3 +23,6 @@ Antes de integrar:
 - `n8n` de Fusion es exclusivo (no compartir contenedor, volumen ni base con otros repos).
 - Puerto `5678` reservado para Fusion (`n8n`) y bloqueante ante conflicto.
 - Antes de `up/restart/stop/down`: ejecutar `./scripts/fusion_isolation_guard.sh check`.
+- En gateway n8n, mantener routing/modelos y matriz MCP bajo archivo controlado:
+  - `config/n8n_flow_routing.json`
+  - `config/n8n_mcp_matrix.json`

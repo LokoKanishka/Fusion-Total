@@ -5,14 +5,93 @@ import json
 import sys
 from pathlib import Path
 
+DEFAULT_ROUTING_PROFILES = {
+    "default": {
+        "model": "openai-codex/gpt-5.1-codex-mini",
+        "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+        "backend": "cloud",
+        "mcp_profile": "safe_readonly",
+    },
+    "automation": {
+        "model": "openai-codex/gpt-5.1-codex-mini",
+        "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+        "backend": "cloud",
+        "mcp_profile": "ops_automation",
+    },
+    "coding": {
+        "model": "qwen2.5-coder:14b-instruct-q8_0",
+        "fallback_model": "openai-codex/gpt-5.1-codex-mini",
+        "backend": "local",
+        "mcp_profile": "dev_build",
+    },
+    "research": {
+        "model": "openai-codex/gpt-5.1-codex-mini",
+        "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+        "backend": "cloud",
+        "mcp_profile": "research_readonly",
+    },
+    "voice": {
+        "model": "openai-codex/gpt-5.1-codex-mini",
+        "fallback_model": "qwen2.5-coder:14b-instruct-q8_0",
+        "backend": "cloud",
+        "mcp_profile": "safe_readonly",
+    },
+}
 
-CODE_JS = r'''
+DEFAULT_MCP_PROFILE_MATRIX = {
+    "safe_readonly": {
+        "approval_mode": "manual_for_writes",
+        "servers": ["community-cloudflare", "community-exa", "community-arxiv"],
+        "sensitive_tools": [],
+        "notes": "readonly",
+    },
+    "research_readonly": {
+        "approval_mode": "manual_for_writes",
+        "servers": ["community-cloudflare", "community-exa", "community-arxiv", "community-notion"],
+        "sensitive_tools": [],
+        "notes": "research",
+    },
+    "ops_automation": {
+        "approval_mode": "always_for_sensitive",
+        "servers": ["community-n8n", "community-github", "community-cloudflare"],
+        "sensitive_tools": ["workflow_update", "workflow_delete", "repo_push", "deploy"],
+        "notes": "automation",
+    },
+    "dev_build": {
+        "approval_mode": "always_for_sensitive",
+        "servers": ["community-github", "community-browserbase", "community-n8n"],
+        "sensitive_tools": ["repo_push", "workflow_publish", "browser_run_with_credentials"],
+        "notes": "build",
+    },
+}
+
+CODE_JS_TEMPLATE = r'''
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const ROUTING_PROFILES = __ROUTING_PROFILES__;
+const MCP_PROFILE_MATRIX = __MCP_PROFILE_MATRIX__;
+const MODEL_ALLOWLIST = [
+  'openai-codex/gpt-5.1-codex-mini',
+  'qwen2.5-coder:14b-instruct-q8_0',
+];
+const DEFAULT_MODEL = 'openai-codex/gpt-5.1-codex-mini';
+const DEFAULT_FALLBACK_MODEL = 'qwen2.5-coder:14b-instruct-q8_0';
+const DEFAULT_PROFILE = Object.prototype.hasOwnProperty.call(ROUTING_PROFILES, 'default')
+  ? 'default'
+  : (Object.keys(ROUTING_PROFILES)[0] || 'default');
+const DEFAULT_MCP_PROFILE = Object.prototype.hasOwnProperty.call(MCP_PROFILE_MATRIX, 'safe_readonly')
+  ? 'safe_readonly'
+  : (Object.keys(MCP_PROFILE_MATRIX)[0] || '');
+
 function isObject(v) {
   return v && typeof v === 'object' && !Array.isArray(v);
+}
+
+function cleanString(v) {
+  if (typeof v !== 'string') return '';
+  return v.trim();
 }
 
 function normalizeCorrelationId(rawBody) {
@@ -24,10 +103,120 @@ function normalizeCorrelationId(rawBody) {
   return `cid_${payloadHash}`;
 }
 
+function normalizeBackend(raw) {
+  const v = cleanString(raw).toLowerCase();
+  if (v === 'local') return 'local';
+  return 'cloud';
+}
+
+function pickAllowedModel(candidate, fallback) {
+  const c = cleanString(candidate);
+  if (MODEL_ALLOWLIST.includes(c)) return c;
+  return fallback;
+}
+
+function inferProfile(body, meta) {
+  const explicit = cleanString(meta.workflow_profile || meta.route_profile || meta.profile).toLowerCase();
+  if (explicit && Object.prototype.hasOwnProperty.call(ROUTING_PROFILES, explicit)) {
+    return explicit;
+  }
+  const kind = cleanString(body.kind).toLowerCase();
+  const source = cleanString(body.source).toLowerCase();
+  const taskType = cleanString(meta.task_type || meta.intent || '').toLowerCase();
+  const text = cleanString(body.text).toLowerCase();
+
+  if (
+    ['code', 'coding', 'build', 'debug', 'patch', 'refactor', 'script'].includes(taskType) ||
+    /\b(codigo|code|debug|patch|refactor|script)\b/.test(text)
+  ) {
+    return Object.prototype.hasOwnProperty.call(ROUTING_PROFILES, 'coding') ? 'coding' : DEFAULT_PROFILE;
+  }
+  if (kind === 'voice' || source.startsWith('voice') || source.includes('stt')) {
+    return Object.prototype.hasOwnProperty.call(ROUTING_PROFILES, 'voice') ? 'voice' : DEFAULT_PROFILE;
+  }
+  if (
+    ['research', 'search', 'analysis'].includes(taskType) ||
+    kind === 'search' ||
+    /\b(investigar|research|buscar|analisis)\b/.test(text)
+  ) {
+    return Object.prototype.hasOwnProperty.call(ROUTING_PROFILES, 'research') ? 'research' : DEFAULT_PROFILE;
+  }
+  if (source.includes('n8n') || taskType.includes('workflow') || taskType.includes('automation')) {
+    return Object.prototype.hasOwnProperty.call(ROUTING_PROFILES, 'automation') ? 'automation' : DEFAULT_PROFILE;
+  }
+  return DEFAULT_PROFILE;
+}
+
+function resolveRoute(profileName) {
+  const profile = Object.prototype.hasOwnProperty.call(ROUTING_PROFILES, profileName) ? profileName : DEFAULT_PROFILE;
+  const conf = isObject(ROUTING_PROFILES[profile]) ? ROUTING_PROFILES[profile] : {};
+  const model = pickAllowedModel(conf.model, DEFAULT_MODEL);
+  const fallbackModel = pickAllowedModel(conf.fallback_model, DEFAULT_FALLBACK_MODEL);
+  const backend = normalizeBackend(conf.backend);
+  return {
+    profile,
+    model,
+    fallback_model: fallbackModel,
+    backend,
+    mcp_profile: cleanString(conf.mcp_profile) || DEFAULT_MCP_PROFILE
+  };
+}
+
+function resolveMcpPolicy(meta, route) {
+  const explicit = cleanString(meta.mcp_profile).toLowerCase();
+  const profile = explicit && Object.prototype.hasOwnProperty.call(MCP_PROFILE_MATRIX, explicit)
+    ? explicit
+    : (Object.prototype.hasOwnProperty.call(MCP_PROFILE_MATRIX, route.mcp_profile)
+        ? route.mcp_profile
+        : DEFAULT_MCP_PROFILE);
+  const conf = isObject(MCP_PROFILE_MATRIX[profile]) ? MCP_PROFILE_MATRIX[profile] : {};
+  const servers = Array.isArray(conf.servers)
+    ? conf.servers.map((v) => cleanString(v)).filter(Boolean)
+    : [];
+  const sensitive = Array.isArray(conf.sensitive_tools)
+    ? conf.sensitive_tools.map((v) => cleanString(v)).filter(Boolean)
+    : [];
+  return {
+    profile,
+    approval_mode: cleanString(conf.approval_mode) || 'manual_for_writes',
+    servers,
+    sensitive_tools: sensitive,
+    notes: cleanString(conf.notes),
+  };
+}
+
+function appendGatewayMetric(ev) {
+  try {
+    const metricsDir = '/data/lucy_ipc/metrics';
+    const metricsPath = path.join(metricsDir, 'lucy_gateway_events.jsonl');
+    fs.mkdirSync(metricsDir, { recursive: true });
+    fs.appendFileSync(metricsPath, JSON.stringify(ev) + '\n', 'utf8');
+  } catch (_) {
+    // metric write is best effort
+  }
+}
+
 const body = isObject($json.body) ? $json.body : {};
 const headers = isObject($json.headers) ? $json.headers : {};
 const receivedTs = new Date().toISOString();
 const correlationId = normalizeCorrelationId(body);
+const meta = isObject(body.meta) ? body.meta : {};
+const routeProfile = inferProfile(body, meta);
+const route = resolveRoute(routeProfile);
+const mcpPolicy = resolveMcpPolicy(meta, route);
+const enrichedMeta = {
+  ...meta,
+  routing: route,
+  mcp: mcpPolicy,
+  ingress: {
+    gateway: 'Lucy_Gateway_v1',
+    received_ts: receivedTs
+  }
+};
+const normalizedPayload = {
+  ...body,
+  meta: enrichedMeta
+};
 
 const inboxDir = '/data/lucy_ipc/inbox';
 const deadletterDir = '/data/lucy_ipc/deadletter';
@@ -43,18 +232,20 @@ const envelope = {
   version: 'v1',
   correlation_id: correlationId,
   received_ts: receivedTs,
-  payload: body,
+  payload: normalizedPayload,
   headers_subset: subset,
   source_ip: sourceIp,
-  status: 'accepted'
+  status: 'accepted',
+  routing: route,
+  mcp: mcpPolicy
 };
 
 const errors = [];
-if (typeof body.kind !== 'string' || !body.kind.trim()) errors.push('kind is required string');
-if (typeof body.source !== 'string' || !body.source.trim()) errors.push('source is required string');
-if (typeof body.ts !== 'string' || Number.isNaN(Date.parse(body.ts))) errors.push('ts must be RFC3339 date-time');
-if (Object.prototype.hasOwnProperty.call(body, 'text') && typeof body.text !== 'string') errors.push('text must be string');
-if (Object.prototype.hasOwnProperty.call(body, 'meta') && !isObject(body.meta)) errors.push('meta must be object');
+if (typeof normalizedPayload.kind !== 'string' || !normalizedPayload.kind.trim()) errors.push('kind is required string');
+if (typeof normalizedPayload.source !== 'string' || !normalizedPayload.source.trim()) errors.push('source is required string');
+if (typeof normalizedPayload.ts !== 'string' || Number.isNaN(Date.parse(normalizedPayload.ts))) errors.push('ts must be RFC3339 date-time');
+if (Object.prototype.hasOwnProperty.call(normalizedPayload, 'text') && typeof normalizedPayload.text !== 'string') errors.push('text must be string');
+if (Object.prototype.hasOwnProperty.call(normalizedPayload, 'meta') && !isObject(normalizedPayload.meta)) errors.push('meta must be object');
 
 const inboxPath = path.join(inboxDir, `${correlationId}.json`);
 const deadletterPath = path.join(deadletterDir, `${correlationId}.json`);
@@ -101,6 +292,20 @@ try {
   }
 }
 
+appendGatewayMetric({
+  ts: receivedTs,
+  correlation_id: correlationId,
+  ingress_status: envelope.status,
+  ack_ok: ack.ok,
+  route_profile: route.profile,
+  model: route.model,
+  fallback_model: route.fallback_model,
+  backend: route.backend,
+  mcp_profile: mcpPolicy.profile,
+  source: cleanString(normalizedPayload.source),
+  kind: cleanString(normalizedPayload.kind)
+});
+
 return [{ json: ack }];
 '''.strip()
 
@@ -113,6 +318,28 @@ def ensure_workflow(obj):
     return obj, False
 
 
+def load_json_or_fallback(path: Path, fallback: dict) -> dict:
+    if not path.exists():
+        return fallback
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid json in {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise SystemExit(f"invalid json root in {path}: expected object")
+    return data
+
+
+def build_code_js(repo_root: Path) -> str:
+    routing = load_json_or_fallback(repo_root / "config" / "n8n_flow_routing.json", DEFAULT_ROUTING_PROFILES)
+    mcp_matrix = load_json_or_fallback(repo_root / "config" / "n8n_mcp_matrix.json", DEFAULT_MCP_PROFILE_MATRIX)
+    return (
+        CODE_JS_TEMPLATE
+        .replace("__ROUTING_PROFILES__", json.dumps(routing, ensure_ascii=False, separators=(",", ":")))
+        .replace("__MCP_PROFILE_MATRIX__", json.dumps(mcp_matrix, ensure_ascii=False, separators=(",", ":")))
+    )
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: patch_lucy_gateway_v1.py <input.json> <output.json>", file=sys.stderr)
@@ -120,26 +347,23 @@ def main() -> int:
 
     src = Path(sys.argv[1])
     dst = Path(sys.argv[2])
+    repo_root = Path(__file__).resolve().parents[1]
+    code_js = build_code_js(repo_root)
 
     raw = json.loads(src.read_text(encoding="utf-8"))
     wf, wrapped = ensure_workflow(raw)
 
     nodes = wf.get("nodes") or []
 
-    webhook = None
-    for node in nodes:
-        if node.get("type") == "n8n-nodes-base.webhook":
-            webhook = node
-            break
-
-    if webhook is None:
+    webhook_nodes = [node for node in nodes if node.get("type") == "n8n-nodes-base.webhook"]
+    if not webhook_nodes:
         raise SystemExit("workflow does not contain required webhook node")
 
     code_name = "Gateway Contract + IPC"
     code_node = {
         "parameters": {
             "mode": "runOnceForAllItems",
-            "jsCode": CODE_JS,
+            "jsCode": code_js,
         },
         "id": "lucy-gateway-code-v1",
         "name": code_name,
@@ -150,6 +374,7 @@ def main() -> int:
 
     remove_names = {
         code_name,
+        "ACK + Write Payload",
         "Gateway Prepare v1",
         "Gateway IPC Writer v1",
         "Gateway ACK v1",
@@ -164,17 +389,18 @@ def main() -> int:
     ]
     clean_nodes.append(code_node)
 
-    webhook_name = webhook["name"]
-    webhook_params = webhook.get("parameters") or {}
-    webhook_params["responseMode"] = "lastNode"
-    webhook["parameters"] = webhook_params
+    connections = {}
+    for webhook in webhook_nodes:
+        webhook_name = webhook["name"]
+        webhook_params = webhook.get("parameters") or {}
+        webhook_params["responseMode"] = "lastNode"
+        webhook["parameters"] = webhook_params
+        connections[webhook_name] = {
+            "main": [[{"node": code_name, "type": "main", "index": 0}]],
+        }
 
     wf["nodes"] = clean_nodes
-    wf["connections"] = {
-        webhook_name: {
-            "main": [[{"node": code_name, "type": "main", "index": 0}]],
-        },
-    }
+    wf["connections"] = connections
 
     out_obj = [wf] if wrapped else wf
     dst.write_text(json.dumps(out_obj, ensure_ascii=False, indent=2), encoding="utf-8")
