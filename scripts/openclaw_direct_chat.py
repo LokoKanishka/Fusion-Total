@@ -9443,6 +9443,131 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
         return json.loads(body.decode("utf-8") or "{}")
 
+    def _n8n_api_base_url(self) -> str:
+        raw = str(os.environ.get("DIRECT_CHAT_N8N_API_URL", "http://127.0.0.1:5678")).strip()
+        if not raw:
+            raw = "http://127.0.0.1:5678"
+        if "://" not in raw:
+            raw = f"http://{raw}"
+        return raw.rstrip("/")
+
+    def _n8n_api_token(self) -> str:
+        for key in ("DIRECT_CHAT_N8N_API_TOKEN", "N8N_API_KEY", "N8N_API_TOKEN"):
+            token = str(os.environ.get(key, "")).strip()
+            if token:
+                return token
+        return ""
+
+    def _n8n_api_request(self, method: str, api_path: str, *, query: dict | None = None, payload: dict | None = None) -> dict:
+        token = self._n8n_api_token()
+        if not token:
+            raise _BackendCallError("N8N_API_TOKEN_MISSING", "Falta DIRECT_CHAT_N8N_API_TOKEN en runtime/direct_chat.env", status=503)
+        rel_path = "/" + str(api_path or "").lstrip("/")
+        if not rel_path.startswith("/api/"):
+            raise _BackendCallError("N8N_API_PATH_NOT_ALLOWED", f"Ruta no permitida: {rel_path}", status=400)
+        base = self._n8n_api_base_url()
+        url = f"{base}{rel_path}"
+        if isinstance(query, dict) and query:
+            clean_q = {}
+            for k, v in query.items():
+                kk = str(k or "").strip()
+                if not kk:
+                    continue
+                clean_q[kk] = str(v if v is not None else "").strip()
+            if clean_q:
+                url = f"{url}?{urllib.parse.urlencode(clean_q)}"
+        headers = {
+            "Accept": "application/json",
+            "X-N8N-API-KEY": token,
+            "Authorization": f"Bearer {token}",
+        }
+        data = None
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(payload).encode("utf-8")
+        timeout_s = max(2.0, float(_int_env("DIRECT_CHAT_N8N_API_TIMEOUT_SEC", 10)))
+        req = Request(url=url, data=data, headers=headers, method=str(method or "GET").upper())
+        try:
+            with urlopen(req, timeout=timeout_s) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                return json.loads(raw) if raw.strip() else {}
+        except HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            http_status = int(getattr(e, "code", 502) or 502)
+            mapped = http_status if http_status in (400, 401, 403, 404, 409, 422, 429) else 502
+            raise _BackendCallError("N8N_API_HTTP_ERROR", f"HTTP {http_status}: {detail[:400]}", status=mapped) from e
+        except URLError as e:
+            raise _BackendCallError("N8N_API_UNREACHABLE", str(e), status=502) from e
+        except (socket.timeout, TimeoutError) as e:
+            raise _BackendCallError("N8N_API_TIMEOUT", f"n8n api timeout after {timeout_s:.0f}s", status=504) from e
+
+    def _n8n_status_payload(self) -> dict:
+        base = self._n8n_api_base_url()
+        token_set = bool(self._n8n_api_token())
+        health_http = 0
+        try:
+            req = Request(url=f"{base}/healthz", method="GET")
+            with urlopen(req, timeout=2.5) as resp:
+                health_http = int(getattr(resp, "status", 0) or resp.getcode() or 0)
+        except HTTPError as e:
+            health_http = int(getattr(e, "code", 0) or 0)
+        except Exception:
+            health_http = 0
+        out = {
+            "ok": False,
+            "api_url": base,
+            "token_configured": token_set,
+            "health_http": health_http,
+            "api_auth_ok": False,
+        }
+        if not token_set:
+            out["error"] = "n8n_api_token_missing"
+            return out
+        try:
+            probe = self._n8n_api_request("GET", "/api/v1/workflows", query={"limit": "1"})
+            data = probe.get("data") if isinstance(probe, dict) else None
+            sample_count = len(data) if isinstance(data, list) else 0
+            out["api_auth_ok"] = True
+            out["sample_workflows"] = int(sample_count)
+            out["ok"] = bool(health_http == 200 and out["api_auth_ok"])
+        except _BackendCallError as e:
+            out["error"] = e.code.lower()
+            out["detail"] = e.detail
+        return out
+
+    def _n8n_workflows_payload(self, limit: int = 30) -> dict:
+        lim = max(1, min(200, int(limit or 30)))
+        payload = self._n8n_api_request("GET", "/api/v1/workflows", query={"limit": str(lim)})
+        raw_items = []
+        if isinstance(payload, dict):
+            if isinstance(payload.get("data"), list):
+                raw_items = payload.get("data") or []
+            elif isinstance(payload.get("workflows"), list):
+                raw_items = payload.get("workflows") or []
+        elif isinstance(payload, list):
+            raw_items = payload
+        workflows = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            wid = str(item.get("id", "")).strip()
+            name = str(item.get("name", "")).strip()
+            workflows.append(
+                {
+                    "id": wid,
+                    "name": name or (f"workflow-{wid}" if wid else "workflow"),
+                    "active": bool(item.get("active", False)),
+                    "updated_at": str(item.get("updatedAt", "")),
+                    "created_at": str(item.get("createdAt", "")),
+                }
+            )
+        return {
+            "ok": True,
+            "api_url": self._n8n_api_base_url(),
+            "count": len(workflows),
+            "workflows": workflows,
+        }
+
     def _voice_payload(self, state: dict) -> dict:
         enabled = bool(state.get("enabled", False))
         stt_status = _STT_MANAGER.status()
@@ -9637,6 +9762,22 @@ class Handler(BaseHTTPRequestHandler):
                     "history": hist,
                 },
             )
+            return
+
+        if path == "/api/n8n/status":
+            self._json(200, self._n8n_status_payload())
+            return
+
+        if path == "/api/n8n/workflows":
+            query = parse_qs(parsed.query)
+            try:
+                limit = int(str(query.get("limit", ["30"])[0]).strip() or "30")
+            except Exception:
+                limit = 30
+            try:
+                self._json(200, self._n8n_workflows_payload(limit=limit))
+            except _BackendCallError as e:
+                self._json(e.status, e.as_payload())
             return
 
         if path == "/api/chat/poll":

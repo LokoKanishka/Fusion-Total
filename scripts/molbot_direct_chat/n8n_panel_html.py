@@ -34,7 +34,7 @@ N8N_PANEL_HTML = r"""<!doctype html>
       border-radius: 14px;
       background: var(--panel);
       display: grid;
-      grid-template-rows: auto auto 1fr auto;
+      grid-template-rows: auto auto auto 1fr auto;
       overflow: hidden;
     }
     .top {
@@ -58,6 +58,37 @@ N8N_PANEL_HTML = r"""<!doctype html>
       flex-wrap: wrap;
       color: var(--muted);
       font-size: 13px;
+    }
+    .n8n-client {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      gap: 8px;
+    }
+    .wf-list {
+      max-height: 140px;
+      overflow: auto;
+      display: grid;
+      gap: 6px;
+    }
+    .wf-item {
+      border: 1px solid #2a4152;
+      background: #0c151f;
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+    .wf-name {
+      font-size: 13px;
+      color: #d7f7ff;
+    }
+    .wf-meta {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
     }
     .chat {
       padding: 14px;
@@ -140,6 +171,14 @@ N8N_PANEL_HTML = r"""<!doctype html>
       <span class="small">Aislado del chat principal y del modo lectura.</span>
     </div>
 
+    <div class="n8n-client">
+      <div class="row">
+        <span class="small" id="n8nStatus">n8n API: verificando...</span>
+        <button class="alt" id="refreshWorkflows">Actualizar workflows</button>
+      </div>
+      <div class="wf-list" id="workflowList"></div>
+    </div>
+
     <div id="chat" class="chat"></div>
 
     <div class="composer">
@@ -155,7 +194,10 @@ N8N_PANEL_HTML = r"""<!doctype html>
     const sendEl = document.getElementById("send");
     const newSessionEl = document.getElementById("newSession");
     const openN8nUiEl = document.getElementById("openN8nUi");
+    const refreshWorkflowsEl = document.getElementById("refreshWorkflows");
     const sessionInfoEl = document.getElementById("sessionInfo");
+    const n8nStatusEl = document.getElementById("n8nStatus");
+    const workflowListEl = document.getElementById("workflowList");
 
     const N8N_SESSION_KEY = "molbot_n8n_panel_session_id";
     const N8N_MODEL_KEY = "molbot_n8n_panel_model_id";
@@ -168,6 +210,63 @@ N8N_PANEL_HTML = r"""<!doctype html>
       if (cls) node.className = cls;
       if (text != null) node.textContent = text;
       return node;
+    }
+
+    function renderWorkflows(items) {
+      workflowListEl.innerHTML = "";
+      const arr = Array.isArray(items) ? items : [];
+      if (!arr.length) {
+        workflowListEl.appendChild(el("div", "small", "No hay workflows visibles."));
+        return;
+      }
+      for (const wf of arr) {
+        const row = el("div", "wf-item");
+        const name = el("span", "wf-name", String(wf && wf.name || "workflow"));
+        const active = !!(wf && wf.active);
+        const wid = String(wf && wf.id || "").trim();
+        const meta = el("span", "wf-meta", `${active ? "activo" : "inactivo"} · id:${wid || "-"}`);
+        row.appendChild(name);
+        row.appendChild(meta);
+        workflowListEl.appendChild(row);
+      }
+    }
+
+    async function refreshN8nStatus() {
+      try {
+        const r = await fetch("/api/n8n/status");
+        const j = await r.json();
+        if (!r.ok) {
+          n8nStatusEl.textContent = `n8n API: error ${r.status}`;
+          return;
+        }
+        if (!j || !j.token_configured) {
+          n8nStatusEl.textContent = "n8n API: falta token (DIRECT_CHAT_N8N_API_TOKEN)";
+          return;
+        }
+        const health = Number(j.health_http || 0);
+        n8nStatusEl.textContent = `n8n API: ${j.api_auth_ok ? "auth OK" : "auth FAIL"} · health ${health || "-"}`;
+      } catch {
+        n8nStatusEl.textContent = "n8n API: sin conexión";
+      }
+    }
+
+    async function refreshWorkflows() {
+      refreshWorkflowsEl.disabled = true;
+      try {
+        const r = await fetch("/api/n8n/workflows?limit=40");
+        const j = await r.json();
+        if (!r.ok) {
+          n8nStatusEl.textContent = `n8n API workflows error ${r.status}`;
+          renderWorkflows([]);
+          return;
+        }
+        const arr = Array.isArray(j && j.workflows) ? j.workflows : [];
+        renderWorkflows(arr);
+      } catch {
+        renderWorkflows([]);
+      } finally {
+        refreshWorkflowsEl.disabled = false;
+      }
     }
 
     function draw() {
@@ -320,10 +419,16 @@ N8N_PANEL_HTML = r"""<!doctype html>
     openN8nUiEl.addEventListener("click", () => {
       window.open("http://127.0.0.1:5678", "_blank", "noopener,noreferrer");
     });
+    refreshWorkflowsEl.addEventListener("click", async () => {
+      await refreshN8nStatus();
+      await refreshWorkflows();
+    });
 
     sessionInfoEl.textContent = `session_id: ${sessionId}`;
     refreshModels()
       .then(() => loadServerHistory())
+      .then(() => refreshN8nStatus())
+      .then(() => refreshWorkflows())
       .then(() => inputEl.focus());
   </script>
 </body>
