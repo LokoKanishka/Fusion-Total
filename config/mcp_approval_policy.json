@@ -21,6 +21,19 @@
     "write": 1800,
     "sensitive": 900
   },
+  "two_person": {
+    "enabled_for_levels": [
+      "sensitive"
+    ],
+    "require_requester_identity": true,
+    "approver_must_differ": true,
+    "requester_fields": [
+      "requested_by",
+      "requester",
+      "actor_user",
+      "requester_user"
+    ]
+  },
   "require_scope_match": true,
   "hmac": {
     "enabled": true,

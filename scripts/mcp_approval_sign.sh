@@ -6,6 +6,7 @@ APPROVAL_TOKEN=""
 APPROVAL_TS=""
 CORRELATION_ID=""
 LEVEL=""
+REQUESTER=""
 ACTIONS=""
 SCOPE=""
 TICKET=""
@@ -19,6 +20,7 @@ while [[ $# -gt 0 ]]; do
     --ts) APPROVAL_TS="${2:-}"; shift 2 ;;
     --cid) CORRELATION_ID="${2:-}"; shift 2 ;;
     --level) LEVEL="${2:-}"; shift 2 ;;
+    --requester) REQUESTER="${2:-}"; shift 2 ;;
     --actions) ACTIONS="${2:-}"; shift 2 ;;
     --scope) SCOPE="${2:-}"; shift 2 ;;
     --ticket) TICKET="${2:-}"; shift 2 ;;
@@ -33,6 +35,7 @@ Usage:
     --ts <RFC3339> \
     --cid <correlation_id> \
     --level <write|sensitive> \
+    [--requester <requested_by>] \
     --actions <csv_actions> \
     --scope <csv_scope> \
     [--ticket <change_ticket>] \
@@ -53,12 +56,12 @@ if [[ -z "$APPROVED_BY" || -z "$APPROVAL_TOKEN" || -z "$APPROVAL_TS" || -z "$COR
   exit 2
 fi
 
-python3 - <<'PY' "$APPROVED_BY" "$APPROVAL_TOKEN" "$APPROVAL_TS" "$CORRELATION_ID" "$LEVEL" "$ACTIONS" "$SCOPE" "$TICKET" "$JUSTIFICATION" "$SECRET"
+python3 - <<'PY' "$APPROVED_BY" "$APPROVAL_TOKEN" "$APPROVAL_TS" "$CORRELATION_ID" "$LEVEL" "$REQUESTER" "$ACTIONS" "$SCOPE" "$TICKET" "$JUSTIFICATION" "$SECRET"
 import hashlib
 import hmac
 import sys
 
-approved_by, approval_token, approval_ts, cid, level, actions_csv, scope_csv, ticket, justification, secret = sys.argv[1:]
+approved_by, approval_token, approval_ts, cid, level, requester, actions_csv, scope_csv, ticket, justification, secret = sys.argv[1:]
 actions = sorted([x.strip().lower() for x in actions_csv.split(",") if x.strip()])
 scope = sorted([x.strip().lower() for x in scope_csv.split(",") if x.strip()])
 canonical = "\n".join([
@@ -67,6 +70,7 @@ canonical = "\n".join([
     approval_ts.strip(),
     cid.strip(),
     level.strip(),
+    requester.strip(),
     ",".join(actions),
     ",".join(scope),
     ticket.strip(),

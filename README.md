@@ -145,6 +145,7 @@ Controles operativos:
   - `config/mcp_action_policies.json`
   - `config/mcp_approval_policy.json`
 - Para acciones MCP `sensitive`, además de firma HMAC se exige `approval_change_ticket` válido.
+- Para acciones MCP `sensitive`, además se exige separación de funciones (`approved_by` != `requested_by`).
 
 ## Reverse proxy y trusted proxies (gateway)
 - El gateway está configurado como **local-only** (`gateway.bind: loopback`) y autenticado por token.

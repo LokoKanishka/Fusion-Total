@@ -24,6 +24,7 @@ need_bin() {
 need_bin docker
 need_bin curl
 need_bin rg
+need_bin jq
 
 ./scripts/fusion_isolation_guard.sh check >/dev/null
 echo "PREFLIGHT_OK isolation_guard"
@@ -65,6 +66,21 @@ if [[ ! -f "$MCP_APPROVAL_POLICY_CONFIG" ]]; then
   exit 10
 fi
 
+if ! jq -e '
+  (.required_fields.sensitive | type == "array") and
+  (.required_fields.sensitive | index("approval_change_ticket") != null) and
+  (.required_fields.sensitive | index("approval_justification") != null) and
+  (.ticket_pattern | type == "string" and length > 0) and
+  (.two_person.enabled_for_levels | type == "array") and
+  (.two_person.enabled_for_levels | index("sensitive") != null) and
+  (.two_person.require_requester_identity == true) and
+  (.two_person.approver_must_differ == true) and
+  (.two_person.requester_fields | type == "array" and length > 0)
+' "$MCP_APPROVAL_POLICY_CONFIG" >/dev/null; then
+  echo "PREFLIGHT_FAIL invalid_mcp_approval_policy_shape file=$MCP_APPROVAL_POLICY_CONFIG" >&2
+  exit 12
+fi
+
 if ! rg -n "^DIRECT_CHAT_CLOUD_MODELS=${EXPECT_CLOUD_MODEL}$" "$DC_ENV_FILE" >/dev/null; then
   echo "PREFLIGHT_FAIL cloud_model_mismatch expected=$EXPECT_CLOUD_MODEL file=$DC_ENV_FILE" >&2
   exit 4
@@ -78,6 +94,7 @@ echo "PREFLIGHT_OK routing_config file=${ROUTING_CONFIG}"
 echo "PREFLIGHT_OK mcp_config file=${MCP_CONFIG}"
 echo "PREFLIGHT_OK mcp_action_policy_config file=${MCP_ACTION_POLICY_CONFIG}"
 echo "PREFLIGHT_OK mcp_approval_policy_config file=${MCP_APPROVAL_POLICY_CONFIG}"
+echo "PREFLIGHT_OK mcp_approval_policy_shape two_person=sensitive_required"
 
 if command -v mcporter >/dev/null 2>&1; then
   if ./scripts/community_mcp_bridge.sh check >/dev/null; then

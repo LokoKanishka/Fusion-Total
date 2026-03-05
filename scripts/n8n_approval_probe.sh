@@ -22,6 +22,7 @@ m=json.loads(sys.argv[1])
 approved_by=str(m.get("approved_by","")).strip()
 token=str(m.get("approval_token","")).strip()
 ts=str(m.get("approval_ts","")).strip()
+requester=str(m.get("requested_by") or m.get("requester") or m.get("actor_user") or m.get("requester_user") or "").strip()
 actions=m.get("mcp_actions",[])
 scope=m.get("approval_scope",[])
 ticket=str(m.get("approval_change_ticket","")).strip()
@@ -30,10 +31,11 @@ if isinstance(actions,str):
     actions=[x.strip() for x in actions.split(",") if x.strip()]
 if isinstance(scope,str):
     scope=[x.strip() for x in scope.split(",") if x.strip()]
-print("\t".join([
+print("\x1f".join([
     approved_by,
     token,
     ts,
+    requester,
     ",".join(actions),
     ",".join(scope),
     ticket,
@@ -41,8 +43,8 @@ print("\t".join([
 ]))
 PY
 )"
-  local approved_by token ats actions_csv scope_csv ticket justification
-  IFS=$'\t' read -r approved_by token ats actions_csv scope_csv ticket justification <<<"$parsed"
+  local approved_by token ats requester actions_csv scope_csv ticket justification
+  IFS=$'\x1f' read -r approved_by token ats requester actions_csv scope_csv ticket justification <<<"$parsed"
   local sig
   sig="$("$SIGN_BIN" \
     --approved-by "$approved_by" \
@@ -50,6 +52,7 @@ PY
     --ts "$ats" \
     --cid "$cid" \
     --level "$level" \
+    --requester "$requester" \
     --actions "$actions_csv" \
     --scope "$scope_csv" \
     --ticket "$ticket" \
@@ -139,7 +142,7 @@ post_case \
 # Caso sensitive con token pero sin justificación: debe bloquear.
 post_case \
   "sensitive_without_justification" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_002","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_change_ticket":"CHG-2026-001","approval_sig":"__AUTO_SIG__"}' \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","requested_by":"lucy","approval_token":"tok_local_002","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_change_ticket":"CHG-2026-001","approval_sig":"__AUTO_SIG__"}' \
   "false" \
   "missing_approval_justification" \
   "sensitive"
@@ -147,7 +150,7 @@ post_case \
 # Caso sensitive con justificación: debe pasar.
 post_case \
   "sensitive_with_justification" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_003","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado por operacion programada","approval_change_ticket":"CHG-2026-002","approval_sig":"__AUTO_SIG__"}' \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","requested_by":"lucy","approval_token":"tok_local_003","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado por operacion programada","approval_change_ticket":"CHG-2026-002","approval_sig":"__AUTO_SIG__"}' \
   "true" \
   "" \
   "sensitive"
@@ -163,7 +166,7 @@ post_case \
 # Caso sensitive expirado: bloqueado por ventana temporal.
 post_case \
   "sensitive_expired" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_005","approval_ts":"2026-01-01T00:00:00Z","approval_scope":["workflow_delete"],"approval_justification":"Cambio de emergencia","approval_change_ticket":"CHG-2026-003","approval_sig":"__AUTO_SIG__"}' \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","requested_by":"lucy","approval_token":"tok_local_005","approval_ts":"2026-01-01T00:00:00Z","approval_scope":["workflow_delete"],"approval_justification":"Cambio de emergencia","approval_change_ticket":"CHG-2026-003","approval_sig":"__AUTO_SIG__"}' \
   "false" \
   "approval_expired" \
   "sensitive"
@@ -171,7 +174,7 @@ post_case \
 # Caso sensitive sin ticket: bloqueado.
 post_case \
   "sensitive_missing_ticket" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_006","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado","approval_sig":"__AUTO_SIG__"}' \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","requested_by":"lucy","approval_token":"tok_local_006","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado","approval_sig":"__AUTO_SIG__"}' \
   "false" \
   "missing_approval_change_ticket" \
   "sensitive"
@@ -179,9 +182,25 @@ post_case \
 # Caso sensitive con ticket inválido: bloqueado.
 post_case \
   "sensitive_invalid_ticket" \
-  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","approval_token":"tok_local_007","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado","approval_change_ticket":"BADTICKET","approval_sig":"__AUTO_SIG__"}' \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","requested_by":"lucy","approval_token":"tok_local_007","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado","approval_change_ticket":"BADTICKET","approval_sig":"__AUTO_SIG__"}' \
   "false" \
   "invalid_approval_change_ticket_format" \
+  "sensitive"
+
+# Caso sensitive con requester igual al aprobador: bloqueado por regla de doble control.
+post_case \
+  "sensitive_same_requester_approver" \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","requested_by":"diego","approval_token":"tok_local_008","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado","approval_change_ticket":"CHG-2026-008","approval_sig":"__AUTO_SIG__"}' \
+  "false" \
+  "approver_equals_requester" \
+  "sensitive"
+
+# Caso sensitive con requester distinto al aprobador: pasa.
+post_case \
+  "sensitive_distinct_requester_approver" \
+  '{"mcp_profile":"ops_automation","mcp_actions":["workflow_delete"],"approved_by":"diego","requested_by":"lucy","approval_token":"tok_local_009","approval_ts":"__TS__","approval_scope":["workflow_delete"],"approval_justification":"Cambio aprobado","approval_change_ticket":"CHG-2026-009","approval_sig":"__AUTO_SIG__"}' \
+  "true" \
+  "" \
   "sensitive"
 
 echo "N8N_APPROVAL_PROBE=PASS"

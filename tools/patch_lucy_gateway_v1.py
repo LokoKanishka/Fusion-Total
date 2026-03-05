@@ -106,6 +106,12 @@ DEFAULT_APPROVAL_POLICY = {
         "write": 1800,
         "sensitive": 900,
     },
+    "two_person": {
+        "enabled_for_levels": ["sensitive"],
+        "require_requester_identity": True,
+        "approver_must_differ": True,
+        "requester_fields": ["requested_by", "requester", "actor_user", "requester_user"],
+    },
     "require_scope_match": True,
     "hmac": {
         "enabled": True,
@@ -352,6 +358,30 @@ function hmacConfig() {
   return { enabled, algorithm, secretEnvVar, field, requireForLevels };
 }
 
+function twoPersonConfig() {
+  const conf = isObject(APPROVAL_POLICY.two_person) ? APPROVAL_POLICY.two_person : {};
+  const enabledForLevels = Array.isArray(conf.enabled_for_levels)
+    ? conf.enabled_for_levels.map((v) => cleanString(v).toLowerCase()).filter(Boolean)
+    : ['sensitive'];
+  const requesterFields = Array.isArray(conf.requester_fields)
+    ? conf.requester_fields.map((v) => cleanString(v)).filter(Boolean)
+    : ['requested_by', 'requester', 'actor_user', 'requester_user'];
+  const requireRequesterIdentity = conf.require_requester_identity !== false;
+  const approverMustDiffer = conf.approver_must_differ !== false;
+  return { enabledForLevels, requesterFields, requireRequesterIdentity, approverMustDiffer };
+}
+
+function resolveRequesterIdentity(meta, candidateFields) {
+  const fields = Array.isArray(candidateFields) ? candidateFields : [];
+  for (const field of fields) {
+    const key = cleanString(field);
+    if (!key) continue;
+    const direct = cleanString(meta[key]);
+    if (direct) return direct;
+  }
+  return cleanString(meta.requested_by || meta.requester || meta.actor_user || meta.requester_user);
+}
+
 function signatureCanonicalString(params) {
   const actions = Array.isArray(params.actions) ? [...params.actions].sort() : [];
   const scope = Array.isArray(params.scope) ? [...params.scope].sort() : [];
@@ -361,6 +391,7 @@ function signatureCanonicalString(params) {
     cleanString(params.approvalTs),
     cleanString(params.correlationId),
     cleanString(params.level),
+    cleanString(params.requesterIdentity),
     actions.join(','),
     scope.join(','),
     cleanString(params.approvalChangeTicket),
@@ -421,6 +452,8 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
   const approvalTs = cleanString(meta.approval_ts || meta.human_approval_ts);
   const approvalJustification = cleanString(meta.approval_justification || meta.human_approval_justification);
   const approvalChangeTicket = cleanString(meta.approval_change_ticket || meta.change_ticket || meta.ticket_id);
+  const twoPerson = twoPersonConfig();
+  const requesterIdentity = resolveRequesterIdentity(meta, twoPerson.requesterFields);
   const sigField = cleanString(hmacConfig().field) || 'approval_sig';
   const approvalSig = cleanString(meta[sigField] || meta.approval_sig || meta.human_approval_sig);
   const scope = normalizeScope(meta);
@@ -436,6 +469,7 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
   if (actionEntries.some((x) => x.level === 'sensitive')) highestLevel = 'sensitive';
   else if (actionEntries.some((x) => x.level === 'write')) highestLevel = 'write';
   const requiresApproval = actionEntries.some((x) => x.requires_approval);
+  const twoPersonRequired = requiresApproval && twoPerson.enabledForLevels.includes(highestLevel);
   const reasons = [];
   let hasApproval = true;
 
@@ -453,6 +487,17 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
       if (f === 'approval_change_ticket' && !approvalChangeTicket) reasons.push('missing_approval_change_ticket');
     }
     if (approvalChangeTicket && !isTicketValid(approvalChangeTicket)) reasons.push('invalid_approval_change_ticket_format');
+    if (twoPersonRequired) {
+      if (twoPerson.requireRequesterIdentity && !requesterIdentity) reasons.push('missing_requester_identity');
+      if (
+        twoPerson.approverMustDiffer &&
+        requesterIdentity &&
+        approvedBy &&
+        requesterIdentity.toLowerCase() === approvedBy.toLowerCase()
+      ) {
+        reasons.push('approver_equals_requester');
+      }
+    }
 
     const approvalMs = parseIsoToMs(approvalTs);
     const nowMs = parseIsoToMs(receivedTs);
@@ -479,6 +524,7 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
       approvalTs,
       correlationId,
       level: highestLevel,
+      requesterIdentity,
       actions: actionEntries.map((x) => x.action),
       scope,
       approvalChangeTicket,
@@ -498,6 +544,9 @@ function evaluateMcpApproval(meta, mcpPolicy, receivedTs, correlationId) {
     approved: !requiresApproval || hasApproval,
     blocked,
     approved_by: approvedBy,
+    requester_identity: requesterIdentity,
+    requester_identity_present: Boolean(requesterIdentity),
+    two_person_enforced: twoPersonRequired,
     approval_token_present: Boolean(approvalToken),
     approval_sig_present: Boolean(approvalSig),
     approval_ts: approvalTs,
@@ -638,6 +687,8 @@ appendGatewayMetric({
   mcp_highest_action_level: mcpApproval.highest_level,
   mcp_requires_human_approval: mcpApproval.requires_human_approval,
   mcp_approval_blocked: mcpApproval.blocked,
+  mcp_two_person_enforced: mcpApproval.two_person_enforced,
+  mcp_approval_requester_present: mcpApproval.requester_identity_present,
   mcp_approval_change_ticket_present: mcpApproval.approval_change_ticket_present,
   mcp_approval_reasons: Array.isArray(mcpApproval.reasons) ? mcpApproval.reasons : [],
   source: cleanString(normalizedPayload.source),

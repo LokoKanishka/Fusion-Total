@@ -30,3 +30,4 @@ Antes de integrar:
   - `config/mcp_approval_policy.json` (campos requeridos + expiración + scope)
   - secreto runtime `MCP_APPROVAL_HMAC_SECRET` cargado en n8n para validar `approval_sig`.
   - para acciones `sensitive`, exigir `approval_change_ticket` válido (ej. `CHG-*`).
+  - para acciones `sensitive`, exigir regla de dos personas: `approved_by` distinto de `requested_by`.

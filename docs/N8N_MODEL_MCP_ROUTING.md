@@ -40,6 +40,7 @@ También lo replica en el envelope top-level:
 - Entrada esperada para evaluación:
   - `meta.mcp_actions` (lista o CSV)
   - `meta.approved_by`
+  - `meta.requested_by` (o alias permitidos en policy)
   - `meta.approval_token`
   - `meta.approval_ts`
   - `meta.approval_scope`
@@ -55,6 +56,7 @@ También lo replica en el envelope top-level:
   - ventana temporal máxima (`max_age_seconds`) por nivel.
   - `approval_scope` debe cubrir las acciones solicitadas.
   - `approval_sig` debe verificar contra `MCP_APPROVAL_HMAC_SECRET`.
+  - para `sensitive`, se aplica doble control: `approved_by` debe ser distinto de `requested_by`.
 - Si falta aprobación en una acción que la requiere:
   - ACK `ok=false`
   - `reason=human_approval_required_for_mcp_actions`
@@ -83,6 +85,7 @@ MCP_APPROVAL_HMAC_SECRET='fusion-local-approval-hmac-secret' \
   --ts 2026-03-05T04:00:00Z \
   --cid cid_demo_001 \
   --level write \
+  --requester lucy \
   --actions workflow_update \
   --scope workflow_update \
   --ticket CHG-2026-010

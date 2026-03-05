@@ -111,6 +111,8 @@ gw_approval_required = Counter()
 gw_approval_blocked = Counter()
 gw_approval_reasons = Counter()
 gw_ticket_present = Counter()
+gw_two_person_enforced = Counter()
+gw_requester_present = Counter()
 
 if metrics_path.exists():
     for line in metrics_path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -133,6 +135,8 @@ if metrics_path.exists():
         gw_approval_required[str(bool(ev.get("mcp_requires_human_approval"))).lower()] += 1
         gw_approval_blocked[str(bool(ev.get("mcp_approval_blocked"))).lower()] += 1
         gw_ticket_present[str(bool(ev.get("mcp_approval_change_ticket_present"))).lower()] += 1
+        gw_two_person_enforced[str(bool(ev.get("mcp_two_person_enforced"))).lower()] += 1
+        gw_requester_present[str(bool(ev.get("mcp_approval_requester_present"))).lower()] += 1
         reasons = ev.get("mcp_approval_reasons")
         if isinstance(reasons, list):
             for r in reasons:
@@ -157,6 +161,10 @@ for key, count in sorted(gw_approval_blocked.items()):
     print(f"GATEWAY_MCP_APPROVAL_BLOCKED value={key} count={count}")
 for key, count in sorted(gw_ticket_present.items()):
     print(f"GATEWAY_MCP_CHANGE_TICKET_PRESENT value={key} count={count}")
+for key, count in sorted(gw_two_person_enforced.items()):
+    print(f"GATEWAY_MCP_TWO_PERSON_ENFORCED value={key} count={count}")
+for key, count in sorted(gw_requester_present.items()):
+    print(f"GATEWAY_MCP_REQUESTER_PRESENT value={key} count={count}")
 for reason, count in sorted(gw_approval_reasons.items()):
     print(f"GATEWAY_MCP_APPROVAL_REASON name={reason} count={count}")
 PY
