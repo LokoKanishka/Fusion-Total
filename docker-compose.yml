@@ -38,6 +38,8 @@ services:
     depends_on:
       - socket-proxy
     environment:
+      - HOME=/home/node
+      - N8N_USER_FOLDER=/home/node/.n8n
       - DOCKER_HOST=tcp://127.0.0.1:2375
       - N8N_HOST=localhost
       - N8N_PORT=5678

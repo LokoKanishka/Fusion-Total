@@ -5,6 +5,9 @@ CONTAINER="${CONTAINER:-lucy_brain_n8n}"
 BASE_DIR="${BASE_DIR:-./backups/n8n}"
 DECRYPTED="${DECRYPTED:-false}"
 RETAIN="${RETAIN:-14}"
+N8N_HOME="${N8N_HOME:-/home/node}"
+N8N_USER_FOLDER="${N8N_USER_FOLDER:-${N8N_HOME}/.n8n}"
+N8N_EXEC_USER="${N8N_EXEC_USER:-}"
 
 TS="$(date +%Y%m%d_%H%M%S)"
 OUT_DIR="${BASE_DIR}/${TS}"
@@ -13,6 +16,14 @@ CR_DIR="${OUT_DIR}/credentials"
 
 mkdir -p "$WF_DIR" "$CR_DIR"
 
+n8n_exec() {
+  if [[ -n "$N8N_EXEC_USER" ]]; then
+    docker exec -e "HOME=$N8N_HOME" -e "N8N_USER_FOLDER=$N8N_USER_FOLDER" -u "$N8N_EXEC_USER" "$CONTAINER" "$@"
+  else
+    docker exec -e "HOME=$N8N_HOME" -e "N8N_USER_FOLDER=$N8N_USER_FOLDER" "$CONTAINER" "$@"
+  fi
+}
+
 echo "[backup] container=$CONTAINER"
 echo "[backup] out_dir=$OUT_DIR"
 echo "[backup] retain=$RETAIN"
@@ -20,19 +31,19 @@ echo "[backup] retain=$RETAIN"
 docker ps --filter "name=^${CONTAINER}$" --format '{{.Names}}' | grep -q "^${CONTAINER}$" \
   || { echo "[backup] ERROR: container '$CONTAINER' no está corriendo"; exit 1; }
 
-docker exec -u node "$CONTAINER" sh -lc 'rm -rf /tmp/workflows && mkdir -p /tmp/workflows'
-docker exec -u node "$CONTAINER" n8n export:workflow --backup --output=/tmp/workflows >/dev/null || true
+n8n_exec sh -lc 'rm -rf /tmp/workflows && mkdir -p /tmp/workflows'
+n8n_exec n8n export:workflow --backup --output=/tmp/workflows >/dev/null || true
 docker cp "$CONTAINER":/tmp/workflows/. "$WF_DIR" >/dev/null || true
-docker exec -u node "$CONTAINER" rm -rf /tmp/workflows
+n8n_exec rm -rf /tmp/workflows
 
-docker exec -u node "$CONTAINER" sh -lc 'rm -rf /tmp/credentials && mkdir -p /tmp/credentials'
+n8n_exec sh -lc 'rm -rf /tmp/credentials && mkdir -p /tmp/credentials'
 if [[ "$DECRYPTED" == "true" ]]; then
-  docker exec -u node "$CONTAINER" n8n export:credentials --backup --decrypted --output=/tmp/credentials >/dev/null || true
+  n8n_exec n8n export:credentials --backup --decrypted --output=/tmp/credentials >/dev/null || true
 else
-  docker exec -u node "$CONTAINER" n8n export:credentials --backup --output=/tmp/credentials >/dev/null || true
+  n8n_exec n8n export:credentials --backup --output=/tmp/credentials >/dev/null || true
 fi
 docker cp "$CONTAINER":/tmp/credentials/. "$CR_DIR" >/dev/null || true
-docker exec -u node "$CONTAINER" rm -rf /tmp/credentials
+n8n_exec rm -rf /tmp/credentials
 
 WF_COUNT="$(find "$WF_DIR" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
 CR_COUNT="$(find "$CR_DIR" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"

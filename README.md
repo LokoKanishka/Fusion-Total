@@ -132,6 +132,9 @@ Por defecto, `exec`/`bash` deben mantenerse denegados en la política local de O
 Controles operativos:
 - `./scripts/mode_safe.sh` aplica perfil seguro con `exec` fuera de `allow` y explícitamente en `deny`.
 - `./scripts/policy_engine.sh check` falla si `mode_safe` vuelve a permitir `exec` o deja de denegarlo.
+- `./scripts/fusion_isolation_guard.sh check` valida aislamiento estricto del proyecto (sin mezclar puertos/n8n con otros stacks).
+- `scripts/compose_infra.sh` ejecuta ese guard automáticamente en `up/down/start/stop/restart`.
+- `./scripts/n8n_mcp_preflight.sh` valida aislamiento + salud de n8n + lock de modelos + estado del bridge MCP.
 
 ## Reverse proxy y trusted proxies (gateway)
 - El gateway está configurado como **local-only** (`gateway.bind: loopback`) y autenticado por token.

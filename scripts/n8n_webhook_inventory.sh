@@ -4,10 +4,21 @@ set -euo pipefail
 OUT_DIR="${OUT_DIR:-./_tmp}"
 CONTAINER="${CONTAINER:-lucy_brain_n8n}"
 STRICT_CONFLICTS="${STRICT_CONFLICTS:-false}"
+N8N_HOME="${N8N_HOME:-/home/node}"
+N8N_USER_FOLDER="${N8N_USER_FOLDER:-${N8N_HOME}/.n8n}"
+N8N_EXEC_USER="${N8N_EXEC_USER:-}"
 mkdir -p "$OUT_DIR"
 
+n8n_exec() {
+  if [[ -n "$N8N_EXEC_USER" ]]; then
+    docker exec -e "HOME=$N8N_HOME" -e "N8N_USER_FOLDER=$N8N_USER_FOLDER" -u "$N8N_EXEC_USER" "$CONTAINER" "$@"
+  else
+    docker exec -e "HOME=$N8N_HOME" -e "N8N_USER_FOLDER=$N8N_USER_FOLDER" "$CONTAINER" "$@"
+  fi
+}
+
 EXPORT_FILE="$OUT_DIR/workflows_export.json"
-docker exec -u node "$CONTAINER" n8n export:workflow --all --output /tmp/workflows_export.json >/dev/null
+n8n_exec n8n export:workflow --all --output /tmp/workflows_export.json >/dev/null
 docker cp "$CONTAINER":/tmp/workflows_export.json "$EXPORT_FILE" >/dev/null
 export EXPORT_FILE STRICT_CONFLICTS
 

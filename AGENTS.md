@@ -36,3 +36,13 @@ Interpret these aliases as fixed terms in this repository:
 
 1. `cunn` => `Cunningham` (the project's AI).
 2. `dc` => `Molbot Direct Chat`.
+
+# Project Isolation Rule (Priority: Critical)
+
+To prevent cross-project contamination, this rule is mandatory and has priority over convenience:
+
+1. Never mix this repo with other projects in runtime operations.
+2. `n8n` for this project is exclusive and must remain isolated from other project stacks.
+3. Exclusive port ownership (especially `5678`) must remain bound to Fusion services only.
+4. If a conflict is detected (other project container, reused port, wrong repo path), stop immediately and fix isolation before continuing.
+5. Do not reuse another project's n8n instance, workflows, storage path, or compose stack.

@@ -3,11 +3,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 RUN_STRESS="${RUN_STRESS:-false}"
+RUN_MCP_PREFLIGHT="${RUN_MCP_PREFLIGHT:-false}"
 SERVICES="${SERVICES:-n8n codex_runner searxng}"
 APPLY_GATEWAY_PATCH="${APPLY_GATEWAY_PATCH:-true}"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fusiontotal}"
 
 echo "[bringup] init IPC layout"
 ./scripts/ipc_layout_init.sh ./ipc
+
+echo "[bringup] isolation guard check"
+./scripts/fusion_isolation_guard.sh check
 
 echo "[bringup] compose_infra up -d --build ${SERVICES}"
 ./scripts/compose_infra.sh up -d --build ${SERVICES}
@@ -31,7 +36,7 @@ wait_http() {
 
 wait_http "n8n" "http://127.0.0.1:5678/healthz"
 wait_http "codex_runner" "http://127.0.0.1:5000/healthz"
-wait_http "searxng" "http://127.0.0.1:8080/"
+wait_http "searxng" "http://127.0.0.1:8081/"
 
 if [[ "$APPLY_GATEWAY_PATCH" == "true" ]]; then
   echo "[bringup] applying Lucy Gateway v1 patch"
@@ -55,6 +60,11 @@ fi
 if [[ "$RUN_STRESS" == "true" ]]; then
   echo "[bringup] running stress matrix"
   ./scripts/n8n_stress_matrix.sh
+fi
+
+if [[ "$RUN_MCP_PREFLIGHT" == "true" ]]; then
+  echo "[bringup] running n8n+mcp preflight"
+  ./scripts/n8n_mcp_preflight.sh
 fi
 
 echo "BRINGUP=PASS"

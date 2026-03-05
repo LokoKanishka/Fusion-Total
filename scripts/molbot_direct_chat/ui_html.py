@@ -216,6 +216,7 @@ HTML = r"""<!doctype html>
         </button>
         <button class="alt" id="voiceModeToggle" type="button">MODO EXPERIMENTAL</button>
         <button class="alt" id="openReaderMode" type="button">Modo lectura</button>
+        <button class="alt" id="openN8nPanel" type="button">Panel n8n</button>
         <span class="small" id="readerModeInfo"></span>
       <span class="small">Slash: /new /escritorio /lib /rescan /read N /next /repeat /status /help reader</span>
     </div>
@@ -248,8 +249,9 @@ HTML = r"""<!doctype html>
 	    const voiceToggleTextEl = document.getElementById("voiceToggleText");
 	    const sttChatToggleEl = document.getElementById("sttChatToggle");
 	    const sttChatToggleTextEl = document.getElementById("sttChatToggleText");
-	    const voiceModeToggleEl = document.getElementById("voiceModeToggle");
+      const voiceModeToggleEl = document.getElementById("voiceModeToggle");
       const openReaderModeEl = document.getElementById("openReaderMode");
+      const openN8nPanelEl = document.getElementById("openN8nPanel");
       const readerModeInfoEl = document.getElementById("readerModeInfo");
 	    const attachEl = document.getElementById("attach");
 	    const attachInfoEl = document.getElementById("attachInfo");
@@ -1762,6 +1764,10 @@ HTML = r"""<!doctype html>
       } catch {}
       window.open("/reader", "_blank", "noopener,noreferrer");
       await syncVoiceState();
+    });
+
+    openN8nPanelEl.addEventListener("click", () => {
+      window.open("/n8n-panel", "_blank", "noopener,noreferrer");
     });
 
     window.addEventListener("beforeunload", shutdownVoiceStateOnUnload);

@@ -9,6 +9,17 @@ DRY_RUN="${DRY_RUN:-false}"
 RUN_SMOKE="${RUN_SMOKE:-true}"
 SMOKE_SCRIPT="${SMOKE_SCRIPT:-./scripts/webhook_smoke.sh}"
 ROLLBACK_ON_FAIL="${ROLLBACK_ON_FAIL:-true}"
+N8N_HOME="${N8N_HOME:-/home/node}"
+N8N_USER_FOLDER="${N8N_USER_FOLDER:-${N8N_HOME}/.n8n}"
+N8N_EXEC_USER="${N8N_EXEC_USER:-}"
+
+n8n_exec() {
+  if [[ -n "$N8N_EXEC_USER" ]]; then
+    docker exec -e "HOME=$N8N_HOME" -e "N8N_USER_FOLDER=$N8N_USER_FOLDER" -u "$N8N_EXEC_USER" "$CONTAINER" "$@"
+  else
+    docker exec -e "HOME=$N8N_HOME" -e "N8N_USER_FOLDER=$N8N_USER_FOLDER" "$CONTAINER" "$@"
+  fi
+}
 
 pick_latest_backup() {
   ls -1dt "${BACKUP_BASE}"/* 2>/dev/null | head -n 1 || true
@@ -35,13 +46,13 @@ restore_from_dir() {
   [[ -d "$restore_dir/credentials" ]] || { echo "[restore] ERROR: falta ${restore_dir}/credentials"; return 1; }
 
   local tmp_base="/tmp/restore_$(date +%s)_$RANDOM"
-  docker exec -u node "$CONTAINER" mkdir -p "$tmp_base/workflows" "$tmp_base/credentials"
+  n8n_exec mkdir -p "$tmp_base/workflows" "$tmp_base/credentials"
   docker cp "$restore_dir/workflows/." "$CONTAINER":"$tmp_base/workflows/"
   docker cp "$restore_dir/credentials/." "$CONTAINER":"$tmp_base/credentials/"
 
-  docker exec -u node "$CONTAINER" n8n import:credentials --separate --input="$tmp_base/credentials"
-  docker exec -u node "$CONTAINER" n8n import:workflow --separate --input="$tmp_base/workflows"
-  docker exec -u node "$CONTAINER" rm -rf "$tmp_base"
+  n8n_exec n8n import:credentials --separate --input="$tmp_base/credentials"
+  n8n_exec n8n import:workflow --separate --input="$tmp_base/workflows"
+  n8n_exec rm -rf "$tmp_base"
 
   # Reactivate workflows that were active in the backup set.
   mapfile -t active_ids < <(python3 - <<'PY' "$restore_dir/workflows"
@@ -62,7 +73,7 @@ PY
   )
   for wid in "${active_ids[@]:-}"; do
     [[ -n "$wid" ]] || continue
-    docker exec -u node "$CONTAINER" n8n update:workflow --id="$wid" --active=true >/dev/null || true
+    n8n_exec n8n update:workflow --id="$wid" --active=true >/dev/null || true
   done
 
   URL_MODE=hardcoded CODEX_RUNNER_TARGET_URL="http://127.0.0.1:5000/execute" ./scripts/n8n_set_codex_runner_url.sh >/dev/null || true

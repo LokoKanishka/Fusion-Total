@@ -17,3 +17,9 @@ Antes de integrar:
 - Verificación rápida:
   - `bash -n scripts/mode_safe.sh scripts/policy_engine.sh`
   - `./scripts/policy_engine.sh check` (debe devolver `POLICY_ENGINE_OK`)
+
+## Aislamiento estricto de proyecto (Fusion)
+- No mezclar runtime/servicios con otros proyectos.
+- `n8n` de Fusion es exclusivo (no compartir contenedor, volumen ni base con otros repos).
+- Puerto `5678` reservado para Fusion (`n8n`) y bloqueante ante conflicto.
+- Antes de `up/restart/stop/down`: ejecutar `./scripts/fusion_isolation_guard.sh check`.

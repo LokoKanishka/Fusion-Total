@@ -10,7 +10,16 @@ CONTENT_TYPE="${CONTENT_TYPE:-application/json}"
 TIMEOUT_S="${TIMEOUT_S:-30}"
 export DB_PATH WORKFLOW_ID TIMEOUT_S
 
-[[ -f "$DB_PATH" ]] || { echo "ERROR db not found: $DB_PATH"; exit 1; }
+if [[ ! -f "$DB_PATH" ]]; then
+  ALT_DB_PATH="data/n8n/.n8n/database.sqlite"
+  if [[ -f "$ALT_DB_PATH" ]]; then
+    DB_PATH="$ALT_DB_PATH"
+    export DB_PATH
+  else
+    echo "ERROR db not found: $DB_PATH"
+    exit 1
+  fi
+fi
 
 LAST_BEFORE="$(python3 - <<'PY'
 import os, sqlite3

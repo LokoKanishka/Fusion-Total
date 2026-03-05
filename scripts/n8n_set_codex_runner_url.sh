@@ -5,6 +5,24 @@ DB_PATH="${DB_PATH:-data/n8n/database.sqlite}"
 WORKFLOW_NAME="${WORKFLOW_NAME:-Test_Manos}"
 URL_MODE="${URL_MODE:-hardcoded}" # hardcoded | env
 CODEX_RUNNER_TARGET_URL="${CODEX_RUNNER_TARGET_URL:-http://127.0.0.1:5000/execute}"
+
+if [[ ! -f "$DB_PATH" ]]; then
+  ALT_DB_PATH="data/n8n/.n8n/database.sqlite"
+  if [[ -f "$ALT_DB_PATH" ]]; then
+    DB_PATH="$ALT_DB_PATH"
+  fi
+fi
+
+if [[ ! -f "$DB_PATH" ]]; then
+  echo "SKIP db_not_found path=$DB_PATH"
+  exit 0
+fi
+
+if [[ ! -w "$DB_PATH" ]]; then
+  echo "SKIP readonly_db path=$DB_PATH"
+  exit 0
+fi
+
 export DB_PATH WORKFLOW_NAME URL_MODE CODEX_RUNNER_TARGET_URL
 
 python3 - <<'PY'

@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 import requests
 
 from molbot_direct_chat import desktop_ops, web_ask, web_search
+from molbot_direct_chat.n8n_panel_html import N8N_PANEL_HTML
 from molbot_direct_chat.reader_ui_html import READER_HTML
 from molbot_direct_chat.ui_html import HTML as UI_HTML
 from molbot_direct_chat.util import extract_url as _extract_url
@@ -9544,6 +9545,15 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/reader":
             raw = READER_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+
+        if path == "/n8n-panel":
+            raw = N8N_PANEL_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(raw)))
