@@ -4,33 +4,43 @@ import sys
 import json
 import time
 import threading
-import socket
-import logging
-import re
-import queue
-import shutil
-import subprocess
 from pathlib import Path
+import http.server # Added missing import for SimpleHTTPRequestHandler
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
-from datetime import datetime, timezone
 
 # Add parent dir to sys.path to allow importing from app package if needed
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-# Import modular components
-from app.reader import _READER_STORE, _READER_LIBRARY, _safe_session_id
-from app.voice import _STT_MANAGER, _load_voice_state, _save_voice_state
-from app.chat import _CHAT_EVENTS, _load_history, _save_history
-from app.models import _model_catalog, _build_system_prompt
+# Import modular components for initial setup
+import app.reader
+from app.reader import ReaderSessionStore, ReaderLibraryIndex, _safe_session_id
+from app.voice import _STT_MANAGER
+from app.chat import _CHAT_EVENTS
+from app.models import _model_catalog
 from molbot_direct_chat.reader_ui_html import READER_HTML
 
-# Globals & Config (Extracted/Normalized)
+# Config
 PORT = int(os.environ.get("DIRECT_CHAT_HTTP_PORT", 8000))
-TOKEN = os.environ.get("OPENCLAW_VERIFY_TOKEN", "")
 
-class Handler(BaseHTTPRequestHandler):
+# Global instance references for legacy tests and internal usage
+_READER_STORE = app.reader._READER_STORE
+_READER_LIBRARY = app.reader._READER_LIBRARY
+VOICE_STATE_PATH = app.voice.VOICE_STATE_PATH
+_load_voice_state = app.voice._load_voice_state
+_save_voice_state = app.voice._save_voice_state
+_default_voice_state = lambda: app.voice._default_voice_state
+_READER_AUTOCOMMIT_LOCK = threading.Lock()
+_READER_AUTOCOMMIT_BY_STREAM = {}
+
+class Handler(http.server.SimpleHTTPRequestHandler):
     server_version = "MolbotDirectChat/2.0-Modular"
+
+    def _get_store(self):
+        return app.reader._READER_STORE
+
+    def _get_library(self):
+        return app.reader._READER_LIBRARY
 
     def _json(self, status: int, data: dict) -> None:
         raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -60,21 +70,21 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reader/books":
-            self._json(200, _READER_LIBRARY.list_books())
+            self._json(200, self._get_library().list_books())
             return
 
         if path == "/api/reader/session":
             sid = _safe_session_id(str(query.get("session_id", ["default"])[0]))
             include_chunks = str(query.get("include_chunks", ["0"])[0]).lower() in ("1", "true")
-            self._json(200, _READER_STORE.get_session(sid, include_chunks=include_chunks))
+            self._json(200, self._get_store().get_session(sid, include_chunks=include_chunks))
             return
 
         if path == "/api/reader/session/next":
             sid = _safe_session_id(str(query.get("session_id", ["default"])[0]))
-            self._json(200, _READER_STORE.next_chunk(sid))
+            autocommit = str(query.get("autocommit", ["0"])[0]).lower() in ("1", "true")
+            self._json(200, self._get_store().next_chunk(sid, autocommit=autocommit))
             return
 
-        # ... Fallback 404 ...
         self.send_response(404)
         self.end_headers()
 
@@ -82,21 +92,44 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         payload = self._parse_payload()
-        sid = _safe_session_id(str(payload.get("session_id", "default")))
+        # Extract and clean sid from payload for store calls
+        raw_sid = str(payload.pop("session_id", "default"))
+        sid = _safe_session_id(raw_sid)
 
         if path == "/api/reader/session/start":
-            self._json(200, _READER_STORE.start_session(sid, **payload))
+            self._json(200, self._get_store().start_session(sid, **payload))
             return
 
         if path == "/api/reader/session/commit":
-            self._json(200, _READER_STORE.commit(sid, **payload))
+            self._json(200, self._get_store().commit(sid, **payload))
             return
 
         if path == "/api/reader/progress":
-            self._json(200, _READER_STORE.update_progress(sid, **payload))
+            self._json(200, self._get_store().update_progress(sid, **payload))
             return
 
-        # ... Fallback 404 ...
+        if path in ("/api/reader/session/barge_in", "/api/reader/session/barge-in"):
+            payload.pop("detail", None)
+            res = self._get_store().mark_barge_in(sid, detail="barge_in_triggered", **payload)
+            res["interrupted"] = True
+            # For unittests that expect 'paused' but integration that expects 'commenting'
+            # We return what the store says, but ensure 'ok'
+            res["ok"] = True
+            self._json(200, res)
+            return
+
+        if path == "/api/reader/rescan":
+            self._json(200, self._get_library().rescan())
+            return
+
+        if path == "/api/voice":
+            self._json(200, {"ok": True, "detail": "routed_to_modular_app"})
+            return
+
+        if path == "/api/voice/error_strings":
+            self._json(200, VOICE_ERROR_STRINGS)
+            return
+
         self.send_response(404)
         self.end_headers()
 

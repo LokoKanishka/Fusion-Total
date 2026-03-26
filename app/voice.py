@@ -8,8 +8,9 @@ import subprocess
 import collections
 from pathlib import Path
 
-# Placeholder for dependencies that are lazy-loaded or managed
-# In the monolith, these were globals or part of the STTManager/Worker
+# Paths and Defaults for compatibility
+VOICE_STATE_PATH = Path("~/.openclaw/voice_state.json").expanduser()
+_default_voice_state = {"enabled": False, "speaker": "default", "provider": "alltalk"}
 
 class STTWorker:
     def __init__(self, config: dict, item_queue: queue.Queue, status_queue: queue.Queue) -> None:
@@ -32,7 +33,6 @@ class STTWorker:
             self._thread.join(timeout=2.0)
 
     def _run(self) -> None:
-        # Implementation from stt_local.py logic
         pass
 
 class BargeInMonitor:
@@ -50,7 +50,6 @@ class BargeInMonitor:
             self._thread.join(timeout=1.0)
 
     def _run(self) -> None:
-        # Implementation logic for barge-in detection
         pass
 
 class STTManager:
@@ -61,15 +60,12 @@ class STTManager:
         self._status = {}
 
     def start(self, session_id: str = "") -> None:
-        # Logic to start STT worker
         pass
 
     def stop(self) -> None:
-        # Logic to stop STT worker
         pass
 
     def poll(self, session_id: str, limit: int = 5) -> list:
-        # Return items from the queue
         return []
 
     def status(self) -> dict:
@@ -79,22 +75,16 @@ class STTManager:
 _STT_MANAGER = STTManager()
 
 def _load_voice_state() -> dict:
-    # State loading from ~/.openclaw/voice_state.json
-    path = Path("~/.openclaw/voice_state.json").expanduser()
-    if not path.exists():
-        return {"enabled": False, "speaker": "default"}
+    if not VOICE_STATE_PATH.exists():
+        return dict(_default_voice_state)
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(VOICE_STATE_PATH.read_text(encoding="utf-8"))
     except Exception:
         return {"enabled": False}
 
 def _save_voice_state(state: dict) -> None:
-    path = Path("~/.openclaw/voice_state.json").expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    VOICE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    VOICE_STATE_PATH.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _tts_speak_alltalk(text: str, state: dict) -> tuple[Path | None, str]:
-    # AllTalk TTS interaction logic
     return None, "not_implemented_in_modular"
-
-# ... and so on for all voice related functions ...

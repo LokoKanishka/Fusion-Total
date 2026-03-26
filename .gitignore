@@ -60,3 +60,4 @@ config/mcporter.json
 output_playwright_*.png
 
 .playwright-cli/
+state/
