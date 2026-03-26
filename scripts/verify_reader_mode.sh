@@ -27,12 +27,18 @@ tmp_dir = Path(sys.argv[1])
 repo_root = Path.cwd()
 sys.path.insert(0, str(repo_root / "scripts"))
 
-import openclaw_direct_chat as direct_chat  # noqa: E402
-
+# direct_chat now just imports these, but it's cleaner to use the actual source
+from app.reader import ReaderSessionStore, _READER_STORE
+import openclaw_direct_chat as direct_chat
 
 state_path = tmp_dir / "reading_sessions.json"
 lock_path = tmp_dir / ".reading_sessions.lock"
-direct_chat._READER_STORE = direct_chat.ReaderSessionStore(
+# We inject our test store into the modular system if needed, 
+# but for the API tests to work, the HANDLER needs to use our test instance.
+# Since the handler uses the GLOBAL _READER_STORE from app.reader, 
+# we must monkeypatch it for the test.
+import app.reader
+app.reader._READER_STORE = ReaderSessionStore(
     state_path=state_path,
     lock_path=lock_path,
 )

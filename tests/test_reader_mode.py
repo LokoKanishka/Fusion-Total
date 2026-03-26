@@ -14,30 +14,17 @@ REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
 
 
-import openclaw_direct_chat as direct_chat  # noqa: E402
-
-
-class _DummyWorker:
-    def __init__(self, running: bool = True, last_error: str = "") -> None:
-        self._running = running
-        self.last_error = last_error
-
-    def start(self) -> None:
-        return
-
-    def stop(self, timeout: float = 0.0) -> None:
-        self._running = False
-        return
-
-    def is_running(self) -> bool:
-        return self._running
+import openclaw_direct_chat as direct_chat
+from app.reader import ReaderSessionStore, _READER_STORE
+from app.voice import _STT_MANAGER, _load_voice_state, _save_voice_state, _default_voice_state, VOICE_STATE_PATH
+from app.chat import _CHAT_EVENTS
 
 
 class TestReaderSessionStore(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         base = Path(self._tmp.name)
-        self.store = direct_chat.ReaderSessionStore(
+        self.store = ReaderSessionStore(
             state_path=base / "reading_sessions.json",
             lock_path=base / ".reading_sessions.lock",
         )
@@ -87,7 +74,7 @@ class TestReaderSessionStore(unittest.TestCase):
         self.assertEqual(int(interrupted.get("cursor", -1)), 0)
 
         # Simulate restart by opening a new store over the same persisted state file.
-        restarted = direct_chat.ReaderSessionStore(
+        restarted = ReaderSessionStore(
             state_path=self.store.state_path,
             lock_path=self.store.lock_path,
         )
