@@ -1,48 +1,28 @@
-# Workspace Safety Rules (Ubuntu Workspaces)
+# Lector Conversacional — Agent Rules
 
-These rules are mandatory for any browser/UI automation in this repository.
+## Identity
+This is a **conversational reader** — not a general assistant, browser, or desktop automation tool.
 
-1. Never move existing windows between Ubuntu workspaces.
-2. Never reuse or retarget windows that were opened in another workspace.
-3. Only open new windows for tests in the current active workspace.
-4. If the action cannot guarantee workspace isolation, stop and ask before continuing.
-5. Use the requested Chrome profile (for example `diego`) only by opening a new window/tab in the current workspace, without touching other workspace windows.
-6. Forbidden: any command/action that changes a window's workspace (for example `wmctrl -t`, workspace move helpers, or equivalent).
-7. If a window was opened in another workspace by mistake, never move it; leave it there and continue only in the current workspace.
+## Allowed Operations
+- Reader commands: load, read, navigate, bookmark, resume
+- Voice/TTS/STT operations
+- Chat about current reading content
+- Model routing (Ollama/cloud) for reader conversations
 
-# Human Chat Mode (Permanent)
+## Prohibited Operations
+- No browser automation
+- No YouTube/web integration
+- No n8n workflows
+- No desktop file operations
+- No general AI assistant tasks
 
-When the user says "como humano en el chat" (or equivalent), this is mandatory:
+## Project Isolation
+- This repo is self-contained
+- Port 8000 is the reader HTTP server
+- AllTalk TTS on port 7851 (external dependency)
+- Ollama for LLM backend (external dependency)
 
-1. Use the visible `Molbot Direct Chat` UI as the execution path.
-2. If it is already open, use that window/tab; if not, open it.
-3. Type and send commands in the chat exactly as a human would.
-4. Prefer real UI input/send behavior over internal shortcuts/APIs.
-5. This mode is used specifically to test real interface behavior and detect UI failures.
-
-# Lucy Validation Rule (Permanent)
-
-When the goal is to verify whether **Lucy** can perform an action in `dc` (for example search/open/play flows), this is mandatory:
-
-1. Do **not** execute the target chat command yourself as the agent.
-2. Ask Lucy to run the command in `Molbot Direct Chat`.
-3. Use Lucy's real outcome (success/failure) as the source of truth for debugging.
-4. After Lucy runs it, you may inspect logs/history/events/windows to diagnose and fix issues.
-5. Only run the command yourself if the user explicitly asks for an agent-run control test; otherwise first ask permission and explain briefly why.
-
-# User Aliases (Permanent)
-
-Interpret these aliases as fixed terms in this repository:
-
-1. `cunn` => `Cunningham` (the project's AI).
-2. `dc` => `Molbot Direct Chat`.
-
-# Project Isolation Rule (Priority: Critical)
-
-To prevent cross-project contamination, this rule is mandatory and has priority over convenience:
-
-1. Never mix this repo with other projects in runtime operations.
-2. `n8n` for this project is exclusive and must remain isolated from other project stacks.
-3. Exclusive port ownership (especially `5678`) must remain bound to Fusion services only.
-4. If a conflict is detected (other project container, reused port, wrong repo path), stop immediately and fix isolation before continuing.
-5. Do not reuse another project's n8n instance, workflows, storage path, or compose stack.
+## Testing
+```bash
+python3 -m unittest tests.test_reader_mode tests.test_reader_library tests.test_reader_command_stress -v
+```

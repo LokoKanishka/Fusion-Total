@@ -755,7 +755,7 @@ class TestVoiceSttManager(unittest.TestCase):
             direct_chat.requests.post = prev_requests_post  # type: ignore
             direct_chat._DIRECT_CHAT_HTTP_PORT = prev_http_port
         self.assertTrue(ok)
-        self.assertEqual(seen_payload.get("allowed_tools"), ["tts", "web_search", "web_ask"])
+        self.assertEqual(seen_payload.get("allowed_tools"), ["tts"])
 
     def test_stt_chat_drop_reason_rules(self) -> None:
         self.assertEqual(direct_chat._stt_chat_drop_reason("suscribite", min_words_chat=2), "chat_banned_phrase")
@@ -764,8 +764,6 @@ class TestVoiceSttManager(unittest.TestCase):
         self.assertEqual(direct_chat._stt_chat_drop_reason("eh", min_words_chat=2), "")
 
     def test_stt_voice_text_normalize_common_misrecognitions(self) -> None:
-        self.assertEqual(direct_chat._stt_voice_text_normalize("preguntale a Hemini"), "preguntale a gemini")
-        self.assertEqual(direct_chat._stt_voice_text_normalize("Puedes preguntarle a Hemini Informa"), "Puedes preguntarle a gemini")
         self.assertEqual(
             direct_chat._stt_voice_text_normalize("hoy del conflicto entre iran y esto"),
             "hoy del conflicto entre iran y eeuu",
@@ -776,9 +774,9 @@ class TestVoiceSttManager(unittest.TestCase):
             "de que hora son las noticias",
         )
 
-    def test_voice_chat_text_looks_incomplete_for_partial_gemini_request(self) -> None:
-        self.assertTrue(direct_chat._voice_chat_text_looks_incomplete("podes preguntarle a gemini"))
-        self.assertFalse(direct_chat._voice_chat_text_looks_incomplete("podes preguntarle a gemini sobre iran y eeuu"))
+    def test_voice_chat_text_looks_incomplete_for_trailing_conjunction(self) -> None:
+        self.assertTrue(direct_chat._voice_chat_text_looks_incomplete("hoy del conflicto entre iran y"))
+        self.assertFalse(direct_chat._voice_chat_text_looks_incomplete("hoy del conflicto entre iran y eeuu"))
 
     def test_stt_segmentation_profile_chat_defaults_are_dictation_friendly(self) -> None:
         profile = direct_chat._stt_segmentation_profile(True)
