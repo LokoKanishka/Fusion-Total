@@ -118,6 +118,9 @@ class ReaderSessionStore:
                 "last_delivery_ts": now
             }
             
+            # Preserve for contextual queries post barge-in
+            sess["last_active_chunk"] = dict(chunk_data)
+            
             res = {"ok": True, "chunk": chunk_data, "session_id": session_id}
             
             if autocommit:
@@ -185,6 +188,15 @@ class ReaderSessionStore:
             out.pop("chunks", None)
             out["ok"] = True
             return out
+        return self._with_state(True, _write)
+
+    def resume_session(self, session_id: str) -> dict:
+        def _write(state: dict) -> dict:
+            sess = state.get(session_id)
+            if not sess: return {"ok": False, "error": "reader_session_not_found"}
+            sess["reader_state"] = "reading"
+            sess["updated_ts"] = time.time()
+            return {"ok": True, "state": "reading"}
         return self._with_state(True, _write)
 
     # Methods for legacy unittest compatibility

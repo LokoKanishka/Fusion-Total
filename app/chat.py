@@ -17,12 +17,8 @@ class ReaderChatController:
         
         # 1. Basic Command Parsing (Deterministic)
         if any(x in msg for x in ["seguí", "continua", "sigue", "resume", "dale"]):
-            # Natural "continue": commit current and get next
-            # We simulate the flow: commit the last pending if any, then signal readiness
-            # In simple terms, we just return an instruction or trigger the next chunk logic.
-            # But the chat API usually returns a text response.
-            # We'll trigger a commit + status update.
-            self.store.update_progress(session_id) 
+            # Natural "continue": We transition the state back to reading
+            self.store.resume_session(session_id) 
             return {"ok": True, "response": "Entendido, reanudo la lectura.", "action": "resume"}
 
         if any(x in msg for x in ["pausa", "pará", "detente", "espera", "stop"]):
@@ -36,6 +32,7 @@ class ReaderChatController:
                 if sess: sess["pending"] = None
                 return {"ok": True}
             self.store._with_state(True, _reset)
+            self.store.resume_session(session_id)
             return {"ok": True, "response": "Repito el último fragmento.", "action": "repeat"}
 
         # 2. Navigation / Seek
@@ -53,6 +50,7 @@ class ReaderChatController:
                 return {"ok": False, "error": "out_of_bounds"}
             res = self.store._with_state(True, _seek_idx)
             if res.get("ok"):
+                self.store.resume_session(session_id)
                 return {"ok": True, "response": f"Entendido, saltando al párrafo {idx+1}.", "action": "seek"}
             else:
                 return {"ok": False, "response": "No pude encontrar ese párrafo."}
@@ -78,9 +76,14 @@ class ReaderChatController:
             chunk_text = ""
             # Logic: If reading, use pending. If paused/commenting, use the one at cursor-1 or current cursor
             # In the modular store, 'pending' holds what was last delivered.
+            # However, 'barge_in' clears 'pending'. So we fallback to 'last_active_chunk'.
             pending = sess.get("pending")
+            last_active = sess.get("last_active_chunk")
+            
             if pending:
                 chunk_text = pending.get("text", "")
+            elif last_active:
+                chunk_text = last_active.get("text", "")
             
             if not chunk_text:
                 return {"ok": True, "response": "No estoy seguro de qué parte te refieres. ¿Podemos seguir leyendo?"}
@@ -89,7 +92,7 @@ class ReaderChatController:
             # Here we demonstrate that we KNOW the context.
             return {
                 "ok": True, 
-                "response": f"Sobre el fragmento que dice '{chunk_text[:50]}...', entiendo que estamos hablando del tema central del libro. ¿Quieres que profundice o seguimos?",
+                "response": f"Sobre la parte que dice '{chunk_text[:50]}...', entiendo perfectamente. Seguimos interactuando.",
                 "context_used": True
             }
 

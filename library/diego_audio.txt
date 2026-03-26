@@ -1,5 +1,7 @@
-Bloque Uno. Inicio de lectura automatizada.
+Bloque Uno. Inicio de la lectura audible con cliente real y auto avance.
 
-Bloque Dos. Parte interactiva.
+Bloque Dos. Parte a interrumpir porque esto es un test interactivo en CLI.
 
-Bloque Tres. Fin de salto.
+Bloque Tres. El destino del salto del comando natural pidiendo otro bloque.
+
+Bloque Cuatro. Fin de la prueba audible.
