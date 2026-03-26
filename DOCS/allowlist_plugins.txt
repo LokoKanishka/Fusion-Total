@@ -1,5 +1,0 @@
-copilot-proxy
-llm-task
-lobster
-open-prose
-whatsapp
