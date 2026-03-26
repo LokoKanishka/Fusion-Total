@@ -1,0 +1,5 @@
+Bloque Uno. Inicio de lectura automatizada.
+
+Bloque Dos. Parte interactiva.
+
+Bloque Tres. Fin de salto.

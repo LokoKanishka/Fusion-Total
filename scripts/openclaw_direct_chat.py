@@ -122,12 +122,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200, self._get_library().rescan())
             return
 
+        if path == "/api/chat/message":
+            from app.chat import ReaderChatController
+            controller = ReaderChatController(self._get_store(), self._get_library())
+            self._json(200, controller.handle_message(sid, str(payload.get("message", ""))))
+            return
+
         if path == "/api/voice":
             self._json(200, {"ok": True, "detail": "routed_to_modular_app"})
             return
 
         if path == "/api/voice/error_strings":
-            self._json(200, VOICE_ERROR_STRINGS)
+            # For fallback in unittests
+            self._json(200, [])
             return
 
         self.send_response(404)

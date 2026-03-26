@@ -154,9 +154,11 @@ class ReaderSessionStore:
             sess["pending"] = None
             sess["last_commit_ts"] = now
             sess["updated_ts"] = now
-            sess["reader_state"] = "paused"
+            # Auto-advance for continuous mode
+            sess["reader_state"] = "reading" 
             if sess["cursor"] >= sess["total_chunks"]:
                 sess["done"] = True
+                sess["reader_state"] = "paused"
             
             out = dict(sess)
             out.pop("chunks", None)
