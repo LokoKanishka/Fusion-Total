@@ -60,7 +60,7 @@ class ReaderChatController:
             return {"ok": True, "reply": f"Iniciando lectura de '{target}'.", "action": "start"}
 
         # 1. Basic Command Parsing (Deterministic)
-        if any(x in msg for x in ["seguí", "continua", "sigue", "resume", "dale"]):
+        if any(x in msg for x in ["seguí", "segui", "continua", "sigue", "resume", "dale"]):
             # Natural "continue": We transition the state back to reading
             self.store.resume_session(session_id) 
             return {"ok": True, "reply": "Entendido, reanudo la lectura.", "action": "resume"}
