@@ -292,9 +292,22 @@ READER_HTML = r"""<!doctype html>
       } catch {}
     });
 
+    async function pollNextChunk() {
+      try {
+        const r = await fetch(`/api/reader/session/next?session_id=${sessionId}&autocommit=1`);
+        if (r.status === 200) {
+          const j = await r.json();
+          if (j.chunk && j.chunk.text && !j.replayed) {
+            push("assistant", `[SISTEMA LEE]: ${j.chunk.text}`);
+          }
+        }
+      } catch (e) {}
+    }
+
     activateReaderMode().then(() => {
       push("assistant", "Modo lectura activo. Decí: biblioteca o leer libro 1.");
       inputEl.focus();
+      setInterval(pollNextChunk, 2000);
     });
   </script>
 </body>

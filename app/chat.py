@@ -36,15 +36,38 @@ class ReaderChatController:
     def handle_message(self, session_id: str, message: str) -> dict:
         msg = message.lower().strip()
         
+        # 0. Library Commands (New for UI compatibility)
+        if any(x in msg for x in ["biblioteca", "libros", "qué hay para leer"]):
+            if self.library:
+                books = self.library.list_books().get("books", [])
+                titles = [f"- {b['title']} (id: {b['id']})" for b in books]
+                return {"ok": True, "reply": "Libros disponibles:\n" + "\n".join(titles), "action": "library"}
+            return {"ok": False, "reply": "No cargué la biblioteca todavía."}
+
+        match_read = re.search(r"leer\s+(?:el\s+libro\s+)?(\d+|[\w-]+)", msg)
+        if match_read:
+            target = match_read.group(1)
+            # Support "leer libro 1" -> first book
+            if target.isdigit():
+                if self.library:
+                    books = self.library.list_books().get("books", [])
+                    idx = int(target) - 1
+                    if 0 <= idx < len(books):
+                        target = books[idx]["id"]
+            
+            # Start or restart session
+            self.store.start_session(session_id, book_id=target)
+            return {"ok": True, "reply": f"Iniciando lectura de '{target}'.", "action": "start"}
+
         # 1. Basic Command Parsing (Deterministic)
         if any(x in msg for x in ["seguí", "continua", "sigue", "resume", "dale"]):
             # Natural "continue": We transition the state back to reading
             self.store.resume_session(session_id) 
-            return {"ok": True, "response": "Entendido, reanudo la lectura.", "action": "resume"}
+            return {"ok": True, "reply": "Entendido, reanudo la lectura.", "action": "resume"}
 
         if any(x in msg for x in ["pausa", "pará", "detente", "espera", "stop"]):
             self.store.mark_barge_in(session_id, detail="manual_pause")
-            return {"ok": True, "response": "Lectura pausada.", "action": "pause"}
+            return {"ok": True, "reply": "Lectura pausada.", "action": "pause"}
 
         if any(x in msg for x in ["repetí", "otra vez", "no escuché"]):
             # Reset pending to force replay of current cursor
@@ -54,7 +77,7 @@ class ReaderChatController:
                 return {"ok": True}
             self.store._with_state(True, _reset)
             self.store.resume_session(session_id)
-            return {"ok": True, "response": "Repito el último fragmento.", "action": "repeat"}
+            return {"ok": True, "reply": "Repito el último fragmento.", "action": "repeat"}
 
         # 2. Navigation / Seek
         # "andá al párrafo 3" -> seek index 2
@@ -74,9 +97,9 @@ class ReaderChatController:
             res = self.store._with_state(True, _seek_idx)
             if res.get("ok"):
                 # No need to call resume_session separately if we set it in _seek_idx
-                return {"ok": True, "response": f"Entendido, saltando al párrafo {idx+1}. Retomo la lectura desde allí.", "action": "seek"}
+                return {"ok": True, "reply": f"Entendido, saltando al párrafo {idx+1}. Retomo la lectura desde allí.", "action": "seek"}
             else:
-                return {"ok": False, "response": f"No pude encontrar el párrafo {idx+1}. El texto tiene {self.store.get_session(session_id).get('total_chunks', 0)} párrafos."}
+                return {"ok": False, "reply": f"No pude encontrar el párrafo {idx+1}. El texto tiene {self.store.get_session(session_id).get('total_chunks', 0)} párrafos."}
 
         # 3. Contextual Question (¿...?)
         # Detect intent: summarize vs explain
@@ -86,7 +109,7 @@ class ReaderChatController:
         if is_summary or is_explanation:
             sess = self.store.get_session(session_id)
             if not sess or not sess.get("ok"):
-                return {"ok": False, "response": "No tengo una sesión activa de lectura para responder."}
+                return {"ok": False, "reply": "No tengo una sesión activa de lectura para responder."}
             
             chunk_text = ""
             pending = sess.get("pending")
@@ -98,16 +121,16 @@ class ReaderChatController:
                 chunk_text = last_active.get("text", "")
             
             if not chunk_text:
-                return {"ok": True, "response": "No estoy seguro de a qué parte te refieres. ¿Podemos seguir leyendo?"}
+                return {"ok": True, "reply": "No estoy seguro de a qué parte te refieres. ¿Podemos seguir leyendo?"}
 
             if is_summary:
                 prompt = f"Resume el siguiente fragmento de texto de forma muy breve, directa y sintética. Máximo 2 oraciones:\n\n'{chunk_text}'"
                 response = self._call_ollama(prompt)
-                return {"ok": True, "response": f"[Resumen]: {response}", "intent": "summarize"}
+                return {"ok": True, "reply": f"[Resumen]: {response}", "intent": "summarize"}
             else:
                 prompt = f"Explica qué quiso decir el autor en este fragmento de forma conversacional y clara:\n\n'{chunk_text}'"
                 response = self._call_ollama(prompt)
-                return {"ok": True, "response": f"[Explicación]: {response}", "intent": "explain"}
+                return {"ok": True, "reply": f"[Explicación]: {response}", "intent": "explain"}
 
-        return {"ok": True, "response": "Recibido. No estoy seguro de cómo procesar ese comando, pero estoy atento.", "action": "none"}
+        return {"ok": True, "reply": "Recibido. No estoy seguro de cómo procesar ese comando, pero estoy atento.", "action": "none"}
 

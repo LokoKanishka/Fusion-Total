@@ -85,6 +85,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200, self._get_store().next_chunk(sid, autocommit=autocommit))
             return
 
+        if path == "/api/voice":
+            self._json(200, _load_voice_state())
+            return
+
         self.send_response(404)
         self.end_headers()
 
@@ -122,14 +126,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200, self._get_library().rescan())
             return
 
-        if path == "/api/chat/message":
+        if path in ("/api/chat", "/api/chat/message"):
             from app.chat import ReaderChatController
             controller = ReaderChatController(self._get_store(), self._get_library())
             self._json(200, controller.handle_message(sid, str(payload.get("message", ""))))
             return
 
         if path == "/api/voice":
-            self._json(200, {"ok": True, "detail": "routed_to_modular_app"})
+            state = _load_voice_state()
+            state.update(payload)
+            _save_voice_state(state)
+            self._json(200, {"ok": True, "state": state})
             return
 
         if path == "/api/voice/error_strings":
