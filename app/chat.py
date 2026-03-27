@@ -12,6 +12,27 @@ class ReaderChatController:
         self.store = store
         self.library = library
 
+    def _call_ollama(self, prompt: str) -> str:
+        """Helper to call local Ollama instance."""
+        try:
+            import requests
+            # Using llama3.1:8b as discussed
+            resp = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "llama3.1:8b",
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.3}
+                },
+                timeout=15
+            )
+            if resp.status_code == 200:
+                return resp.json().get("response", "").strip()
+            return f"[Error Ollama {resp.status_code}]"
+        except Exception as e:
+            return f"[Error de conexión con Ollama: {e}]"
+
     def handle_message(self, session_id: str, message: str) -> dict:
         msg = message.lower().strip()
         
@@ -37,7 +58,7 @@ class ReaderChatController:
 
         # 2. Navigation / Seek
         # "andá al párrafo 3" -> seek index 2
-        match_p = re.search(r"(?:parrafo|párrafo|bloque)\s+(\d+)", msg)
+        match_p = re.search(r"(?:parrafo|párrafo|bloque|página|pagina)\s+(\d+)", msg)
         if match_p:
             idx = int(match_p.group(1)) - 1
             def _seek_idx(state):
@@ -46,37 +67,28 @@ class ReaderChatController:
                 if 0 <= idx < sess.get("total_chunks", 0):
                     sess["cursor"] = idx
                     sess["pending"] = None
+                    # Ensure state is reading so it's picked up
+                    sess["reader_state"] = "reading"
                     return {"ok": True, "cursor": idx}
                 return {"ok": False, "error": "out_of_bounds"}
             res = self.store._with_state(True, _seek_idx)
             if res.get("ok"):
-                self.store.resume_session(session_id)
-                return {"ok": True, "response": f"Entendido, saltando al párrafo {idx+1}.", "action": "seek"}
+                # No need to call resume_session separately if we set it in _seek_idx
+                return {"ok": True, "response": f"Entendido, saltando al párrafo {idx+1}. Retomo la lectura desde allí.", "action": "seek"}
             else:
-                return {"ok": False, "response": "No pude encontrar ese párrafo."}
-
-        # "continuá desde <frase>"
-        match_f = re.search(r"(?:desde|frase)\s+['\"]?([^'\"]+)['\"]?", msg)
-        if match_f:
-            phrase = match_f.group(1)
-            res = self.store.seek_phrase(session_id, phrase)
-            if res.get("ok"):
-                return {"ok": True, "response": f"Localizado. Reanudo desde '{phrase}'.", "action": "seek"}
-            else:
-                return {"ok": False, "response": f"No encontré la frase '{phrase}' en el texto."}
+                return {"ok": False, "response": f"No pude encontrar el párrafo {idx+1}. El texto tiene {self.store.get_session(session_id).get('total_chunks', 0)} párrafos."}
 
         # 3. Contextual Question (¿...?)
-        if "?" in msg or any(x in msg for x in ["explicame", "que quiso decir", "resumi", "no entendi"]):
+        # Detect intent: summarize vs explain
+        is_summary = any(x in msg for x in ["resumi", "resumen", "resúm", "sintetiza"])
+        is_explanation = any(x in msg for x in ["explica", "que quiso decir", "no entendi", "qué significa"]) or "?" in msg
+
+        if is_summary or is_explanation:
             sess = self.store.get_session(session_id)
             if not sess or not sess.get("ok"):
                 return {"ok": False, "response": "No tengo una sesión activa de lectura para responder."}
             
-            # Use chunks if available in memory or re-read from disk
-            # For brevity in this hotfix, we use the text of the current/last chunk
             chunk_text = ""
-            # Logic: If reading, use pending. If paused/commenting, use the one at cursor-1 or current cursor
-            # In the modular store, 'pending' holds what was last delivered.
-            # However, 'barge_in' clears 'pending'. So we fallback to 'last_active_chunk'.
             pending = sess.get("pending")
             last_active = sess.get("last_active_chunk")
             
@@ -86,14 +98,16 @@ class ReaderChatController:
                 chunk_text = last_active.get("text", "")
             
             if not chunk_text:
-                return {"ok": True, "response": "No estoy seguro de qué parte te refieres. ¿Podemos seguir leyendo?"}
+                return {"ok": True, "response": "No estoy seguro de a qué parte te refieres. ¿Podemos seguir leyendo?"}
 
-            # Response logic (In a real product, this goes to an LLM)
-            # Here we demonstrate that we KNOW the context.
-            return {
-                "ok": True, 
-                "response": f"Sobre la parte que dice '{chunk_text[:50]}...', entiendo perfectamente. Seguimos interactuando.",
-                "context_used": True
-            }
+            if is_summary:
+                prompt = f"Resume el siguiente fragmento de texto de forma muy breve, directa y sintética. Máximo 2 oraciones:\n\n'{chunk_text}'"
+                response = self._call_ollama(prompt)
+                return {"ok": True, "response": f"[Resumen]: {response}", "intent": "summarize"}
+            else:
+                prompt = f"Explica qué quiso decir el autor en este fragmento de forma conversacional y clara:\n\n'{chunk_text}'"
+                response = self._call_ollama(prompt)
+                return {"ok": True, "response": f"[Explicación]: {response}", "intent": "explain"}
 
         return {"ok": True, "response": "Recibido. No estoy seguro de cómo procesar ese comando, pero estoy atento.", "action": "none"}
+

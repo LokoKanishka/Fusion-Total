@@ -1,4 +1,5 @@
 import sys
+import os
 import time
 import requests
 import subprocess
@@ -16,6 +17,11 @@ def play_tts(text):
     global current_tts_process
     barge_in_event.clear()
     
+    if os.environ.get("TTS_DRY_RUN") == "1":
+        # Simulate quick reading
+        time.sleep(min(2, len(text) / 200)) # Faster for test
+        return not barge_in_event.is_set()
+
     # We use spd-say with -w (wait) and -l es (spanish language)
     try:
         proc = subprocess.Popen(["spd-say", "-w", "-l", "es", text])
@@ -23,7 +29,7 @@ def play_tts(text):
         proc.wait()
         ret = proc.returncode
     except Exception as e:
-        print(f"\\n[TTS Fallback - No se pudo reproducir audio]: {e}\\n> ", end="")
+        print(f"\n[TTS Fallback - No se pudo reproducir audio]: {e}\n> ", end="")
         time.sleep(2)  # simulated fallback
         ret = 0
         
@@ -46,7 +52,6 @@ def reader_thread():
                             print(f"\n[SISTEMA LEE]: {chunk['text']}\n> ", end="", flush=True)
                             completed = play_tts(chunk['text'])
                             if completed:
-                                # autocommit
                                 requests.post(f"{API_BASE}/reader/session/commit", json={"session_id": session_id, "chunk_index": chunk['chunk_index']})
                 elif data.get("done"):
                     print("\n[FIN DEL LIBRO]")
