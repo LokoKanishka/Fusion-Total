@@ -15,7 +15,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 # Import modular components for initial setup
 import app.reader
 from app.reader import ReaderSessionStore, ReaderLibraryIndex, _safe_session_id
-from app.voice import _STT_MANAGER
+from app.voice import _STT_MANAGER, perform_tts, stop_speech
 from app.chat import _CHAT_EVENTS
 from app.models import _model_catalog
 from molbot_direct_chat.reader_ui_html import READER_HTML
@@ -82,7 +82,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/reader/session/next":
             sid = _safe_session_id(str(query.get("session_id", ["default"])[0]))
             autocommit = str(query.get("autocommit", ["0"])[0]).lower() in ("1", "true")
-            self._json(200, self._get_store().next_chunk(sid, autocommit=autocommit))
+            
+            # --- TICKET 467: Audio Integration ---
+            res = self._get_store().next_chunk(sid, autocommit=autocommit)
+            state = _load_voice_state()
+            if state.get("enabled") and res.get("chunk") and res["chunk"].get("text"):
+                # Blocking TTS call before returning response to the UI
+                perform_tts(res["chunk"]["text"], blocking=True)
+                
+            self._json(200, res)
             return
 
         if path == "/api/voice":
@@ -114,6 +122,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path in ("/api/reader/session/barge_in", "/api/reader/session/barge-in"):
             payload.pop("detail", None)
+            # --- TICKET 467: Stop speech on barge-in ---
+            stop_speech()
             res = self._get_store().mark_barge_in(sid, detail="barge_in_triggered", **payload)
             res["interrupted"] = True
             # For unittests that expect 'paused' but integration that expects 'commenting'
@@ -124,6 +134,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/reader/rescan":
             self._json(200, self._get_library().rescan())
+            return
+
+        if path == "/api/documents/upload":
+            import app.uploads
+            res = app.uploads.save_uploaded_document(
+                payload.get("filename", ""),
+                payload.get("content", "")
+            )
+            status = 200 if res.get("ok") else 400
+            self._json(status, res)
             return
 
         if path in ("/api/chat", "/api/chat/message"):

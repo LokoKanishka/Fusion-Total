@@ -49,8 +49,12 @@ READER_HTML = r"""<!doctype html>
     }
     
     /* Sidebar Components */
-    .side-header { padding: 20px; border-bottom: 1px solid var(--border); }
+    .side-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;}
     .side-header h2 { margin: 0; font-size: 18px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+    .upload-btn { background: var(--accent); color: #000; border: none; padding: 6px 12px; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+    .upload-btn:hover { box-shadow: 0 0 10px var(--accent-glow); }
+    .drop-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11,17,23,0.9); z-index: 1000; display: none; justify-content: center; align-items: center; border: 4px dashed var(--accent); color: var(--accent); font-size: 24px; font-weight: bold; pointer-events: none; }
+    .drop-overlay.active { display: flex; }
     .library-list { flex: 1; overflow-y: auto; padding: 10px; }
     .book-item {
       padding: 12px;
@@ -157,9 +161,12 @@ READER_HTML = r"""<!doctype html>
   </style>
 </head>
 <body>
+  <div id="dropOverlay" class="drop-overlay">Drop .txt or .md files here</div>
   <aside class="sidebar">
     <div class="side-header">
       <h2>Biblioteca</h2>
+      <button id="btnUpload" class="upload-btn">Subir</button>
+      <input type="file" id="fileUpload" accept=".txt,.md" style="display:none;" />
     </div>
     <div class="library-list" id="library">
       <div class="empty-state">Cargando libros...</div>
@@ -225,7 +232,10 @@ READER_HTML = r"""<!doctype html>
       btnNext: document.getElementById("cmdNext"),
       btnPause: document.getElementById("cmdPause"),
       btnResume: document.getElementById("cmdResume"),
-      btnJump: document.getElementById("cmdJump")
+      btnJump: document.getElementById("cmdJump"),
+      btnUpload: document.getElementById("btnUpload"),
+      fileUpload: document.getElementById("fileUpload"),
+      dropOverlay: document.getElementById("dropOverlay")
     };
 
     let state = {
@@ -371,6 +381,60 @@ READER_HTML = r"""<!doctype html>
     el.send.onclick = sendChat;
     el.input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } };
     document.getElementById("backChat").onclick = () => window.location.href = "/";
+
+    // --- Upload Logic ---
+    async function handleFileRead(file, content) {
+      pushMessage("system", `Subiendo ${file.name}...`);
+      try {
+        const r = await fetch("/api/documents/upload", {
+           method: "POST",
+           headers: { "Content-Type": "application/json" },
+           body: JSON.stringify({ filename: file.name, content: content })
+        }).then(res => res.json());
+        
+        if (r.ok) {
+           pushMessage("system", `Archivo subido: ${r.title}.`);
+           await loadLibrary();
+           startBook(r.book_id);
+        } else {
+           pushMessage("system", `Error al subir: ${r.message || r.error}`);
+        }
+      } catch (e) {
+        pushMessage("system", `Fallo la conexión al subir: ${e}`);
+      }
+    }
+
+    function processFile(file) {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".txt") && !file.name.toLowerCase().endsWith(".md")) {
+         pushMessage("system", `Formato no soportado (${file.name}). Solo .txt o .md.`);
+         return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => handleFileRead(file, e.target.result);
+      reader.onerror = () => pushMessage("system", `Error al leer archivo local.`);
+      reader.readAsText(file);
+    }
+
+    el.btnUpload.onclick = () => el.fileUpload.click();
+    el.fileUpload.onchange = (e) => {
+      processFile(e.target.files[0]);
+      el.fileUpload.value = "";
+    };
+
+    window.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      el.dropOverlay.classList.add("active");
+    });
+    window.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      if (e.clientX === 0 && e.clientY === 0) el.dropOverlay.classList.remove("active");
+    });
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      el.dropOverlay.classList.remove("active");
+      if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+    });
 
     // --- Init ---
     async function init() {
