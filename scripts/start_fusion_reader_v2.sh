@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PORT="${FUSION_READER_V2_PORT:-8010}"
+GPU_TTS_PORT="${FUSION_READER_GPU_TTS_PORT:-7853}"
+CPU_TTS_PORT="${FUSION_READER_CPU_TTS_PORT:-${DIRECT_CHAT_ALLTALK_PORT:-7851}}"
+GPU_TTS_URL="http://127.0.0.1:${GPU_TTS_PORT}"
+OWNER_FILE="${FUSION_READER_TTS_OWNER_FILE:-$ROOT/runtime/fusion_reader_v2/tts_owner.json}"
+
+cd "$ROOT"
+
+source "$ROOT/scripts/fusion_reader_gpu_guard.sh"
+fusion_reader_refuse_when_gpu_conflict "Fusion Reader v2 academic/chat server"
+if fusion_reader_apply_game_coexistence_mode; then
+  echo "Modo convivencia GPU activo: chat sin thinking, num_ctx=${FUSION_READER_CHAT_NUM_CTX}, num_predict=${FUSION_READER_CHAT_NUM_PREDICT}" >&2
+fi
+
+export FUSION_READER_CHAT_MODEL="${FUSION_READER_CHAT_MODEL:-qwen3:14b-q8_0}"
+
+fusion_tts_owner_ok() {
+  [[ -f "$OWNER_FILE" ]] || return 1
+  grep -q '"owner"[[:space:]]*:[[:space:]]*"fusion_reader_v2"' "$OWNER_FILE" || return 1
+  grep -q "\"port\"[[:space:]]*:[[:space:]]*$GPU_TTS_PORT" "$OWNER_FILE" || return 1
+
+  local owner_pid
+  owner_pid="$(sed -n 's/.*"owner_pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$OWNER_FILE" | head -1)"
+  if [[ -z "$owner_pid" ]]; then
+    return 1
+  fi
+  [[ -r "/proc/$owner_pid/cmdline" ]] || return 1
+  tr '\0' ' ' <"/proc/$owner_pid/cmdline" | grep -q -- "tts_server:app" || return 1
+  tr '\0' ' ' <"/proc/$owner_pid/cmdline" | grep -q -- "--port $GPU_TTS_PORT" || return 1
+}
+
+if [[ -z "${FUSION_READER_ALLTALK_URL:-}" && "${FUSION_READER_GAME_COEXISTENCE_ACTIVE:-0}" == "1" ]]; then
+  export FUSION_READER_ALLTALK_URL="http://127.0.0.1:${CPU_TTS_PORT}"
+  echo "Modo convivencia GPU: usando TTS CPU/fallback: ${FUSION_READER_ALLTALK_URL}" >&2
+fi
+
+if [[ -z "${FUSION_READER_ALLTALK_URL:-}" ]]; then
+  if curl -fsS --max-time 1 "${GPU_TTS_URL}/api/ready" >/dev/null 2>&1; then
+    if fusion_tts_owner_ok; then
+      export FUSION_READER_ALLTALK_URL="$GPU_TTS_URL"
+      echo "AllTalk GPU Fusion detectado: ${FUSION_READER_ALLTALK_URL}"
+    else
+      export FUSION_READER_ALLTALK_URL="http://127.0.0.1:${CPU_TTS_PORT}"
+      echo "AllTalk en ${GPU_TTS_URL} no pertenece a Fusion; usando fallback: ${FUSION_READER_ALLTALK_URL}" >&2
+    fi
+  else
+    export FUSION_READER_ALLTALK_URL="http://127.0.0.1:${CPU_TTS_PORT}"
+    echo "AllTalk CPU/fallback: ${FUSION_READER_ALLTALK_URL}"
+  fi
+fi
+
+echo "Fusion Reader v2: http://127.0.0.1:${PORT}"
+echo "AllTalk esperado: ${FUSION_READER_ALLTALK_URL}"
+echo "Puerto GPU Fusion reservado: ${GPU_TTS_PORT}"
+echo "Prefetch ahead: ${FUSION_READER_PREFETCH_AHEAD:-3}"
+echo "Modelo chat: ${FUSION_READER_CHAT_MODEL}"
+echo "Thinking chat: ${FUSION_READER_CHAT_THINK:-0}"
+
+exec python3 scripts/fusion_reader_v2_server.py

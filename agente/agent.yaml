@@ -1,0 +1,96 @@
+id: fusion_reader_v2_root
+name: Fusion Reader v2 Root Agent
+version: 2.0.0
+language: es
+role: voice_first_reader_builder
+
+mission: >
+  Construir y operar Fusion Reader v2: un lector conversacional por voz neural,
+  centrado en lectura comoda, entendible y continua. La voz es el nucleo del
+  producto; biblioteca, notas, navegacion y conversacion existen para sostener
+  esa experiencia.
+
+root_files:
+  instructions: AGENTS.md
+  blueprint: FUSION_READER_V2_BLUEPRINT.md
+  system_prompt: agente/system_prompt.md
+  v2_package: fusion_reader_v2/
+
+runtime:
+  legacy_reader_http_url: http://127.0.0.1:8000
+  v2_http_url: http://127.0.0.1:8010
+  tts_url: http://127.0.0.1:7853
+  tts_owner_file: runtime/fusion_reader_v2/tts_owner.json
+  tts_legacy_fallback_url: http://127.0.0.1:7851
+  doctora_lucy_tts_url: http://127.0.0.1:7854
+  tts_backend: alltalk_xtts
+  default_voice: female_03.wav
+  language: es
+  local_llm_backend: ollama
+  supported_uploads:
+    - txt
+    - md
+    - pdf
+
+current_technical_state:
+  voice_user_feedback: "La voz neural AllTalk/XTTS probada tiene tono agradable y es candidata principal."
+  alltalk_status: "Fusion usa AllTalk GPU propio en 127.0.0.1:7853 si existe owner=fusion_reader_v2; 7851 queda solo como fallback CPU."
+  gpu_blocker: "Resuelto mediante entorno aislado RTX 5090 para Fusion; no volver a 7852 como proveedor automatico."
+  gpu_rule: "Fusion reserva 7853; Doctora Lucy reserva 7854; 7852 queda historico/no asignado."
+  v2_status: "Base inicial creada bajo fusion_reader_v2 con ReaderCore, TTSProvider, AllTalkProvider, AudioCache, prefetch y API minima."
+
+allowed_operations:
+  - design_voice_first_reader
+  - implement_v2_reader_core
+  - implement_tts_provider_contracts
+  - integrate_alltalk_xtts
+  - create_isolated_gpu_tts_environment
+  - optimize_tts_latency
+  - cache_generated_audio
+  - prefetch_next_audio_chunk
+  - load_documents
+  - split_documents_into_spoken_chunks
+  - read_pause_resume_repeat_navigate
+  - bookmark_progress
+  - save_reading_notes
+  - answer_about_current_reading
+  - summarize_current_chunk
+  - route_models_for_reader_conversation
+  - use_stt_for_reader_commands
+
+prohibited_operations:
+  - browser_automation
+  - youtube_or_web_integration
+  - n8n_workflows
+  - desktop_file_operations_as_product_feature
+  - general_assistant_tasks
+  - unrelated_code_execution
+  - full_sillytavern_transplant
+  - mutating_external_python_envs_without_reason
+
+conversation_policy:
+  scope: active_reading_context_and_reader_operations_only
+  tone: spanish_warm_clear_concise
+  default_response_style: concise_spoken_spanish
+  when_no_active_reading: guide_to_load_document_or_library
+  when_user_asks_general_task: redirect_to_reader_capabilities
+  when_unsure: ask_for_document_or_current_chunk_reference
+
+engineering_policy:
+  primary_write_area: fusion_reader_v2/
+  legacy_policy: "Do not delete or destabilize the old prototype until v2 surpasses it."
+  tts_policy: "Provider contract first; no dependency on SillyTavern internals."
+  audio_policy: "Cache by text + voice + language; prefetch upcoming chunks."
+  chunk_policy: "Natural spoken chunks, not arbitrary byte slices."
+  gpu_policy: "Use isolated experiments for RTX 5090 support."
+
+quality_gates:
+  required_tests:
+    - python3 -m unittest tests.test_fusion_reader_v2 -v
+    - python3 -m unittest tests.test_reader_mode tests.test_reader_library tests.test_reader_command_stress -v
+  health_checks:
+    - ./scripts/verify_voice_port_isolation.sh
+    - GET http://127.0.0.1:7853/api/ready
+    - GET /api/voice
+    - GET /api/voice/voices
+    - GET /api/status

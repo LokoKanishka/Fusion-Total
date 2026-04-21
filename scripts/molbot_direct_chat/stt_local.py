@@ -1,13 +1,48 @@
 from __future__ import annotations
 
-import audioop
 import dataclasses
 import queue
 import re
+import struct
 import threading
 import time
 from collections import deque
 from typing import Callable, Optional
+
+try:
+    import audioop  # type: ignore
+except ModuleNotFoundError:
+    class _AudioopCompat:
+        @staticmethod
+        def _samples(pcm: bytes, width: int) -> list[int]:
+            if width != 2:
+                raise ValueError("audioop compatibility only supports 16-bit PCM")
+            usable = len(pcm) - (len(pcm) % 2)
+            if usable <= 0:
+                return []
+            return list(struct.unpack("<" + "h" * (usable // 2), pcm[:usable]))
+
+        @classmethod
+        def rms(cls, pcm: bytes, width: int) -> int:
+            samples = cls._samples(pcm, width)
+            if not samples:
+                return 0
+            return int((sum(s * s for s in samples) / len(samples)) ** 0.5)
+
+        @classmethod
+        def mul(cls, pcm: bytes, width: int, factor: float) -> bytes:
+            samples = cls._samples(pcm, width)
+            out = bytearray()
+            for sample in samples:
+                scaled = max(-32768, min(32767, int(sample * float(factor))))
+                out.extend(struct.pack("<h", scaled))
+            return bytes(out)
+
+        @staticmethod
+        def ratecv(data: bytes, width: int, channels: int, inrate: int, outrate: int, state):
+            return data, state
+
+    audioop = _AudioopCompat()
 
 
 class DependencyError(RuntimeError):

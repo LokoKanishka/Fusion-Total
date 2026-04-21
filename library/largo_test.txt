@@ -1,0 +1,23 @@
+Párrafo 1. Introducción al tema de prueba largo. Aquí verificaremos la paginación.
+
+Párrafo 2. Continuamos con el texto para generar suficientes bloques.
+
+Párrafo 3. Un bloque más para la primera página. Aún faltan algunos.
+
+Párrafo 4. Casi terminando la primera página si usamos 5 bloques por página.
+
+Párrafo 5. Final de la primera página.
+
+Párrafo 6. Inicio de la segunda página. A partir de aquí el texto debería cambiar en la UI.
+
+Párrafo 7. Más contenido para la página dos. Aquí escribiremos nuestra nota.
+
+Párrafo 8. Relleno para asegurar que la página dos se renderiza correctamente.
+
+Párrafo 9. Seguimos en la página dos.
+
+Párrafo 10. Final de la página dos.
+
+Párrafo 11. Inicio de la página tres. Probaremos volver hacia atrás desde aquí.
+
+Párrafo 12. Fin del documento largo.
