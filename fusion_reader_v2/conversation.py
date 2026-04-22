@@ -407,6 +407,9 @@ class ConversationCore:
     def _messages(self, question: str, snapshot: dict, history: list[dict] | None = None, dialogue: bool = False, reasoning_mode: str = "") -> list[dict]:
         context = self._context_text(question, snapshot, history=history or [], include_document=not dialogue)
         persona_overlay = self._persona_overlay(reasoning_mode, dialogue=dialogue)
+        lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
+        laboratory_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower()
+        free_mode = laboratory_mode == "free"
         if dialogue:
             system = (
                 "Operas dentro de Fusion Reader v2 como voz de laboratorio. "
@@ -425,6 +428,13 @@ class ConversationCore:
                 "Las notas solo las guarda y confirma el sistema reader_notes; si el usuario pregunta por notas visibles, decile que revise el panel de notas del documento o que repita el pedido como 'tomá nota de ...'. "
                 "Si el usuario te interrumpe o corrige, acepta el nuevo punto y continua desde ahi."
             )
+            if free_mode:
+                system = (
+                    f"{system} Estas en modo libre. No estas encadenada a hablar solo del texto visible. "
+                    "Podes conversar sobre otros temas aunque no dependan del documento activo. "
+                    "El texto, el foco del laboratorio y los documentos de consulta siguen disponibles como contexto opcional, no como obligacion. "
+                    "Si el usuario abre un tema ajeno al documento, no lo fuerces a volver al texto; segui la conversacion libremente."
+                )
             if persona_overlay:
                 system = f"{system} {persona_overlay}"
             messages = [
@@ -461,6 +471,12 @@ class ConversationCore:
             "Si el usuario pide guardar o tomar una nota y esa accion no aparece ya confirmada por el sistema, no finjas haberla guardado. "
             "Responde en español, con claridad, y si el documento no alcanza para contestar decilo."
         )
+        if free_mode:
+            system = (
+                f"{system} Estas en modo libre. No estas obligada a responder solo sobre el texto o lo visible en pantalla. "
+                "Podes conversar con libertad sobre otros temas y usar el documento como contexto opcional cuando aporte. "
+                "No arrastres cada respuesta de vuelta al texto si el usuario quiere abrir una conversacion mas amplia."
+            )
         if persona_overlay:
             system = f"{system} {persona_overlay}"
         messages = [

@@ -400,6 +400,18 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("validez", prompt)
         self.assertIn("Borges", prompt)
 
+    def test_free_laboratory_mode_chat_prompt_is_not_forced_back_to_text(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_laboratory_mode("free")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("Hablemos de física cuántica.")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Estas en modo libre", prompt)
+        self.assertIn("No estas obligada a responder solo sobre el texto", prompt)
+        self.assertEqual(app.laboratory_mode_status()["mode"], "free")
+
     def test_supreme_mode_chat_prompt_reuses_thinking_lucy_persona(self):
         chat_provider = NullChatProvider("Respuesta final.")
         app = test_app()
@@ -1258,6 +1270,12 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn('FUSION_READER_STT_BEAM_SIZE", "1"', stt_server)
         self.assertIn('FUSION_READER_STT_RECOVERY_BEAM_SIZE', stt_server)
         self.assertIn("STT convert_failed", stt_server)
+
+    def test_server_exposes_free_laboratory_mode_button_and_endpoint(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("freeModeBtn", server)
+        self.assertIn("/api/laboratory/mode", server)
+        self.assertIn("Modo libre", server)
 
     def test_dialogue_barge_in_keeps_pre_roll_for_short_commands(self):
         server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")

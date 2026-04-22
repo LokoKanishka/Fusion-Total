@@ -136,6 +136,10 @@ Fusion=7853.
   exactamente la misma personalidad que `Pensamiento`; la diferencia entre
   ambos queda solo en la profundidad del procesamiento, no en identidad,
   tono ni postura intelectual.
+- El laboratorio ahora tiene un `Modo libre` persistente, separado del modo de
+  razonamiento: cuando esta activo, Lucy puede conversar sobre temas no
+  anclados al documento y usar texto/foco/consultas como contexto opcional en
+  vez de obligacion. La lectura principal no cambia.
 - Se corrigio una regresion importante en `Dialogar`: pedidos como "pensar
   filosoficamente sobre el bloque 34" estaban cayendo en la ruta
   `focus_block` de navegacion y devolvian casi una lectura del bloque. Ahora

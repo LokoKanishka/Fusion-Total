@@ -83,6 +83,7 @@
 - [x] Agregar documento principal + documentos de consulta en estado, API, UI y chat
 - [x] Agregar trazas persistentes de `Dialogar` y degradacion controlada `Supremo -> Pensamiento` en voz
 - [x] Crear workbook de personalidad profunda por modo en `FUSION_READER_V2_PERSONALITY_WORKBOOK.md`
+- [x] Agregar `Modo libre` al laboratorio para desacoplar conversación y texto cuando haga falta
 - [ ] Probar modo `Dialogar` con microfono real
 - [ ] Ajustar VAD/barge-in segun ruido ambiente y eco
 - [ ] Afinar warmup/keep-hot de AllTalk GPU

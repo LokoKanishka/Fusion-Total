@@ -546,9 +546,14 @@ INDEX_HTML = r"""<!doctype html>
     }
     .dialogue-row {
       display: grid;
-      grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+      grid-template-columns: minmax(140px, 220px) minmax(120px, 170px) minmax(0, 1fr);
       gap: 10px;
       align-items: center;
+    }
+    .mode-toggle-btn.active {
+      border-color: var(--accent-2);
+      background: rgba(56, 198, 216, 0.14);
+      color: var(--text);
     }
     .dialogue-side {
       display: grid;
@@ -679,6 +684,7 @@ INDEX_HTML = r"""<!doctype html>
       </div>
       <div class="dialogue-row">
         <button id="dialogueBtn" class="primary">Dialogar</button>
+        <button id="freeModeBtn" class="mode-toggle-btn" type="button">Modo libre</button>
         <div class="dialogue-side">
           <div id="dialogueInfo" class="dialogue-info">Diálogo apagado.</div>
           <div class="reasoning-panel">
@@ -751,6 +757,7 @@ INDEX_HTML = r"""<!doctype html>
       reasoningNormalBtn: document.getElementById('reasoningNormalBtn'),
       reasoningThinkingBtn: document.getElementById('reasoningThinkingBtn'),
       reasoningSupremeBtn: document.getElementById('reasoningSupremeBtn'),
+      freeModeBtn: document.getElementById('freeModeBtn'),
       reasoningCaption: document.getElementById('reasoningCaption'),
       dialogueBtn: document.getElementById('dialogueBtn'),
       dialogueInfo: document.getElementById('dialogueInfo'),
@@ -983,6 +990,10 @@ INDEX_HTML = r"""<!doctype html>
       const shouldRefreshNotes = selectedNotesDocId !== notesState.docId || data.current !== notesState.current || Boolean(data.notes && data.notes.count !== notesState.items.length);
       status = data;
       renderReasoningStatus(data.reasoning || {});
+      renderLaboratoryMode(data.laboratory_mode || {});
+      if (!dialogue.active && !dialogue.processing && !dialogue.speaking) {
+        setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
+      }
       els.docTitle.textContent = data.title || 'Ningún documento activo';
       els.docMeta.textContent = `Bloque ${data.current || 0} de ${data.total || 0}`;
       const mainDocument = data.main_document && typeof data.main_document === 'object' ? data.main_document : {};
@@ -1011,6 +1022,14 @@ INDEX_HTML = r"""<!doctype html>
       return String(status && status.reasoning && status.reasoning.label || 'Pensamiento');
     }
 
+    function currentLaboratoryMode() {
+      return String(status && status.laboratory_mode && status.laboratory_mode.mode || 'document');
+    }
+
+    function laboratoryModeSummary() {
+      return currentLaboratoryMode() === 'free' ? 'Modo libre.' : 'Anclado al texto.';
+    }
+
     function dialogueAppliedReasoningLabel(data) {
       const applied = String(data && (data.reasoning_mode_applied || data.reasoning_mode) || currentReasoningMode());
       if (applied === 'supreme') {
@@ -1033,13 +1052,14 @@ INDEX_HTML = r"""<!doctype html>
 
     function pendingThoughtLabel() {
       const mode = currentReasoningMode();
+      const scope = currentLaboratoryMode() === 'free' ? 'con laboratorio libre' : 'con el documento abierto';
       if (mode === 'supreme') {
-        return 'Repensando en profundidad con el laboratorio abierto...';
+        return `Repensando en profundidad ${scope}...`;
       }
       if (mode === 'normal') {
-        return 'Respondiendo con el laboratorio abierto...';
+        return `Respondiendo ${scope}...`;
       }
-      return 'Pensando con el documento abierto...';
+      return `Pensando ${scope}...`;
     }
 
     function renderReasoningStatus(reasoning) {
@@ -1059,6 +1079,36 @@ INDEX_HTML = r"""<!doctype html>
       const passes = Number(item.passes || (mode === 'supreme' ? 3 : 1));
       const think = Object.prototype.hasOwnProperty.call(item, 'think') ? Boolean(item.think) : mode !== 'normal';
       els.reasoningCaption.textContent = `${label} | ${think ? 'thinking activo' : 'sin thinking'} | ${passes} pasada${passes === 1 ? '' : 's'}${description ? ` | ${description}` : ''}`;
+    }
+
+    function renderLaboratoryMode(modeInfo) {
+      const item = modeInfo && typeof modeInfo === 'object' ? modeInfo : {};
+      const mode = String(item.mode || 'document');
+      els.freeModeBtn.classList.toggle('active', mode === 'free');
+      els.freeModeBtn.setAttribute('aria-pressed', mode === 'free' ? 'true' : 'false');
+      els.freeModeBtn.textContent = mode === 'free' ? 'Modo libre activo' : 'Modo libre';
+      els.freeModeBtn.title = String(item.description || '');
+      els.chatInput.placeholder = mode === 'free' ? 'Escribí lo que quieras conversar...' : 'Escribí sobre el texto actual...';
+    }
+
+    async function setLaboratoryMode(mode) {
+      const targetMode = String(mode || '').trim();
+      try {
+        const data = await api('/api/laboratory/mode', { mode: targetMode });
+        if (!status) {
+          status = {};
+        }
+        status.laboratory_mode = data;
+        renderLaboratoryMode(data);
+        log(`${data.label || 'Modo de laboratorio'} activado.`);
+        if (dialogue.active && !dialogue.processing && !dialogue.speaking) {
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary({})} ${laboratoryModeSummary()}`);
+        } else if (!dialogue.active) {
+          setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
+        }
+      } catch (err) {
+        log(`No pude cambiar el modo del laboratorio: ${err.message}`);
+      }
     }
 
     async function setReasoningMode(mode) {
@@ -1082,7 +1132,7 @@ INDEX_HTML = r"""<!doctype html>
           log(`Modo de razonamiento: ${data.label || targetMode}.`);
         }
         if (dialogue.active && !dialogue.processing && !dialogue.speaking) {
-          setDialogueInfo(`Escuchando... ${dialogueModeSummary({ reasoning_mode_requested: String(data.mode || targetMode), reasoning_mode_applied: String(dialogueReasoning.applied_mode || data.mode || targetMode), reasoning_degraded: Boolean(dialogueReasoning.degraded) })}`);
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary({ reasoning_mode_requested: String(data.mode || targetMode), reasoning_mode_applied: String(dialogueReasoning.applied_mode || data.mode || targetMode), reasoning_degraded: Boolean(dialogueReasoning.degraded) })} ${laboratoryModeSummary()}`);
         }
       } catch (err) {
         log(`No pude cambiar el modo mental: ${err.message}`);
@@ -1648,9 +1698,9 @@ INDEX_HTML = r"""<!doctype html>
         speakLocal(data.answer, () => {
           dialogue.speaking = false;
           if (dialogue.active) {
-            setDialogueInfo(`Escuchando... ${currentReasoningLabel()}.`);
-          }
-        });
+          setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. ${laboratoryModeSummary()}`);
+        }
+      });
       }
     }
 
@@ -1682,7 +1732,7 @@ INDEX_HTML = r"""<!doctype html>
         await refresh().catch(() => {});
         const wallMs = Math.round(performance.now() - startedAt);
         const info = `${dialogueModeSummary(data)} | chat ${fmtMs(data.chat_ms)} | voz ${fmtMs(data.tts_ms)} | total ${fmtMs(data.duration_ms || wallMs)} | ${Number(data.reasoning_passes || 1)} pasada${Number(data.reasoning_passes || 1) === 1 ? '' : 's'}`;
-        setDialogueInfo(info);
+        setDialogueInfo(`${laboratoryModeSummary()} ${info}`);
         log(`Diálogo escrito listo con ${data.model || 'modelo local'} en ${wallMs} ms. ${dialogueModeSummary(data)}`);
         await playDialogueAnswer(data);
       } catch (err) {
@@ -1695,7 +1745,7 @@ INDEX_HTML = r"""<!doctype html>
       } finally {
         dialogue.processing = false;
         if (!dialogue.speaking && dialogue.active) {
-          setDialogueInfo(`Escuchando... ${dialogueModeSummary(status && status.dialogue_reasoning ? { reasoning_mode_requested: status.reasoning && status.reasoning.mode, reasoning_mode_applied: status.dialogue_reasoning.applied_mode, reasoning_degraded: status.dialogue_reasoning.degraded } : {})}`);
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary(status && status.dialogue_reasoning ? { reasoning_mode_requested: status.reasoning && status.reasoning.mode, reasoning_mode_applied: status.dialogue_reasoning.applied_mode, reasoning_degraded: status.dialogue_reasoning.degraded } : {})} ${laboratoryModeSummary()}`);
         }
       }
     }
@@ -1774,7 +1824,7 @@ INDEX_HTML = r"""<!doctype html>
         dialogue.noiseFloor = 0.012;
         dialogue.lastTick = performance.now();
         els.dialogueBtn.textContent = 'Detener diálogo';
-        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. Hacé una pausa corta y respondo.`);
+        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. ${laboratoryModeSummary()} Hacé una pausa corta y respondo.`);
         monitorDialogue();
       } catch (err) {
         setDialogueInfo(`No pude abrir el micrófono: ${err.message}`);
@@ -1825,7 +1875,7 @@ INDEX_HTML = r"""<!doctype html>
       dialogue.pcmPreRollSamples = 0;
       dialogue.finalizing = false;
       els.dialogueBtn.textContent = 'Dialogar';
-      setDialogueInfo('Diálogo apagado.');
+      setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
     }
 
     function monitorDialogue() {
@@ -2062,7 +2112,7 @@ INDEX_HTML = r"""<!doctype html>
       dialogue.speechMs = 0;
       dialogue.silenceMs = 0;
       if (blob.size < 1200) {
-        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}.`);
+        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. ${laboratoryModeSummary()}`);
         return;
       }
       dialogue.processing = true;
@@ -2090,7 +2140,7 @@ INDEX_HTML = r"""<!doctype html>
         if (data.ignored || data.detail === 'hallucinated_transcript') {
           addChatMessage('system', 'Ignoré una transcripción espuria de Whisper.');
           addChatMessage('system', traceText);
-          setDialogueInfo(`${dialogueModeSummary(data)} | ${traceText}`);
+          setDialogueInfo(`${laboratoryModeSummary()} ${dialogueModeSummary(data)} | ${traceText}`);
           return;
         }
         addChatMessage('user', data.transcript || '(audio)');
@@ -2109,7 +2159,7 @@ INDEX_HTML = r"""<!doctype html>
         } else {
           log(`Diálogo por audio listo. ${dialogueModeSummary(data)} ${traceText}`);
         }
-        setDialogueInfo(`${dialogueModeSummary(data)} | ${traceText}`);
+        setDialogueInfo(`${laboratoryModeSummary()} ${dialogueModeSummary(data)} | ${traceText}`);
         await playDialogueAnswer(data);
       } catch (err) {
         addChatMessage('system', `Falló el diálogo: ${err.message}`);
@@ -2119,7 +2169,7 @@ INDEX_HTML = r"""<!doctype html>
         dialogue.processing = false;
         dialogue.chunkIndex = null;
         if (!dialogue.speaking && dialogue.active) {
-          setDialogueInfo(`Escuchando... ${dialogueModeSummary(status && status.dialogue_reasoning ? { reasoning_mode_requested: status.reasoning && status.reasoning.mode, reasoning_mode_applied: status.dialogue_reasoning.applied_mode, reasoning_degraded: status.dialogue_reasoning.degraded } : {})}`);
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary(status && status.dialogue_reasoning ? { reasoning_mode_requested: status.reasoning && status.reasoning.mode, reasoning_mode_applied: status.dialogue_reasoning.applied_mode, reasoning_degraded: status.dialogue_reasoning.degraded } : {})} ${laboratoryModeSummary()}`);
         }
       }
     }
@@ -2137,6 +2187,7 @@ INDEX_HTML = r"""<!doctype html>
     els.reasoningNormalBtn.addEventListener('click', () => setReasoningMode('normal'));
     els.reasoningThinkingBtn.addEventListener('click', () => setReasoningMode('thinking'));
     els.reasoningSupremeBtn.addEventListener('click', () => setReasoningMode('supreme'));
+    els.freeModeBtn.addEventListener('click', () => setLaboratoryMode(currentLaboratoryMode() === 'free' ? 'document' : 'free'));
     els.dialogueBtn.addEventListener('click', toggleDialogue);
     els.chatInput.addEventListener('keydown', event => {
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -2632,6 +2683,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/reasoning/mode":
                 self._json(200, APP.set_reasoning_mode(str(payload.get("mode") or "")))
+                return
+            if path == "/api/laboratory/mode":
+                self._json(200, APP.set_laboratory_mode(str(payload.get("mode") or "")))
                 return
             if path in ("/api/laboratory/reset", "/api/chat/reset"):
                 self._json(200, APP.clear_laboratory_history())

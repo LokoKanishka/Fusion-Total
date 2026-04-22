@@ -79,6 +79,7 @@ class FusionReaderV2:
         self._main_source_type = ""
         self.dialogue_allow_supreme = os.environ.get("FUSION_READER_DIALOGUE_ALLOW_SUPREME", "0").strip().lower() in {"1", "true", "yes", "on"}
         self.reasoning_mode = str(getattr(self.conversation, "default_reasoning_mode", "thinking") or "thinking")
+        self.laboratory_mode = "document"
         self.session_state_path = Path(session_state_path) if session_state_path else None
         self.dialogue_trace_path = (self.session_state_path.parent / "dialogue_trace.jsonl") if self.session_state_path else None
         self._restore_session_state()
@@ -387,6 +388,7 @@ class FusionReaderV2:
         out["language"] = self.voice.language
         out["tts"] = self.tts.health()
         out["reasoning"] = self.reasoning_status()
+        out["laboratory_mode"] = self.laboratory_mode_status()
         main_record = self._main_document_record()
         out["main_document"] = self._public_document_record(main_record) if main_record else {}
         out["reference_documents"] = self._reference_document_items()
@@ -717,6 +719,7 @@ class FusionReaderV2:
                 "document_chunks": [],
                 "reference_documents": [self._snapshot_document_record(item) for item in self._reference_documents.values()],
                 "laboratory_focus": self.laboratory_focus_status(),
+                "laboratory_mode": self.laboratory_mode_status(),
             }
         cursor = self.session.cursor
         chunks = document.chunks
@@ -738,6 +741,7 @@ class FusionReaderV2:
             ],
             "reference_documents": [self._snapshot_document_record(item) for item in self._reference_documents.values()],
             "laboratory_focus": self.laboratory_focus_status(),
+            "laboratory_mode": self.laboratory_mode_status(),
         }
 
     def _extract_navigation_plan(self, text: str) -> dict | None:
@@ -1254,6 +1258,7 @@ class FusionReaderV2:
             "tts": self.tts.health(),
             "turns": len(self._dialogue_history),
             "reasoning": self.reasoning_status(),
+            "laboratory_mode": self.laboratory_mode_status(),
             "dialogue_reasoning": {
                 **self.conversation.reasoning_status(dialogue_reasoning["applied"]),
                 "requested_mode": dialogue_reasoning["requested"],
@@ -1267,6 +1272,19 @@ class FusionReaderV2:
         info = self.conversation.reasoning_status(self.reasoning_mode)
         info["selected"] = info.get("mode") == self.reasoning_mode
         return info
+
+    def laboratory_mode_status(self) -> dict:
+        mode = "free" if str(self.laboratory_mode or "").strip().lower() == "free" else "document"
+        return {
+            "mode": mode,
+            "label": "Modo libre" if mode == "free" else "Anclado al texto",
+            "description": (
+                "Lucy puede conversar libremente aunque el tema no dependa del texto; el documento queda como contexto opcional."
+                if mode == "free"
+                else "Lucy prioriza lo que ves, el texto activo y los documentos cargados."
+            ),
+            "selected": True,
+        }
 
     def set_reasoning_mode(self, mode: str) -> dict:
         profile = self.conversation.reasoning_status(mode)
@@ -1291,6 +1309,18 @@ class FusionReaderV2:
             "degraded_reason": dialogue_reasoning["reason"],
         }
         return out
+
+    def set_laboratory_mode(self, mode: str) -> dict:
+        self.laboratory_mode = "free" if str(mode or "").strip().lower() == "free" else "document"
+        self._persist_session_state()
+        self._append_dialogue_trace(
+            {
+                "ts": time.time(),
+                "event": "laboratory_mode_changed",
+                "selected_mode": self.laboratory_mode,
+            }
+        )
+        return self.laboratory_mode_status()
 
     def dialogue_reset(self) -> dict:
         with self._dialogue_lock:
@@ -2081,6 +2111,7 @@ class FusionReaderV2:
             "total": int(status.get("total") or 0),
             "updated_ts": time.time(),
             "reasoning_mode": self.reasoning_mode,
+            "laboratory_mode": self.laboratory_mode,
             "reference_documents": [
                 {
                     "doc_id": str(item.get("doc_id") or ""),
@@ -2127,6 +2158,7 @@ class FusionReaderV2:
         raw = self._read_session_state()
         self.reasoning_mode = str(raw.get("reasoning_mode") or self.reasoning_mode or "thinking")
         self.reasoning_mode = str(self.conversation.reasoning_status(self.reasoning_mode).get("mode") or "thinking")
+        self.laboratory_mode = "free" if str(raw.get("laboratory_mode") or "").strip().lower() == "free" else "document"
         doc_id = str(raw.get("doc_id") or "")
         title = str(raw.get("title") or "")
         self._reference_documents = {}
