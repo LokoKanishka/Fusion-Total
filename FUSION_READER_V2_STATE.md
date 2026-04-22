@@ -124,6 +124,10 @@ Fusion=7853.
 - Si el usuario deja el modo global en `Pensamiento supremo`, `Dialogar` por
   voz lo degrada a `Pensamiento` por defecto para cuidar latencia oral; el chat
   textual puede seguir usando `Supremo` real.
+- La personalidad de `Normal` ya tiene una primera implementacion activa en
+  `ConversationCore`: Lucy Cunningham, companera humana de lectura, intima,
+  filosofica, calida, directa, problematizadora y con inspiracion en la actitud
+  personal de Borges mas que en la imitacion de su escritura.
 - Modo `Dialogar`: microfono del navegador, STT, Qwen/Ollama, respuesta por voz,
   y barge-in inicial desde el navegador.
 - STT persistente GPU con faster-whisper para evitar el costo de cargar Whisper

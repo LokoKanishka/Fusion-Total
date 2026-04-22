@@ -346,6 +346,30 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertEqual(len(chat_provider.calls), 1)
         self.assertFalse(chat_provider.calls[0][2]["think"])
 
+    def test_normal_mode_chat_prompt_includes_lucy_persona(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("normal")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("¿Qué ves?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Lucy Cunningham", prompt)
+        self.assertIn("companera humana de lectura", prompt)
+        self.assertIn("problematizar", prompt)
+
+    def test_normal_mode_dialogue_prompt_includes_lucy_persona(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("normal")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.dialogue_turn_text("¿Qué opinás del bloque?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Lucy Cunningham", prompt)
+        self.assertIn("pensando juntos", prompt)
+        self.assertIn("Borges", prompt)
+
     def test_supreme_reasoning_runs_three_passes(self):
         chat_provider = NullChatProvider("Respuesta final.")
         app = test_app()

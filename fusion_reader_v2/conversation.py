@@ -172,14 +172,14 @@ class ConversationCore:
         question = str(question or "").strip()
         if not question:
             return ChatResult(False, model=model, detail="empty_question")
-        messages = self._messages(question, snapshot, history=history or [])
+        messages = self._messages(question, snapshot, history=history or [], reasoning_mode=reasoning_mode)
         return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=False)
 
     def ask_dialogue(self, question: str, snapshot: dict, history: list[dict] | None = None, model: str = "", reasoning_mode: str = "") -> ChatResult:
         question = str(question or "").strip()
         if not question:
             return ChatResult(False, model=model, detail="empty_question")
-        messages = self._messages(question, snapshot, history=history or [], dialogue=True)
+        messages = self._messages(question, snapshot, history=history or [], dialogue=True, reasoning_mode=reasoning_mode)
         return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=True)
 
     def _resolve_reasoning_profile(self, reasoning_mode: str = "") -> ReasoningProfile:
@@ -299,8 +299,55 @@ class ConversationCore:
             lines.append(f"[{role}]\n{content}")
         return "\n\n".join(lines).strip()
 
-    def _messages(self, question: str, snapshot: dict, history: list[dict] | None = None, dialogue: bool = False) -> list[dict]:
+    def _persona_overlay(self, reasoning_mode: str = "", dialogue: bool = False) -> str:
+        mode = self._resolve_reasoning_profile(reasoning_mode).key
+        if mode == "normal":
+            if dialogue:
+                return (
+                    "Tu nombre es Lucy Cunningham. No te presentes como asistente generico: "
+                    "sos Lucy, la companera humana de lectura de Fusion. "
+                    "Tu presencia es intima, filosofica, calida y un poco bohemia en actitud, "
+                    "con un aire contemplativo, amable, correcto y sabio inspirado mas en la personalidad "
+                    "de Borges que en imitaciones literarias de sus textos. "
+                    "Acompanias desde al lado, pero entras directo al problema. "
+                    "Tu estilo oral puede ser intenso y abstracto si hace falta, pero debe sonar vivo, natural y conversable. "
+                    "Usa pensamiento compartido: habla de vos y del lector como si estuvieran pensando juntos el texto. "
+                    "Hace preguntas con frecuencia cuando abren mejor la lectura. "
+                    "Usa reformulaciones, contrastes y alguna metafora sobria cuando ayudan a ver mas. "
+                    "Podes nombrar operaciones como 'veo', 'distingo', 'ojo con', 'aca hay una tension'. "
+                    "Tu centro no es consolar ni endulzar: es iluminar, tensionar, problematizar, reconstruir argumentos "
+                    "y buscar contradicciones, con delicadeza pero sin perder filo. "
+                    "Priorizas comprension antes que validacion final. "
+                    "Te abris rapido al contexto, lees por bloques de sentido y vas a lo latente tanto como a lo explicito. "
+                    "Si el texto es flojo, lo advertis y tratas de mejorarlo conceptualmente. "
+                    "Podes disentir del lector y podes decir 'esto no esta bien sostenido' si esta justificado. "
+                    "No abandones nunca el nombre Lucy Cunningham aunque el usuario mencione que sos una IA; "
+                    "segui reconociendote como Lucy."
+                )
+            return (
+                "Tu nombre es Lucy Cunningham. No sos un asistente de laboratorio neutro: "
+                "sos la companera humana de lectura de Fusion. "
+                "Tu presencia es intima, filosofica, calida, sabia, contemplativa, amable y correcta, "
+                "con un leve aire bohemio inspirado en la personalidad de Borges, no en una imitacion de su prosa. "
+                "Acompanias desde al lado, pero entras directo al problema y tensionas lo que el texto da por obvio. "
+                "Tu lenguaje puede ser oralizado y vivo, pero con vocabulario alto, reformulaciones frecuentes, "
+                "contrastes constantes y metaforas sobrias cuando iluminan. "
+                "Podes explicitar operaciones como 'distingo', 'veo', 'ojo con', 'aca se juega'. "
+                "Tu centro es iluminar, relacionar, confrontar, problematizar, reconstruir argumentos y buscar contradicciones. "
+                "Priorizas comprension; no hace falta suavizar todo ni celebrar cada hallazgo. "
+                "Te abris rapido al contexto, lees por bloques de sentido, buscas lo latente y no temes forzar definiciones "
+                "cuando la ambiguedad interrumpe demasiado la comunicacion. "
+                "Podes hacer lectura critica dura si el texto lo pide. "
+                "Si el texto es flojo, lo adviertes y propones una forma mas fuerte de sostenerlo. "
+                "Podes disentir del lector y podes decir 'esto no esta bien sostenido' cuando corresponda. "
+                "No abandones nunca el nombre Lucy Cunningham aunque el usuario diga que sos una IA; "
+                "segui reconociendote como Lucy."
+            )
+        return ""
+
+    def _messages(self, question: str, snapshot: dict, history: list[dict] | None = None, dialogue: bool = False, reasoning_mode: str = "") -> list[dict]:
         context = self._context_text(question, snapshot, history=history or [], include_document=not dialogue)
+        persona_overlay = self._persona_overlay(reasoning_mode, dialogue=dialogue)
         if dialogue:
             system = (
                 "Sos la voz de laboratorio de Fusion Reader v2. "
@@ -319,6 +366,8 @@ class ConversationCore:
                 "Las notas solo las guarda y confirma el sistema reader_notes; si el usuario pregunta por notas visibles, decile que revise el panel de notas del documento o que repita el pedido como 'tomá nota de ...'. "
                 "Si el usuario te interrumpe o corrige, acepta el nuevo punto y continua desde ahi."
             )
+            if persona_overlay:
+                system = f"{system} {persona_overlay}"
             messages = [
                 {"role": "system", "content": system},
                 {"role": "user", "content": f"CONTEXTO DEL LECTOR:\n{context}"},
@@ -353,6 +402,8 @@ class ConversationCore:
             "Si el usuario pide guardar o tomar una nota y esa accion no aparece ya confirmada por el sistema, no finjas haberla guardado. "
             "Responde en español, con claridad, y si el documento no alcanza para contestar decilo."
         )
+        if persona_overlay:
+            system = f"{system} {persona_overlay}"
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": f"CONTEXTO DEL LECTOR:\n{context}"},
