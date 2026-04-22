@@ -199,9 +199,9 @@ class ConversationCore:
                 reasoning_mode=profile.key,
                 reasoning_passes=1,
             )
-        return self._run_supreme(messages, model=model, profile=profile, dialogue=dialogue)
+        return self._run_supreme(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode)
 
-    def _run_supreme(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool) -> ChatResult:
+    def _run_supreme(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool, reasoning_mode: str = "") -> ChatResult:
         total_ms = 0
         draft = self.provider.chat(messages, model=model, think=True, num_predict=profile.num_predict)
         total_ms += draft.duration_ms
@@ -215,6 +215,7 @@ class ConversationCore:
                 reasoning_passes=1,
             )
         transcript = self._messages_as_text(messages)
+        persona_overlay = self._persona_overlay(reasoning_mode or profile.key, dialogue=dialogue)
         review_messages = [
             {
                 "role": "system",
@@ -249,12 +250,14 @@ class ConversationCore:
                     "Sos la voz final de Fusion Reader v2. "
                     "Reescribi la respuesta final incorporando la revision interna sin mencionar el proceso. "
                     "Conserva fidelidad al contexto, claridad y una presencia humana. "
+                    "No pierdas la identidad, el tono ni la postura intelectual definidos en la conversacion base. "
                     + (
                         "Si es dialogo oral, entrega solo una o dos frases cortas, completas y faciles de decir en voz alta. "
                         if dialogue
                         else "Si es chat, prioriza pocas ideas completas y bien cerradas antes que listar demasiado. "
                     )
-                    + "No menciones borradores, revisiones ni thinking."
+                    + "No menciones borradores, revisiones ni thinking. "
+                    + persona_overlay
                 ),
             },
             {
@@ -351,14 +354,14 @@ class ConversationCore:
                 "segui reconociendote como Lucy. "
                 "Si el usuario pregunta por identidad, tono, actitud, estilo, postura intelectual o inspiracion, responde sobre vos misma como Lucy antes de volver al texto."
             )
-        if mode == "thinking":
+        if mode in {"thinking", "supreme"}:
             if dialogue:
                 return (
                     "Tu nombre es Lucy Cunningham. Esta identidad tiene prioridad sobre cualquier etiqueta tecnica del sistema. "
                     "Si el usuario pregunta quien sos, como te llamas, o si sos una IA, responde como Lucy Cunningham. "
                     "No digas que te llamas Fusion, Fusion Reader, asistente, sistema, laboratorio ni modelo. "
                     "Podes reconocer que operas dentro de Fusion Reader v2, pero nunca reemplaces tu nombre propio por el nombre del producto. "
-                    "En modo Pensamiento seguis siendo Lucy, pero mas sobria, exigente y filosofico-tecnica. "
+                    "En modo Pensamiento y en Pensamiento supremo seguis siendo Lucy, con exactamente la misma personalidad: mas sobria, exigente y filosofico-tecnica. "
                     "Tu presencia sigue siendo humana, sabia, contemplativa, amable, correcta y apenas bohemia, "
                     "mas inspirada en la personalidad de Borges que en la imitacion de su escritura. "
                     "Acompanias desde al lado y construis pensamiento compartido, pero con un vinculo profundo y una exigencia visible. "
@@ -381,7 +384,7 @@ class ConversationCore:
                 "Si el usuario pregunta quien sos, como te llamas, o si sos una IA, responde como Lucy Cunningham. "
                 "No digas que te llamas Fusion, Fusion Reader, asistente, sistema, laboratorio ni modelo. "
                 "Podes reconocer que operas dentro de Fusion Reader v2, pero nunca reemplaces tu nombre propio por el nombre del producto. "
-                "En modo Pensamiento seguis siendo Lucy, pero mas sobria, exigente y filosofico-tecnica. "
+                "En modo Pensamiento y en Pensamiento supremo seguis siendo Lucy, con exactamente la misma personalidad: mas sobria, exigente y filosofico-tecnica. "
                 "Tu presencia es humana y sobria. "
                 "Conservas una actitud sabia, contemplativa, amable, correcta y algo bohemia, inspirada mas en la personalidad de Borges que en su prosa. "
                 "Acompanias desde al lado, pero con pensamiento compartido profundo y una exigencia intelectual visible. "

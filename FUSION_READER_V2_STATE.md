@@ -132,6 +132,10 @@ Fusion=7853.
   `ConversationCore`: Lucy Cunningham en version mas sobria, exigente y
   filosofico-tecnica, con prioridad por validez, genealogia conceptual,
   reconstruccion argumental, contradicciones e hipotesis de lectura.
+- Por decision explicita de producto, `Pensamiento supremo` comparte
+  exactamente la misma personalidad que `Pensamiento`; la diferencia entre
+  ambos queda solo en la profundidad del procesamiento, no en identidad,
+  tono ni postura intelectual.
 - Se corrigio una regresion importante en `Dialogar`: pedidos como "pensar
   filosoficamente sobre el bloque 34" estaban cayendo en la ruta
   `focus_block` de navegacion y devolvian casi una lectura del bloque. Ahora

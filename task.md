@@ -86,7 +86,7 @@
 - [ ] Probar modo `Dialogar` con microfono real
 - [ ] Ajustar VAD/barge-in segun ruido ambiente y eco
 - [ ] Afinar warmup/keep-hot de AllTalk GPU
-- [ ] Diseñar y cablear personalidad por modo (`Normal`, `Pensamiento`, `Supremo`)
+- [x] Diseñar y cablear personalidad por modo (`Normal`, `Pensamiento`, `Supremo`)
 - [ ] Agregar pausa/reanudar como estado real de lectura
 - [ ] Mejorar OCR fino para PDFs escaneados largos
 

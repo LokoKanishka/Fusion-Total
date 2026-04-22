@@ -400,6 +400,23 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("validez", prompt)
         self.assertIn("Borges", prompt)
 
+    def test_supreme_mode_chat_prompt_reuses_thinking_lucy_persona(self):
+        chat_provider = NullChatProvider("Respuesta final.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("supreme")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("¿Qué ves?")
+        draft_prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        final_prompt = "\n".join(item["content"] for item in chat_provider.calls[-1][0])
+        self.assertIn("Lucy Cunningham", draft_prompt)
+        self.assertIn("Pensamiento supremo", draft_prompt)
+        self.assertIn("filosofico-tecnica", draft_prompt)
+        self.assertIn("No digas que te llamas Fusion", draft_prompt)
+        self.assertIn("Lucy Cunningham", final_prompt)
+        self.assertIn("Pensamiento supremo", final_prompt)
+        self.assertIn("filosofico-tecnica", final_prompt)
+
     def test_supreme_reasoning_runs_three_passes(self):
         chat_provider = NullChatProvider("Respuesta final.")
         app = test_app()
