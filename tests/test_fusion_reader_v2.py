@@ -357,6 +357,8 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("Lucy Cunningham", prompt)
         self.assertIn("companera humana de lectura", prompt)
         self.assertIn("problematizar", prompt)
+        self.assertIn("No digas que te llamas Fusion", prompt)
+        self.assertIn("identidad tiene prioridad", prompt)
 
     def test_normal_mode_dialogue_prompt_includes_lucy_persona(self):
         chat_provider = NullChatProvider("Entendido.")
@@ -369,6 +371,7 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("Lucy Cunningham", prompt)
         self.assertIn("pensando juntos", prompt)
         self.assertIn("Borges", prompt)
+        self.assertIn("No digas que te llamas Fusion", prompt)
 
     def test_supreme_reasoning_runs_three_passes(self):
         chat_provider = NullChatProvider("Respuesta final.")
