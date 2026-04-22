@@ -192,6 +192,54 @@ INDEX_HTML = r"""<!doctype html>
       border-top: 1px solid var(--line);
       padding-top: 14px;
     }
+    .reference-panel {
+      display: grid;
+      gap: 8px;
+    }
+    .reference-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .reference-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #080a0a;
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+    }
+    .reference-card strong,
+    .reference-card span,
+    .reference-card p {
+      overflow-wrap: anywhere;
+    }
+    .reference-meta,
+    .reference-empty {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .reference-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .lab-focus {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0a0d0c;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 10px 12px;
+      overflow-wrap: anywhere;
+    }
+    .lab-focus strong {
+      color: var(--accent-2);
+      display: block;
+      margin-bottom: 4px;
+    }
     .notes-panel summary {
       cursor: pointer;
       color: var(--accent-2);
@@ -462,11 +510,51 @@ INDEX_HTML = r"""<!doctype html>
       grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr);
       gap: 10px;
     }
+    .reasoning-panel {
+      display: grid;
+      gap: 4px;
+      justify-items: end;
+      align-content: start;
+    }
+    .reasoning-tabs {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .reasoning-tab {
+      min-height: 24px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #0a0d0c;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+    .reasoning-tab.active {
+      border-color: var(--accent-2);
+      color: var(--text);
+      background: rgba(56, 198, 216, 0.14);
+    }
+    .reasoning-caption {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.2;
+      text-align: right;
+    }
     .dialogue-row {
       display: grid;
       grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
       gap: 10px;
       align-items: center;
+    }
+    .dialogue-side {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      align-items: start;
     }
     .dialogue-info {
       color: var(--muted);
@@ -534,6 +622,7 @@ INDEX_HTML = r"""<!doctype html>
         <input id="fileInput" class="file-input" type="file" accept=".txt,.md,.markdown,.pdf,.doc,.docx,.odt,.ott,.rtf,.html,.htm,.csv,.log,text/plain,text/markdown,application/pdf,application/vnd.oasis.opendocument.text,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword">
       </div>
       <label class="toggle upload-toggle"><input id="autoReadToggle" type="checkbox" checked> Leer al cargar</label>
+      <label class="toggle upload-toggle"><input id="referenceModeToggle" type="checkbox"> Agregar como consulta</label>
       <p id="uploadInfo" class="upload-info">Todavía no cargaste ningún texto.</p>
       <div class="progress-wrap" aria-hidden="true"><div id="importProgress" class="progress-bar"></div></div>
       <button id="prepareBtn" class="wide" type="button">Preparar documento</button>
@@ -579,6 +668,7 @@ INDEX_HTML = r"""<!doctype html>
 
     <section class="lab">
       <h2>Laboratorio</h2>
+      <div id="labFocus" class="lab-focus"><strong>Foco del laboratorio</strong>Sin foco activo.</div>
       <div id="chatLog" class="chat-log" aria-live="polite">
         <div class="chat-msg system">Cargá un documento y preguntame por lo que está en pantalla.</div>
       </div>
@@ -589,11 +679,37 @@ INDEX_HTML = r"""<!doctype html>
       </div>
       <div class="dialogue-row">
         <button id="dialogueBtn" class="primary">Dialogar</button>
-        <div id="dialogueInfo" class="dialogue-info">Diálogo apagado.</div>
+        <div class="dialogue-side">
+          <div id="dialogueInfo" class="dialogue-info">Diálogo apagado.</div>
+          <div class="reasoning-panel">
+            <div class="reasoning-tabs" aria-label="Modo de razonamiento">
+              <button id="reasoningNormalBtn" class="reasoning-tab" type="button">Normal</button>
+              <button id="reasoningThinkingBtn" class="reasoning-tab" type="button">Pensar</button>
+              <button id="reasoningSupremeBtn" class="reasoning-tab" type="button">Supremo</button>
+            </div>
+            <div id="reasoningCaption" class="reasoning-caption">Pensamiento activo.</div>
+          </div>
+        </div>
       </div>
       <audio id="dialoguePlayer"></audio>
     </section>
-    <aside class="right-sidebar" aria-label="Panel lateral derecho"></aside>
+    <aside class="right-sidebar" aria-label="Panel lateral derecho">
+      <div class="reference-panel">
+        <h2>Consulta</h2>
+        <p class="sub">El lector sigue leyendo el principal. Estos textos solo apoyan el laboratorio.</p>
+        <div id="mainDocInfo" class="reference-card">
+          <strong>Documento principal</strong>
+          <span id="mainDocTitle">Ningún documento principal</span>
+          <span id="mainDocMeta" class="reference-meta">Sin lectura activa.</span>
+        </div>
+        <div>
+          <strong>Documentos de consulta</strong>
+          <div id="referenceList" class="reference-list">
+            <div class="reference-empty">Todavía no cargaste documentos de consulta.</div>
+          </div>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <script>
@@ -604,6 +720,7 @@ INDEX_HTML = r"""<!doctype html>
       uploadInfo: document.getElementById('uploadInfo'),
       importProgress: document.getElementById('importProgress'),
       autoReadToggle: document.getElementById('autoReadToggle'),
+      referenceModeToggle: document.getElementById('referenceModeToggle'),
       prepareBtn: document.getElementById('prepareBtn'),
       cancelPrepareBtn: document.getElementById('cancelPrepareBtn'),
       prepareInfo: document.getElementById('prepareInfo'),
@@ -631,9 +748,17 @@ INDEX_HTML = r"""<!doctype html>
       chatInput: document.getElementById('chatInput'),
       sendChatBtn: document.getElementById('sendChatBtn'),
       clearLabHistoryBtn: document.getElementById('clearLabHistoryBtn'),
+      reasoningNormalBtn: document.getElementById('reasoningNormalBtn'),
+      reasoningThinkingBtn: document.getElementById('reasoningThinkingBtn'),
+      reasoningSupremeBtn: document.getElementById('reasoningSupremeBtn'),
+      reasoningCaption: document.getElementById('reasoningCaption'),
       dialogueBtn: document.getElementById('dialogueBtn'),
       dialogueInfo: document.getElementById('dialogueInfo'),
-      dialoguePlayer: document.getElementById('dialoguePlayer')
+      dialoguePlayer: document.getElementById('dialoguePlayer'),
+      labFocus: document.getElementById('labFocus'),
+      mainDocTitle: document.getElementById('mainDocTitle'),
+      mainDocMeta: document.getElementById('mainDocMeta'),
+      referenceList: document.getElementById('referenceList')
     };
     const LAB_NOTES_DOC_ID = '__laboratory__';
     let status = null;
@@ -857,8 +982,14 @@ INDEX_HTML = r"""<!doctype html>
       const selectedNotesDocId = data.doc_id || LAB_NOTES_DOC_ID;
       const shouldRefreshNotes = selectedNotesDocId !== notesState.docId || data.current !== notesState.current || Boolean(data.notes && data.notes.count !== notesState.items.length);
       status = data;
+      renderReasoningStatus(data.reasoning || {});
       els.docTitle.textContent = data.title || 'Ningún documento activo';
       els.docMeta.textContent = `Bloque ${data.current || 0} de ${data.total || 0}`;
+      const mainDocument = data.main_document && typeof data.main_document === 'object' ? data.main_document : {};
+      els.mainDocTitle.textContent = mainDocument.title || data.title || 'Ningún documento principal';
+      els.mainDocMeta.textContent = mainDocument.doc_id ? `${mainDocument.doc_id} | ${mainDocument.total || data.total || 0} bloques` : 'Sin lectura activa.';
+      renderReferenceDocuments(Array.isArray(data.reference_documents) ? data.reference_documents : []);
+      renderLabFocus(data.laboratory_focus || {});
       els.jumpInput.max = data.total || 1;
       els.jumpInput.value = data.current || 1;
       els.chunk.textContent = data.text || 'Subí un TXT o MD para empezar.';
@@ -869,6 +1000,168 @@ INDEX_HTML = r"""<!doctype html>
       renderPrepareStatus(data.prepare);
       if (shouldRefreshNotes) {
         refreshNotes().catch(() => {});
+      }
+    }
+
+    function currentReasoningMode() {
+      return String(status && status.reasoning && status.reasoning.mode || 'thinking');
+    }
+
+    function currentReasoningLabel() {
+      return String(status && status.reasoning && status.reasoning.label || 'Pensamiento');
+    }
+
+    function dialogueAppliedReasoningLabel(data) {
+      const applied = String(data && (data.reasoning_mode_applied || data.reasoning_mode) || currentReasoningMode());
+      if (applied === 'supreme') {
+        return 'Pensamiento supremo';
+      }
+      if (applied === 'normal') {
+        return 'Normal';
+      }
+      return 'Pensamiento';
+    }
+
+    function dialogueModeSummary(data) {
+      const requested = String(data && data.reasoning_mode_requested || currentReasoningMode());
+      const applied = String(data && (data.reasoning_mode_applied || data.reasoning_mode) || requested);
+      if (Boolean(data && data.reasoning_degraded) && requested === 'supreme' && applied === 'thinking') {
+        return 'Supremo pedido; diálogo usa Pensamiento para cuidar latencia.';
+      }
+      return `${dialogueAppliedReasoningLabel(data)} activo.`;
+    }
+
+    function pendingThoughtLabel() {
+      const mode = currentReasoningMode();
+      if (mode === 'supreme') {
+        return 'Repensando en profundidad con el laboratorio abierto...';
+      }
+      if (mode === 'normal') {
+        return 'Respondiendo con el laboratorio abierto...';
+      }
+      return 'Pensando con el documento abierto...';
+    }
+
+    function renderReasoningStatus(reasoning) {
+      const item = reasoning && typeof reasoning === 'object' ? reasoning : {};
+      const mode = String(item.mode || 'thinking');
+      const buttons = {
+        normal: els.reasoningNormalBtn,
+        thinking: els.reasoningThinkingBtn,
+        supreme: els.reasoningSupremeBtn
+      };
+      Object.entries(buttons).forEach(([key, button]) => {
+        button.classList.toggle('active', key === mode);
+        button.setAttribute('aria-pressed', key === mode ? 'true' : 'false');
+      });
+      const label = String(item.label || (mode === 'supreme' ? 'Pensamiento supremo' : mode === 'normal' ? 'Normal' : 'Pensamiento'));
+      const description = String(item.description || '');
+      const passes = Number(item.passes || (mode === 'supreme' ? 3 : 1));
+      const think = Object.prototype.hasOwnProperty.call(item, 'think') ? Boolean(item.think) : mode !== 'normal';
+      els.reasoningCaption.textContent = `${label} | ${think ? 'thinking activo' : 'sin thinking'} | ${passes} pasada${passes === 1 ? '' : 's'}${description ? ` | ${description}` : ''}`;
+    }
+
+    async function setReasoningMode(mode) {
+      const targetMode = String(mode || '').trim();
+      if (!targetMode || currentReasoningMode() === targetMode) {
+        return;
+      }
+      setBusy(true);
+      try {
+        const data = await api('/api/reasoning/mode', { mode: targetMode });
+        if (!status) {
+          status = {};
+        }
+        status.reasoning = data;
+        status.dialogue_reasoning = data.dialogue_reasoning || status.dialogue_reasoning || {};
+        renderReasoningStatus(data);
+        const dialogueReasoning = status && status.dialogue_reasoning && typeof status.dialogue_reasoning === 'object' ? status.dialogue_reasoning : {};
+        if (String(data.mode || targetMode) === 'supreme' && String(dialogueReasoning.applied_mode || '') === 'thinking' && Boolean(dialogueReasoning.degraded)) {
+          log(`Modo de razonamiento: ${data.label || targetMode}. En Dialogar se usa Pensamiento para cuidar latencia.`);
+        } else {
+          log(`Modo de razonamiento: ${data.label || targetMode}.`);
+        }
+        if (dialogue.active && !dialogue.processing && !dialogue.speaking) {
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary({ reasoning_mode_requested: String(data.mode || targetMode), reasoning_mode_applied: String(dialogueReasoning.applied_mode || data.mode || targetMode), reasoning_degraded: Boolean(dialogueReasoning.degraded) })}`);
+        }
+      } catch (err) {
+        log(`No pude cambiar el modo mental: ${err.message}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderLabFocus(focus) {
+      const item = focus && typeof focus === 'object' ? focus : {};
+      const title = String(item.title || '').trim();
+      if (!title) {
+        els.labFocus.innerHTML = '<strong>Foco del laboratorio</strong>Sin foco activo.';
+        return;
+      }
+      const role = item.role === 'main' ? 'principal' : 'consulta';
+      const query = item.query ? `<br>Búsqueda: ${String(item.query)}` : '';
+      const excerpt = String(item.text || '').trim();
+      const clipped = excerpt.length > 240 ? `${excerpt.slice(0, 240).trimEnd()}...` : excerpt;
+      els.labFocus.innerHTML = `<strong>Foco del laboratorio</strong>${title} | ${role} | bloque ${Number(item.chunk_number || 0)} de ${Number(item.total || 0)}${query}${clipped ? `<br>${clipped}` : ''}`;
+    }
+
+    async function promoteReference(docId) {
+      try {
+        const data = await api('/api/reference/promote', { doc_id: docId });
+        renderStatus(data);
+        log(data.message || 'Documento de consulta promovido a principal.');
+      } catch (err) {
+        log(`No pude promover la consulta: ${err.message}`);
+      }
+    }
+
+    async function removeReference(docId) {
+      try {
+        const data = await api('/api/reference/remove', { doc_id: docId });
+        renderReferenceDocuments(data.items || []);
+        if (status) {
+          status.reference_documents = data.items || [];
+        }
+        log('Documento de consulta quitado.');
+      } catch (err) {
+        log(`No pude quitar la consulta: ${err.message}`);
+      }
+    }
+
+    function renderReferenceDocuments(items) {
+      const references = Array.isArray(items) ? items : [];
+      els.referenceList.replaceChildren();
+      if (!references.length) {
+        const empty = document.createElement('div');
+        empty.className = 'reference-empty';
+        empty.textContent = 'Todavía no cargaste documentos de consulta.';
+        els.referenceList.appendChild(empty);
+        return;
+      }
+      for (const item of references) {
+        const card = document.createElement('div');
+        card.className = 'reference-card';
+        const title = document.createElement('strong');
+        title.textContent = item.title || item.doc_id || 'Consulta';
+        const meta = document.createElement('span');
+        meta.className = 'reference-meta';
+        meta.textContent = `${item.doc_id || ''}${item.source_type ? ` | ${item.source_type}` : ''}${item.total ? ` | ${item.total} bloques` : ''}`;
+        const preview = document.createElement('p');
+        preview.className = 'reference-meta';
+        preview.textContent = item.preview || 'Sin extracto.';
+        const actions = document.createElement('div');
+        actions.className = 'reference-actions';
+        const promoteBtn = document.createElement('button');
+        promoteBtn.type = 'button';
+        promoteBtn.textContent = 'Hacer principal';
+        promoteBtn.addEventListener('click', () => promoteReference(item.doc_id));
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = 'Quitar';
+        removeBtn.addEventListener('click', () => removeReference(item.doc_id));
+        actions.append(promoteBtn, removeBtn);
+        card.append(title, meta, preview, actions);
+        els.referenceList.appendChild(card);
       }
     }
 
@@ -1171,10 +1464,11 @@ INDEX_HTML = r"""<!doctype html>
       }
       setBusy(true);
       try {
-        log('Preparando documento...');
+        const role = els.referenceModeToggle.checked ? 'reference' : 'main';
+        log(role === 'reference' ? 'Agregando documento de consulta...' : 'Preparando documento...');
         setImportProgress(0);
-        els.uploadInfo.textContent = `${file.name}: convirtiendo para lectura...`;
-        const url = `/api/import-file/start?filename=${encodeURIComponent(file.name)}&mime=${encodeURIComponent(file.type || '')}`;
+        els.uploadInfo.textContent = `${file.name}: convirtiendo para ${role === 'reference' ? 'consulta' : 'lectura'}...`;
+        const url = `/api/import-file/start?filename=${encodeURIComponent(file.name)}&mime=${encodeURIComponent(file.type || '')}&role=${encodeURIComponent(role)}`;
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': file.type || 'application/octet-stream' },
@@ -1189,11 +1483,13 @@ INDEX_HTML = r"""<!doctype html>
         const data = await pollImportJob(started.job_id);
         renderStatus(data);
         const convertedKb = data.converted_bytes ? ` Texto convertido: ${Math.max(1, Math.round(data.converted_bytes / 1024))} KB.` : '';
-        els.uploadInfo.textContent = `${file.name} cargado. ${data.total || 0} bloques listos. ${data.import_detail || ''}.${convertedKb}`;
+        els.uploadInfo.textContent = `${file.name} ${data.role === 'reference' ? 'agregado como consulta' : 'cargado'}. ${data.total || 0} bloques listos. ${data.import_detail || ''}.${convertedKb}`;
         els.player.removeAttribute('src');
-        if (els.autoReadToggle.checked) {
+        if (data.role !== 'reference' && els.autoReadToggle.checked) {
           log('Texto cargado. Generando voz del primer bloque...');
           await readCurrent();
+        } else if (data.role === 'reference') {
+          log(data.message || 'Documento de consulta agregado.');
         } else {
           log('Texto cargado. La voz ya puede leer el bloque actual.');
         }
@@ -1304,17 +1600,18 @@ INDEX_HTML = r"""<!doctype html>
       }
       setBusy(true);
       try {
-        addChatMessage('system', 'Pensando con el documento abierto...');
+        addChatMessage('system', pendingThoughtLabel());
         const data = await api('/api/chat', { message, chunk_index: visibleChunkIndex() });
         const pending = els.chatLog.querySelector('.chat-msg.system:last-child');
-        if (pending && pending.textContent.includes('Pensando')) {
+        if (pending && /Pensando|Repensando|Respondiendo/.test(pending.textContent)) {
           pending.remove();
         }
         addChatMessage('assistant', data.answer || '(sin respuesta)');
         if (data.note) {
           await refreshNotes();
         }
-        log(`Chat listo con ${data.model || 'modelo local'} en ${data.duration_ms || 0} ms.`);
+        await refresh().catch(() => {});
+        log(`Chat listo con ${data.model || 'modelo local'} en ${data.duration_ms || 0} ms. ${currentReasoningLabel()} (${data.reasoning_passes || 1} pasada${Number(data.reasoning_passes || 1) === 1 ? '' : 's'}).`);
       } catch (err) {
         addChatMessage('system', `Falló el chat: ${err.message}`);
         log(`Falló el chat: ${err.message}`);
@@ -1351,7 +1648,7 @@ INDEX_HTML = r"""<!doctype html>
         speakLocal(data.answer, () => {
           dialogue.speaking = false;
           if (dialogue.active) {
-            setDialogueInfo('Escuchando...');
+            setDialogueInfo(`Escuchando... ${currentReasoningLabel()}.`);
           }
         });
       }
@@ -1367,7 +1664,7 @@ INDEX_HTML = r"""<!doctype html>
       dialogue.pcmChunks = [];
       dialogue.pcmPreRoll = [];
       dialogue.pcmPreRollSamples = 0;
-      const pending = addChatMessage('system', 'Dialogando por voz...');
+      const pending = addChatMessage('system', currentReasoningMode() === 'supreme' ? 'Dialogando por voz; Supremo se baja a Pensamiento para no romper latencia...' : 'Dialogando por voz...');
       const startedAt = performance.now();
       try {
         const data = await api('/api/dialogue/turn', { text: message, chunk_index: visibleChunkIndex() });
@@ -1382,10 +1679,11 @@ INDEX_HTML = r"""<!doctype html>
         if (data.note) {
           await refreshNotes();
         }
+        await refresh().catch(() => {});
         const wallMs = Math.round(performance.now() - startedAt);
-        const info = `Texto respondido con voz | chat ${fmtMs(data.chat_ms)} | voz ${fmtMs(data.tts_ms)} | total ${fmtMs(data.duration_ms || wallMs)}`;
+        const info = `${dialogueModeSummary(data)} | chat ${fmtMs(data.chat_ms)} | voz ${fmtMs(data.tts_ms)} | total ${fmtMs(data.duration_ms || wallMs)} | ${Number(data.reasoning_passes || 1)} pasada${Number(data.reasoning_passes || 1) === 1 ? '' : 's'}`;
         setDialogueInfo(info);
-        log(`Diálogo escrito listo con ${data.model || 'modelo local'} en ${wallMs} ms.`);
+        log(`Diálogo escrito listo con ${data.model || 'modelo local'} en ${wallMs} ms. ${dialogueModeSummary(data)}`);
         await playDialogueAnswer(data);
       } catch (err) {
         if (pending && pending.isConnected) {
@@ -1397,7 +1695,7 @@ INDEX_HTML = r"""<!doctype html>
       } finally {
         dialogue.processing = false;
         if (!dialogue.speaking && dialogue.active) {
-          setDialogueInfo('Escuchando...');
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary(status && status.dialogue_reasoning ? { reasoning_mode_requested: status.reasoning && status.reasoning.mode, reasoning_mode_applied: status.dialogue_reasoning.applied_mode, reasoning_degraded: status.dialogue_reasoning.degraded } : {})}`);
         }
       }
     }
@@ -1476,7 +1774,7 @@ INDEX_HTML = r"""<!doctype html>
         dialogue.noiseFloor = 0.012;
         dialogue.lastTick = performance.now();
         els.dialogueBtn.textContent = 'Detener diálogo';
-        setDialogueInfo('Escuchando en modo rápido... hacé una pausa corta y respondo.');
+        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. Hacé una pausa corta y respondo.`);
         monitorDialogue();
       } catch (err) {
         setDialogueInfo(`No pude abrir el micrófono: ${err.message}`);
@@ -1764,7 +2062,7 @@ INDEX_HTML = r"""<!doctype html>
       dialogue.speechMs = 0;
       dialogue.silenceMs = 0;
       if (blob.size < 1200) {
-        setDialogueInfo('Escuchando...');
+        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}.`);
         return;
       }
       dialogue.processing = true;
@@ -1792,7 +2090,7 @@ INDEX_HTML = r"""<!doctype html>
         if (data.ignored || data.detail === 'hallucinated_transcript') {
           addChatMessage('system', 'Ignoré una transcripción espuria de Whisper.');
           addChatMessage('system', traceText);
-          setDialogueInfo(traceText);
+          setDialogueInfo(`${dialogueModeSummary(data)} | ${traceText}`);
           return;
         }
         addChatMessage('user', data.transcript || '(audio)');
@@ -1804,17 +2102,24 @@ INDEX_HTML = r"""<!doctype html>
         if (data.note) {
           await refreshNotes();
         }
+        await refresh().catch(() => {});
         addChatMessage('system', traceText);
-        setDialogueInfo(traceText);
+        if (data.detail === 'empty_transcript' || data.detail === 'empty_audio') {
+          log(`Diálogo sin transcripción útil (${data.detail}). ${traceText}`);
+        } else {
+          log(`Diálogo por audio listo. ${dialogueModeSummary(data)} ${traceText}`);
+        }
+        setDialogueInfo(`${dialogueModeSummary(data)} | ${traceText}`);
         await playDialogueAnswer(data);
       } catch (err) {
         addChatMessage('system', `Falló el diálogo: ${err.message}`);
         setDialogueInfo(`Falló el diálogo: ${err.message}`);
+        log(`Falló el diálogo: ${err.message}`);
       } finally {
         dialogue.processing = false;
         dialogue.chunkIndex = null;
         if (!dialogue.speaking && dialogue.active) {
-          setDialogueInfo('Escuchando...');
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary(status && status.dialogue_reasoning ? { reasoning_mode_requested: status.reasoning && status.reasoning.mode, reasoning_mode_applied: status.dialogue_reasoning.applied_mode, reasoning_degraded: status.dialogue_reasoning.degraded } : {})}`);
         }
       }
     }
@@ -1829,6 +2134,9 @@ INDEX_HTML = r"""<!doctype html>
     els.saveNoteBtn.addEventListener('click', saveCurrentNote);
     els.sendChatBtn.addEventListener('click', sendChat);
     els.clearLabHistoryBtn.addEventListener('click', clearLaboratoryHistory);
+    els.reasoningNormalBtn.addEventListener('click', () => setReasoningMode('normal'));
+    els.reasoningThinkingBtn.addEventListener('click', () => setReasoningMode('thinking'));
+    els.reasoningSupremeBtn.addEventListener('click', () => setReasoningMode('supreme'));
     els.dialogueBtn.addEventListener('click', toggleDialogue);
     els.chatInput.addEventListener('keydown', event => {
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -1840,7 +2148,7 @@ INDEX_HTML = r"""<!doctype html>
     els.dialoguePlayer.addEventListener('ended', () => {
       dialogue.speaking = false;
       if (dialogue.active) {
-        setDialogueInfo('Escuchando...');
+        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}.`);
       }
     });
     els.chooseFileBtn.addEventListener('click', event => {
@@ -1940,11 +2248,15 @@ def cached_audio_path(url_path: str) -> Path | None:
     return audio_path
 
 
-def load_imported_document(imported) -> dict:
+def load_imported_document(imported, role: str = "main") -> dict:
     CONVERTED_ROOT.mkdir(parents=True, exist_ok=True)
     target = CONVERTED_ROOT / f"{imported.doc_id}.txt"
     target.write_text(imported.text, encoding="utf-8")
-    out = APP.load_text(imported.doc_id, imported.title, imported.text, prefetch=False, source_path=str(target), source_type=imported.source_type)
+    if str(role or "main") == "reference":
+        out = APP.add_reference_text(imported.doc_id, imported.title, imported.text, source_path=str(target), source_type=imported.source_type)
+    else:
+        out = APP.load_text(imported.doc_id, imported.title, imported.text, prefetch=False, source_path=str(target), source_type=imported.source_type)
+    out["role"] = "reference" if str(role or "") == "reference" else "main"
     out["source_type"] = imported.source_type
     out["import_detail"] = imported.detail
     out["converted_text"] = str(target)
@@ -1952,7 +2264,7 @@ def load_imported_document(imported) -> dict:
     return out
 
 
-def new_import_job(filename: str, mime: str, upload_path: Path, size_bytes: int) -> dict:
+def new_import_job(filename: str, mime: str, upload_path: Path, size_bytes: int, role: str = "main") -> dict:
     job_id = uuid.uuid4().hex[:16]
     now = time.time()
     job = {
@@ -1966,6 +2278,7 @@ def new_import_job(filename: str, mime: str, upload_path: Path, size_bytes: int)
         "total": 0,
         "percent": 0,
         "message": "Documento recibido. Esperando conversión...",
+        "role": "reference" if str(role or "") == "reference" else "main",
         "size_bytes": size_bytes,
         "created_ts": now,
         "updated_ts": now,
@@ -2010,12 +2323,12 @@ def import_progress_for(job_id: str):
     return progress
 
 
-def import_job_worker(job_id: str, filename: str, upload_path: Path, mime: str) -> None:
+def import_job_worker(job_id: str, filename: str, upload_path: Path, mime: str, role: str = "main") -> None:
     update_import_job(job_id, status="running", stage="starting", message="Preparando conversión...")
     try:
         imported = import_document_path(filename, upload_path, mime=mime, progress=import_progress_for(job_id))
         update_import_job(job_id, status="running", stage="loading", current=0, total=0, message="Cargando texto convertido en el lector...")
-        result = load_imported_document(imported)
+        result = load_imported_document(imported, role=role)
         update_import_job(
             job_id,
             status="done",
@@ -2023,7 +2336,7 @@ def import_job_worker(job_id: str, filename: str, upload_path: Path, mime: str) 
             current=1,
             total=1,
             percent=100,
-            message=f"{filename} cargado. {result.get('total') or 0} bloques listos.",
+            message=f"{filename} {'agregado como consulta' if result.get('role') == 'reference' else 'cargado'}. {result.get('total') or 0} bloques listos.",
             result=result,
         )
     except Exception as exc:
@@ -2125,6 +2438,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/prepare/status":
             self._json(200, APP.prepare_status())
             return
+        if path == "/api/references":
+            self._json(200, APP.list_reference_documents())
+            return
         if path == "/api/notes":
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
@@ -2187,11 +2503,12 @@ class Handler(BaseHTTPRequestHandler):
                 params = parse_qs(parsed.query)
                 filename = str((params.get("filename") or ["documento"])[0])
                 mime = str((params.get("mime") or [self.headers.get("Content-Type", "") or ""])[0])
+                role = str((params.get("role") or ["main"])[0])
                 tmp_path = self._read_body_to_temp(filename)
-                job = new_import_job(filename, mime, tmp_path, tmp_path.stat().st_size)
+                job = new_import_job(filename, mime, tmp_path, tmp_path.stat().st_size, role=role)
                 thread = threading.Thread(
                     target=import_job_worker,
-                    args=(str(job["job_id"]), filename, tmp_path, mime),
+                    args=(str(job["job_id"]), filename, tmp_path, mime, role),
                     name=f"fusion-import-{job['job_id']}",
                     daemon=True,
                 )
@@ -2202,12 +2519,13 @@ class Handler(BaseHTTPRequestHandler):
                 params = parse_qs(parsed.query)
                 filename = str((params.get("filename") or ["documento"])[0])
                 mime = str((params.get("mime") or [self.headers.get("Content-Type", "") or ""])[0])
+                role = str((params.get("role") or ["main"])[0])
                 tmp_path = self._read_body_to_temp(filename)
                 try:
                     imported = import_document_path(filename, tmp_path, mime=mime)
                 finally:
                     tmp_path.unlink(missing_ok=True)
-                self._json(200, load_imported_document(imported))
+                self._json(200, load_imported_document(imported, role=role))
                 return
             if path == "/api/dialogue/turn" and "application/json" not in (self.headers.get("Content-Type", "") or ""):
                 content_type = self.headers.get("Content-Type", "") or ""
@@ -2223,35 +2541,60 @@ class Handler(BaseHTTPRequestHandler):
                 return
             payload = self._payload()
             if path == "/api/load":
+                role = str(payload.get("role") or "main")
                 if payload.get("book_id"):
-                    self._json(200, APP.load_file(resolve_library_path(str(payload.get("book_id"))), prefetch=False))
+                    if role == "reference":
+                        self._json(200, APP.add_reference_file(resolve_library_path(str(payload.get("book_id")))))
+                    else:
+                        self._json(200, APP.load_file(resolve_library_path(str(payload.get("book_id"))), prefetch=False))
                     return
                 if payload.get("text"):
-                    self._json(
-                        200,
-                        APP.load_text(
-                            str(payload.get("doc_id") or "manual"),
-                            str(payload.get("title") or "Manual"),
-                            str(payload.get("text")),
-                            prefetch=False,
-                            source_type="manual",
-                        ),
-                    )
+                    if role == "reference":
+                        self._json(
+                            200,
+                            APP.add_reference_text(
+                                str(payload.get("doc_id") or "manual"),
+                                str(payload.get("title") or "Manual"),
+                                str(payload.get("text")),
+                                source_type="manual",
+                            ),
+                        )
+                    else:
+                        self._json(
+                            200,
+                            APP.load_text(
+                                str(payload.get("doc_id") or "manual"),
+                                str(payload.get("title") or "Manual"),
+                                str(payload.get("text")),
+                                prefetch=False,
+                                source_type="manual",
+                            ),
+                        )
                     return
                 if payload.get("path"):
-                    self._json(200, APP.load_file(resolve_library_path(str(payload.get("path"))), prefetch=False))
+                    if role == "reference":
+                        self._json(200, APP.add_reference_file(resolve_library_path(str(payload.get("path")))))
+                    else:
+                        self._json(200, APP.load_file(resolve_library_path(str(payload.get("path"))), prefetch=False))
                     return
                 self._json(400, {"ok": False, "error": "missing_text_or_book_id"})
                 return
             if path == "/api/import":
                 filename = str(payload.get("filename") or "documento")
                 mime = str(payload.get("mime") or "")
+                role = str(payload.get("role") or "main")
                 raw_b64 = str(payload.get("data_b64") or "")
                 if not raw_b64:
                     self._json(400, {"ok": False, "error": "missing_file_data"})
                     return
                 imported = import_document_bytes(filename, base64.b64decode(raw_b64), mime=mime)
-                self._json(200, load_imported_document(imported))
+                self._json(200, load_imported_document(imported, role=role))
+                return
+            if path == "/api/reference/promote":
+                self._json(200, APP.promote_reference_document(str(payload.get("doc_id") or ""), prefetch=False))
+                return
+            if path == "/api/reference/remove":
+                self._json(200, APP.remove_reference_document(str(payload.get("doc_id") or "")))
                 return
             if path == "/api/read":
                 self._result(200, APP.read_current(play=bool(payload.get("play", False))))
@@ -2286,6 +2629,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/dialogue/reset":
                 self._json(200, APP.dialogue_reset())
+                return
+            if path == "/api/reasoning/mode":
+                self._json(200, APP.set_reasoning_mode(str(payload.get("mode") or "")))
                 return
             if path in ("/api/laboratory/reset", "/api/chat/reset"):
                 self._json(200, APP.clear_laboratory_history())

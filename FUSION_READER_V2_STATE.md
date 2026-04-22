@@ -8,6 +8,7 @@ detallada vive en:
 - `FUSION_READER_V2_BLUEPRINT.md`
 - `FUSION_READER_V2_PERFORMANCE.md`
 - `FUSION_READER_V2_DIALOGUE.md`
+- `FUSION_READER_V2_PERSONALITY_WORKBOOK.md`
 - `task.md`
 
 ## Norte del Producto
@@ -48,9 +49,16 @@ Si STT, Ollama o el dialogo fallan, `Leer` debe seguir funcionando.
 - El modelo `qwen3:14b-q8_0` esta descargado en Ollama y queda como default
   por calidad de lectura filosofica y manejo de texto largo; `qwen3:14b` queda
   como opcion mas rapida si se necesita menor latencia.
-- Chat/dialogo usa `think:false` por defecto para evitar que Qwen consuma la
-  latencia del laboratorio en razonamiento oculto. Para analisis largo:
-  `FUSION_READER_CHAT_THINK=1`.
+- Chat/dialogo ahora expone tres modos persistentes de razonamiento en la UI:
+  `Normal`, `Pensamiento` y `Pensamiento supremo`.
+- Default actual de producto: `Pensamiento`, o sea una sola pasada con
+  `think:true`.
+- `Pensamiento supremo` hace tres pasadas internas
+  (borrador -> revision -> respuesta final) y queda pensado para laboratorio
+  profundo, no para la ruta critica de lectura.
+- Excepcion de convivencia: si el guardian GPU detecta conflicto con juego y
+  activa `FUSION_READER_GAME_COEXISTENCE_ACTIVE=1`, Fusion baja por defecto a
+  `Normal` con menor presupuesto para no pelear por latencia.
 - Modo academico/acceso directo: usa `qwen3:14b-q8_0`,
   `FUSION_READER_CHAT_THINK=1` y
   `FUSION_READER_CHAT_NUM_PREDICT=1536`.
@@ -95,6 +103,8 @@ Fusion=7853.
 - Carga de documentos desde navegador.
 - Importacion TXT, MD, PDF, DOCX, ODT, RTF, HTML y formatos de oficina via
   LibreOffice cuando aplica.
+- Un documento principal de lectura y multiples documentos de consulta para el
+  laboratorio, sin romper la ruta critica de `/api/read`.
 - PDF con `pdftotext`; si no hay texto suficiente, OCR con Tesseract `spa+eng`.
 - OCR para PDFs escaneados con paginas, encabezados y columnas.
 - Texto convertido guardado en `runtime/fusion_reader_v2/imported_texts/`.
@@ -106,6 +116,14 @@ Fusion=7853.
 - Preparar documento: cachea todos los chunks en background.
 - Metricas de voz por evento, proveedor, documento y chunk lento.
 - Chat textual de laboratorio separado de `/api/read`.
+- Selector persistente de razonamiento en laboratorio con `Normal`,
+  `Pensamiento` y `Pensamiento supremo`.
+- `Dialogar` ahora guarda trazas persistentes en
+  `runtime/fusion_reader_v2/dialogue_trace.jsonl` con modo pedido, modo
+  aplicado, degradacion, STT, chat y TTS por turno.
+- Si el usuario deja el modo global en `Pensamiento supremo`, `Dialogar` por
+  voz lo degrada a `Pensamiento` por defecto para cuidar latencia oral; el chat
+  textual puede seguir usando `Supremo` real.
 - Modo `Dialogar`: microfono del navegador, STT, Qwen/Ollama, respuesta por voz,
   y barge-in inicial desde el navegador.
 - STT persistente GPU con faster-whisper para evitar el costo de cargar Whisper
@@ -154,6 +172,7 @@ POST /api/notes/delete
 POST /api/chat
 POST /api/dialogue/turn
 POST /api/dialogue/reset
+POST /api/reasoning/mode
 POST /api/voice/test
 ```
 
@@ -176,7 +195,7 @@ Validacion actual:
 
 ```text
 voice port isolation: OK
-v2: 76 tests OK
+v2: 95 tests OK
 ```
 
 Ultima validacion legacy registrada en memoria:
@@ -289,6 +308,12 @@ viendo que Fusion "no escucha", primero hacer recarga fuerte de la pestana
 
 ## Pendientes Reales
 
+- Diseñar personalidad profunda de Fusion por modo (`Normal`, `Pensamiento`,
+  `Supremo`) sin volverlo asistente general.
+- Completar `FUSION_READER_V2_PERSONALITY_WORKBOOK.md` con decisiones del
+  usuario y luego cablear esa personalidad en `ConversationCore`.
+- Probar en navegador la nueva dinamica `principal + consulta` y afinar la UI
+  de promocion/quitado si hace falta menos friccion.
 - Seguir probando `Dialogar` con microfono real, especialmente interrupcion
   natural mientras Fusion habla.
 - Ajustar VAD/barge-in segun ruido ambiente y eco si vuelve a cortar tarde,

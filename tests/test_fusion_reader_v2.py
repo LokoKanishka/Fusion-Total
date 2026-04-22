@@ -272,6 +272,117 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertEqual(app.prepare_status()["status"], "idle")
         self.assertEqual(app.prepare_status()["doc_id"], "")
 
+    def test_reference_documents_can_be_added_without_replacing_main(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Texto principal.\n\nSegundo bloque.", prefetch=False)
+        out = app.add_reference_text("ref", "Consulta", "Texto de consulta.\n\nOtro dato.")
+        self.assertTrue(out["ok"])
+        status = app.status()
+        self.assertEqual(status["doc_id"], "doc")
+        self.assertEqual(status["main_document"]["title"], "Principal")
+        self.assertEqual(len(status["reference_documents"]), 1)
+        self.assertEqual(status["reference_documents"][0]["doc_id"], "ref")
+
+    def test_promote_reference_swaps_main_and_previous_main_becomes_reference(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.add_reference_text("ref", "Consulta", "Texto de consulta.")
+        out = app.promote_reference_document("ref", prefetch=False)
+        self.assertTrue(out["ok"])
+        status = app.status()
+        self.assertEqual(status["doc_id"], "ref")
+        self.assertEqual(status["title"], "Consulta")
+        refs = status["reference_documents"]
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0]["doc_id"], "doc")
+
+    def test_restart_restores_reference_documents(self):
+        root = Path(tempfile.mkdtemp())
+        app = test_app(root=root)
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.add_reference_text("ref", "Consulta", "Texto de consulta.")
+        reopened = test_app(root=root)
+        status = reopened.status()
+        self.assertEqual(status["doc_id"], "doc")
+        self.assertEqual(len(status["reference_documents"]), 1)
+        self.assertEqual(status["reference_documents"][0]["title"], "Consulta")
+
+    def test_reasoning_mode_defaults_to_thinking_when_env_is_not_forcing_normal(self):
+        previous_mode = os.environ.get("FUSION_READER_REASONING_MODE")
+        previous_think = os.environ.get("FUSION_READER_CHAT_THINK")
+        try:
+            os.environ.pop("FUSION_READER_REASONING_MODE", None)
+            os.environ.pop("FUSION_READER_CHAT_THINK", None)
+            app = test_app()
+            self.assertEqual(app.reasoning_status()["mode"], "thinking")
+        finally:
+            if previous_mode is None:
+                os.environ.pop("FUSION_READER_REASONING_MODE", None)
+            else:
+                os.environ["FUSION_READER_REASONING_MODE"] = previous_mode
+            if previous_think is None:
+                os.environ.pop("FUSION_READER_CHAT_THINK", None)
+            else:
+                os.environ["FUSION_READER_CHAT_THINK"] = previous_think
+
+    def test_reasoning_mode_switch_persists_across_restart(self):
+        root = Path(tempfile.mkdtemp())
+        app = test_app(root=root)
+        changed = app.set_reasoning_mode("supreme")
+        self.assertEqual(changed["mode"], "supreme")
+        reopened = test_app(root=root)
+        self.assertEqual(reopened.reasoning_status()["mode"], "supreme")
+
+    def test_chat_uses_selected_reasoning_mode_settings(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("normal")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        out = app.chat("¿Qué ves?")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["reasoning_mode"], "normal")
+        self.assertEqual(out["reasoning_passes"], 1)
+        self.assertEqual(len(chat_provider.calls), 1)
+        self.assertFalse(chat_provider.calls[0][2]["think"])
+
+    def test_supreme_reasoning_runs_three_passes(self):
+        chat_provider = NullChatProvider("Respuesta final.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("supreme")
+        app.load_text("doc", "Doc", "Pantalla actual.\n\nOtro contexto.", prefetch=False)
+        out = app.chat("Pensá este fragmento con profundidad.")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["reasoning_mode"], "supreme")
+        self.assertEqual(out["reasoning_passes"], 3)
+        self.assertEqual(len(chat_provider.calls), 3)
+        self.assertTrue(all(call[2]["think"] for call in chat_provider.calls))
+        self.assertIn("REVISION INTERNA", chat_provider.calls[-1][0][1]["content"])
+
+    def test_dialogue_degrades_supreme_to_thinking_by_default(self):
+        chat_provider = NullChatProvider("Entendido.")
+        root = Path(tempfile.mkdtemp())
+        app = test_app(root=root)
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("supreme")
+        app.load_text("doc", "Doc", "Pantalla actual.\n\nOtro contexto.", prefetch=False)
+        out = app.dialogue_turn_text("¿Qué opinás del bloque?")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["reasoning_mode_requested"], "supreme")
+        self.assertEqual(out["reasoning_mode_applied"], "thinking")
+        self.assertTrue(out["reasoning_degraded"])
+        self.assertEqual(out["reasoning_mode"], "thinking")
+        self.assertEqual(out["reasoning_passes"], 1)
+        self.assertEqual(len(chat_provider.calls), 1)
+        self.assertTrue(chat_provider.calls[0][2]["think"])
+        trace_path = root / "dialogue_trace.jsonl"
+        self.assertTrue(trace_path.exists())
+        logged = trace_path.read_text(encoding="utf-8")
+        self.assertIn('"event": "dialogue_turn_text"', logged)
+        self.assertIn('"requested_mode": "supreme"', logged)
+        self.assertIn('"applied_mode": "thinking"', logged)
+
     def test_dialogue_turn_text_answers_with_audio_without_touching_reader_tts_path(self):
         provider = NullTTSProvider()
         app = test_app(tts=provider)
@@ -807,6 +918,139 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("DOCUMENTO COMPLETO DISPONIBLE:", prompt)
         self.assertIn("Contexto posterior del documento.", prompt)
 
+    def test_chat_context_includes_reference_documents(self):
+        chat_provider = NullChatProvider("Veo el apoyo.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Principal", "Texto principal.\n\nContexto del principal.", prefetch=False)
+        app.add_reference_text("ref", "Consulta", "Texto de consulta sobre el mismo tema.\n\nComparación complementaria.")
+        out = app.chat("Compará el principal con la consulta.")
+        self.assertTrue(out["ok"])
+        messages = chat_provider.calls[0][0]
+        prompt = "\n".join(item["content"] for item in messages)
+        self.assertIn("DOCUMENTOS DE CONSULTA:", prompt)
+        self.assertIn("Consulta", prompt)
+        self.assertIn("Comparación complementaria", prompt)
+
+    def test_chat_lists_all_reference_documents_even_if_first_is_long(self):
+        chat_provider = NullChatProvider("Los veo.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        long_text = " ".join(["analisis"] * 600)
+        app.add_reference_text("ref-1", "Análisis Filosófico", long_text)
+        app.add_reference_text("ref-2", "desgrabaciones.docx", "Primera desgrabación.\n\nSegunda desgrabación.")
+        out = app.chat("¿Ves los documentos de consulta?")
+        self.assertTrue(out["ok"])
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Análisis Filosófico", prompt)
+        self.assertIn("desgrabaciones.docx", prompt)
+
+    def test_dialogue_context_includes_reference_document_intro_chunks(self):
+        chat_provider = NullChatProvider("Sí, lo veo.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Principal", "Bloque principal uno.\n\nBloque principal dos.", prefetch=False)
+        app.add_reference_text(
+            "desgrabaciones",
+            "desgrabaciones.docx",
+            "Primera línea de desgrabaciones.\n\nSegunda línea importante del documento.\n\nTercera línea.",
+        )
+        out = app.dialogue_turn_text("Dame un contexto general de desgrabaciones.docx.")
+        self.assertTrue(out["ok"])
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("desgrabaciones.docx", prompt)
+        self.assertIn("Primera línea de desgrabaciones.", prompt)
+        self.assertIn("Segunda línea importante del documento.", prompt)
+
+    def test_chat_navigation_focuses_reference_block_without_replacing_main(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Uno principal.\n\nDos principal.", prefetch=False)
+        app.add_reference_text("ref", "Desgrabaciones.docx", "Uno consulta.\n\nDos consulta.\n\nTres consulta.")
+        out = app.chat("andá al bloque 2 de Desgrabaciones.docx")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "reader_navigation")
+        self.assertEqual(out["detail"], "focus_block")
+        self.assertEqual(out["doc_id"], "ref")
+        self.assertEqual(app.status()["doc_id"], "doc")
+        self.assertEqual(app.laboratory_focus_status()["chunk_number"], 2)
+        self.assertIn("Dos consulta.", out["answer"])
+
+    def test_chat_search_sets_laboratory_focus_on_match(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.add_reference_text(
+            "ref",
+            "Desgrabaciones.docx",
+            "Primera parte.\n\nAcá aparece YouTube como ejemplo pedagógico.\n\nCierre.",
+        )
+        out = app.chat("buscá dónde habla de YouTube en Desgrabaciones.docx")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "reader_navigation")
+        self.assertEqual(out["detail"], "search_matches")
+        self.assertEqual(out["current"], 2)
+        self.assertIn("YouTube", out["answer"])
+        self.assertEqual(app.laboratory_focus_status()["query"], "YouTube")
+
+    def test_chat_combined_focus_and_search_prefers_search_result_when_both_are_requested(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.add_reference_text(
+            "ref",
+            "Desgrabaciones.docx",
+            "Speaker 1.\n\nNada de YouTube acá.\n\nMás texto.\n\nYouTube aparece fuerte en este bloque.",
+        )
+        out = app.chat("Andá al bloque 1 de Desgrabaciones.docx y buscá dónde habla de YouTube y ese bloque qué dice exactamente.")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["detail"], "search_matches")
+        self.assertEqual(out["current"], 2)
+        self.assertIn("YouTube", out["answer"])
+        self.assertEqual(app.laboratory_focus_status()["chunk_number"], 2)
+
+    def test_followup_chat_gets_laboratory_focus_in_context(self):
+        chat_provider = NullChatProvider("Sí, sigo ese foco.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Principal", "Bloque principal uno.\n\nBloque principal dos.", prefetch=False)
+        app.add_reference_text("ref", "Desgrabaciones.docx", "Uno consulta.\n\nDos consulta con YouTube.\n\nTres consulta.")
+        nav = app.chat("buscá YouTube en Desgrabaciones.docx")
+        self.assertTrue(nav["ok"])
+        followup = app.chat("¿y ese bloque qué plantea?")
+        self.assertTrue(followup["ok"])
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("FOCO ACTUAL DEL LABORATORIO:", prompt)
+        self.assertIn("Desgrabaciones.docx", prompt)
+        self.assertIn("Dos consulta con YouTube.", prompt)
+
+    def test_chat_compare_uses_focus_and_explicit_target(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Bloque principal uno.\n\nBloque principal dos importante.", prefetch=False)
+        app.add_reference_text(
+            "ref",
+            "Análisis Filosófico.docx",
+            "Bloque uno consulta.\n\nBloque dos consulta importante.\n\nBloque tres consulta.",
+        )
+        nav = app.chat("andá al bloque 2 de Análisis Filosófico.docx")
+        self.assertTrue(nav["ok"])
+        out = app.chat("compará este bloque con el bloque 2 del principal")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "reader_compare")
+        self.assertEqual(out["detail"], "compare_blocks")
+        self.assertIn("Comparación:", out["answer"])
+        self.assertIn("Análisis Filosófico.docx", out["answer"])
+        self.assertIn("Principal", out["answer"])
+
+    def test_dialogue_compare_returns_reader_compare_without_llm(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Idea central del principal.\n\nSegunda idea del principal.", prefetch=False)
+        app.add_reference_text("ref", "ideas.docx", "Idea central de consulta.\n\nSegunda idea de consulta.")
+        app.chat("andá al bloque 1 de ideas.docx")
+        out = app.dialogue_turn_text("compará este bloque con el bloque 1 del principal")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "reader_compare")
+        self.assertEqual(out["detail"], "compare_blocks")
+        self.assertIn("Comparé", out["answer"])
+
     def test_chat_uses_recent_laboratory_text_without_document(self):
         chat_provider = NullChatProvider("Sí, lo veo.")
         app = test_app()
@@ -877,6 +1121,17 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("/api/laboratory/reset", server)
         self.assertIn("Historial de laboratorio borrado", server)
 
+    def test_server_exposes_reference_documents_ui_and_endpoints(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("referenceModeToggle", server)
+        self.assertIn("Documentos de consulta", server)
+        self.assertIn("/api/reference/promote", server)
+        self.assertIn("/api/reference/remove", server)
+        self.assertIn("Agregar como consulta", server)
+        self.assertIn("labFocus", server)
+        self.assertIn("Foco del laboratorio", server)
+        self.assertNotIn("refreshStatus(", server)
+
     def test_server_distinguishes_laboratory_notes_with_l_prefix(self):
         server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
         self.assertIn("const LAB_NOTES_DOC_ID = '__laboratory__';", server)
@@ -890,6 +1145,13 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("if (dialogue.active)", server)
         self.assertIn("api('/api/dialogue/turn', { text: message", server)
         self.assertIn("await playDialogueAnswer(data)", server)
+
+    def test_reasoning_tabs_and_endpoint_exist_in_server_ui(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("Pensamiento supremo", server)
+        self.assertIn("reasoningNormalBtn", server)
+        self.assertIn("api('/api/reasoning/mode', { mode: targetMode })", server)
+        self.assertIn("Supremo pedido; diálogo usa Pensamiento para cuidar latencia.", server)
 
     def test_dialogue_low_latency_defaults_are_configured(self):
         server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")

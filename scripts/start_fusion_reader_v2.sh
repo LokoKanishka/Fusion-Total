@@ -17,6 +17,15 @@ if fusion_reader_apply_game_coexistence_mode; then
 fi
 
 export FUSION_READER_CHAT_MODEL="${FUSION_READER_CHAT_MODEL:-qwen3:14b-q8_0}"
+export FUSION_READER_CHAT_THINK="${FUSION_READER_CHAT_THINK:-1}"
+export FUSION_READER_CHAT_NUM_PREDICT="${FUSION_READER_CHAT_NUM_PREDICT:-1536}"
+if [[ -z "${FUSION_READER_REASONING_MODE:-}" ]]; then
+  if [[ "${FUSION_READER_CHAT_THINK}" == "0" || "${FUSION_READER_CHAT_THINK,,}" == "false" || "${FUSION_READER_CHAT_THINK,,}" == "no" ]]; then
+    export FUSION_READER_REASONING_MODE="normal"
+  else
+    export FUSION_READER_REASONING_MODE="thinking"
+  fi
+fi
 
 fusion_tts_owner_ok() {
   [[ -f "$OWNER_FILE" ]] || return 1
@@ -59,5 +68,6 @@ echo "Puerto GPU Fusion reservado: ${GPU_TTS_PORT}"
 echo "Prefetch ahead: ${FUSION_READER_PREFETCH_AHEAD:-3}"
 echo "Modelo chat: ${FUSION_READER_CHAT_MODEL}"
 echo "Thinking chat: ${FUSION_READER_CHAT_THINK:-0}"
+echo "Modo razonamiento: ${FUSION_READER_REASONING_MODE}"
 
 exec python3 scripts/fusion_reader_v2_server.py

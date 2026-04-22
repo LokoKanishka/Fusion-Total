@@ -80,9 +80,13 @@
 - [x] Agregar barge-in navegador para cortar voz local/audio al hablar encima
 - [x] Filtrar alucinaciones STT tipo "suscribete" antes de UI/chat/notas
 - [x] Saneamiento final de continuidad en README/STATE/DIALOGUE/AUDIT
+- [x] Agregar documento principal + documentos de consulta en estado, API, UI y chat
+- [x] Agregar trazas persistentes de `Dialogar` y degradacion controlada `Supremo -> Pensamiento` en voz
+- [x] Crear workbook de personalidad profunda por modo en `FUSION_READER_V2_PERSONALITY_WORKBOOK.md`
 - [ ] Probar modo `Dialogar` con microfono real
 - [ ] Ajustar VAD/barge-in segun ruido ambiente y eco
 - [ ] Afinar warmup/keep-hot de AllTalk GPU
+- [ ] Diseñar y cablear personalidad por modo (`Normal`, `Pensamiento`, `Supremo`)
 - [ ] Agregar pausa/reanudar como estado real de lectura
 - [ ] Mejorar OCR fino para PDFs escaneados largos
 

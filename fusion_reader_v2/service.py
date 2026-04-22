@@ -73,8 +73,210 @@ class FusionReaderV2:
         self.dialogue_tts_max_chars = int(os.environ.get("FUSION_READER_DIALOGUE_TTS_MAX_CHARS", "520"))
         self.fast_note_ack = os.environ.get("FUSION_READER_FAST_NOTE_ACK", "0").strip().lower() not in {"0", "false", "no"}
         self.fast_dialogue_ack = os.environ.get("FUSION_READER_FAST_DIALOGUE_ACK", "0").strip().lower() not in {"0", "false", "no"}
+        self._reference_documents: dict[str, dict] = {}
+        self._laboratory_focus: dict = {}
+        self._main_source_path = ""
+        self._main_source_type = ""
+        self.dialogue_allow_supreme = os.environ.get("FUSION_READER_DIALOGUE_ALLOW_SUPREME", "0").strip().lower() in {"1", "true", "yes", "on"}
+        self.reasoning_mode = str(getattr(self.conversation, "default_reasoning_mode", "thinking") or "thinking")
         self.session_state_path = Path(session_state_path) if session_state_path else None
+        self.dialogue_trace_path = (self.session_state_path.parent / "dialogue_trace.jsonl") if self.session_state_path else None
         self._restore_session_state()
+
+    def _effective_reasoning_mode(self, *, dialogue: bool = False) -> dict:
+        requested = str(self.reasoning_mode or "thinking")
+        applied = requested
+        degraded = False
+        reason = ""
+        if dialogue and requested == "supreme" and not self.dialogue_allow_supreme:
+            applied = "thinking"
+            degraded = True
+            reason = "dialogue_supreme_degraded_to_thinking"
+        return {
+            "requested": requested,
+            "applied": applied,
+            "degraded": degraded,
+            "reason": reason,
+        }
+
+    def _append_dialogue_trace(self, event: dict) -> None:
+        if self.dialogue_trace_path is None:
+            return
+        try:
+            self.dialogue_trace_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.dialogue_trace_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event, ensure_ascii=True) + "\n")
+        except Exception:
+            return
+
+    def _document_record(
+        self,
+        doc_id: str,
+        title: str,
+        text: str,
+        source_path: str = "",
+        source_type: str = "",
+    ) -> dict:
+        document = Document.from_text(doc_id, title, text)
+        preview = " ".join(document.text.split())[:220]
+        return {
+            "doc_id": document.doc_id,
+            "title": document.title,
+            "text": document.text,
+            "source_path": str(source_path or ""),
+            "source_type": str(source_type or "text"),
+            "total": len(document.chunks),
+            "preview": preview,
+        }
+
+    def _public_document_record(self, record: dict) -> dict:
+        return {
+            "doc_id": str(record.get("doc_id") or ""),
+            "title": str(record.get("title") or ""),
+            "source_path": str(record.get("source_path") or ""),
+            "source_type": str(record.get("source_type") or ""),
+            "total": int(record.get("total") or 0),
+            "preview": str(record.get("preview") or ""),
+        }
+
+    def _snapshot_document_record(self, record: dict) -> dict:
+        document = Document.from_text(
+            str(record.get("doc_id") or ""),
+            str(record.get("title") or ""),
+            str(record.get("text") or ""),
+        )
+        return {
+            **self._public_document_record(record),
+            "text": document.text,
+            "chunks": [
+                {
+                    "chunk_number": index + 1,
+                    "text": chunk,
+                }
+                for index, chunk in enumerate(document.chunks)
+            ],
+        }
+
+    def _main_document_record(self) -> dict | None:
+        document = self.session.document
+        if not document:
+            return None
+        return self._document_record(
+            document.doc_id,
+            document.title,
+            document.text,
+            source_path=self._main_source_path,
+            source_type=self._main_source_type,
+        )
+
+    def _reference_document_items(self) -> list[dict]:
+        return [self._public_document_record(item) for item in self._reference_documents.values()]
+
+    def _all_document_records(self) -> list[dict]:
+        records: list[dict] = []
+        main_record = self._main_document_record()
+        if main_record:
+            records.append(
+                {
+                    **self._snapshot_document_record(main_record),
+                    "role": "main",
+                    "current": int(self.session.status().get("current") or 0),
+                }
+            )
+        for item in self._reference_documents.values():
+            records.append({**self._snapshot_document_record(item), "role": "reference"})
+        return records
+
+    def _normalize_search_text(self, text: str) -> str:
+        return " ".join(str(text or "").strip().lower().replace("¿", "").replace("¡", "").split())
+
+    def _meaningful_search_terms(self, text: str) -> list[str]:
+        stopwords = {
+            "a", "al", "alguna", "alguno", "andá", "anda", "andar", "bloque", "busca", "buscá", "buscar",
+            "chunk", "con", "consulta", "de", "del", "donde", "dónde", "documento", "el", "en", "esa", "ese",
+            "esta", "este", "habla", "ir", "la", "las", "lo", "los", "main", "muestra", "mostrame", "muéstrame",
+            "para", "parte", "por", "principal", "quiero", "sección", "seccion", "sobre", "texto", "ver",
+            "vamos", "y",
+        }
+        tokens = re.findall(r"[a-záéíóúñ0-9_./-]{3,}", self._normalize_search_text(text))
+        out: list[str] = []
+        for token in tokens:
+            if token in stopwords or token in out:
+                continue
+            out.append(token)
+        return out
+
+    def _resolve_document_record(self, selector: str = "") -> dict | None:
+        clean_selector = self._normalize_search_text(selector)
+        records = self._all_document_records()
+        if not clean_selector:
+            return records[0] if records else None
+        for record in records:
+            title = self._normalize_search_text(record.get("title") or "")
+            doc_id = self._normalize_search_text(record.get("doc_id") or "")
+            if clean_selector == title or clean_selector == doc_id:
+                return record
+        for record in records:
+            haystack = " ".join(
+                [
+                    self._normalize_search_text(record.get("title") or ""),
+                    self._normalize_search_text(record.get("doc_id") or ""),
+                ]
+            ).strip()
+            if clean_selector and clean_selector in haystack:
+                return record
+        selector_terms = self._meaningful_search_terms(clean_selector)
+        ranked: list[tuple[int, dict]] = []
+        for record in records:
+            haystack = " ".join(
+                [
+                    self._normalize_search_text(record.get("title") or ""),
+                    self._normalize_search_text(record.get("doc_id") or ""),
+                    self._normalize_search_text(record.get("preview") or ""),
+                ]
+            ).strip()
+            score = sum(1 for term in selector_terms if term in haystack)
+            if score > 0:
+                ranked.append((score, record))
+        if ranked:
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            return ranked[0][1]
+        return None
+
+    def _set_laboratory_focus(self, record: dict, chunk_index: int, query: str = "", reason: str = "") -> dict:
+        chunks = record.get("chunks") if isinstance(record.get("chunks"), list) else []
+        if chunk_index < 0 or chunk_index >= len(chunks):
+            raise IndexError("chunk_out_of_bounds")
+        item = chunks[chunk_index]
+        text = str(item.get("text") or "").strip()
+        focus = {
+            "ok": True,
+            "doc_id": str(record.get("doc_id") or ""),
+            "title": str(record.get("title") or ""),
+            "role": str(record.get("role") or "reference"),
+            "source_type": str(record.get("source_type") or "text"),
+            "total": int(record.get("total") or len(chunks)),
+            "chunk_index": int(chunk_index),
+            "chunk_number": int(item.get("chunk_number") or chunk_index + 1),
+            "text": text,
+            "query": str(query or "").strip(),
+            "reason": str(reason or "").strip(),
+            "updated_ts": time.time(),
+        }
+        self._laboratory_focus = focus
+        return dict(focus)
+
+    def laboratory_focus_status(self) -> dict:
+        return dict(self._laboratory_focus) if self._laboratory_focus else {}
+
+    def _focus_record(self) -> dict | None:
+        focus = self.laboratory_focus_status()
+        if not focus:
+            return None
+        record = self._resolve_document_record(str(focus.get("doc_id") or focus.get("title") or ""))
+        if not record:
+            return None
+        return record
 
     def _new_prepare_status(self) -> dict:
         return {
@@ -104,7 +306,11 @@ class FusionReaderV2:
         source_type: str = "",
     ) -> dict:
         self._reset_prepare_for_new_document()
+        self._laboratory_focus = {}
         status = self.session.load(Document.from_text(doc_id, title, text))
+        self._main_source_path = str(source_path or "")
+        self._main_source_type = str(source_type or "text")
+        self._reference_documents.pop(str(status.get("doc_id") or ""), None)
         self._persist_session_state(text=str(text or ""), source_path=source_path, source_type=source_type)
         if prefetch:
             self.prefetch_current()
@@ -115,11 +321,76 @@ class FusionReaderV2:
         text = p.read_text(encoding="utf-8")
         return self.load_text(p.stem, p.name, text, prefetch=prefetch, source_path=str(p), source_type="file")
 
+    def add_reference_text(
+        self,
+        doc_id: str,
+        title: str,
+        text: str,
+        source_path: str = "",
+        source_type: str = "",
+    ) -> dict:
+        main_doc = self.session.document
+        clean_doc_id = str(doc_id or "").strip()
+        if main_doc and clean_doc_id and clean_doc_id == main_doc.doc_id:
+            return {"ok": False, "error": "reference_matches_main_document"}
+        record = self._document_record(clean_doc_id or title, title, text, source_path=source_path, source_type=source_type)
+        self._reference_documents[record["doc_id"]] = record
+        self._persist_session_state()
+        return {
+            **self.status(),
+            "reference_added": self._public_document_record(record),
+            "message": f"{record['title']} agregado como documento de consulta.",
+        }
+
+    def add_reference_file(self, path: str | Path) -> dict:
+        p = Path(path)
+        text = p.read_text(encoding="utf-8")
+        return self.add_reference_text(p.stem, p.name, text, source_path=str(p), source_type="file")
+
+    def list_reference_documents(self) -> dict:
+        return {"ok": True, "items": self._reference_document_items()}
+
+    def remove_reference_document(self, doc_id: str) -> dict:
+        removed = self._reference_documents.pop(str(doc_id or ""), None)
+        if not removed:
+            return {"ok": False, "error": "reference_not_found"}
+        if str(self._laboratory_focus.get("doc_id") or "") == str(removed.get("doc_id") or ""):
+            self._laboratory_focus = {}
+        self._persist_session_state()
+        return {"ok": True, "removed": True, "reference": self._public_document_record(removed), "items": self._reference_document_items()}
+
+    def promote_reference_document(self, doc_id: str, prefetch: bool = True) -> dict:
+        selected_id = str(doc_id or "")
+        record = self._reference_documents.pop(selected_id, None)
+        if not record:
+            return {"ok": False, "error": "reference_not_found"}
+        previous_main = self._main_document_record()
+        self._reset_prepare_for_new_document()
+        status = self.session.load(Document.from_text(str(record.get("doc_id") or ""), str(record.get("title") or ""), str(record.get("text") or "")))
+        self._main_source_path = str(record.get("source_path") or "")
+        self._main_source_type = str(record.get("source_type") or "text")
+        if previous_main and previous_main["doc_id"] != status.get("doc_id"):
+            self._reference_documents[previous_main["doc_id"]] = previous_main
+        self._laboratory_focus = {}
+        self._persist_session_state()
+        if prefetch:
+            self.prefetch_current()
+        return {
+            **self.status(),
+            "promoted_reference": self._public_document_record(record),
+            "message": f"{record['title']} ahora es el documento principal.",
+        }
+
     def status(self) -> dict:
         out = self.session.status()
         out["voice"] = self.voice.voice
         out["language"] = self.voice.language
         out["tts"] = self.tts.health()
+        out["reasoning"] = self.reasoning_status()
+        main_record = self._main_document_record()
+        out["main_document"] = self._public_document_record(main_record) if main_record else {}
+        out["reference_documents"] = self._reference_document_items()
+        out["laboratory_focus"] = self.laboratory_focus_status()
         with self._prefetch_lock:
             out["prefetch_index"] = self._prefetch_index
             out["prefetch_done"] = bool(self._prefetch_future and self._prefetch_future.done())
@@ -442,9 +713,14 @@ class FusionReaderV2:
                 "next_chunk": "",
                 "document_text": "",
                 "notes": [],
+                "main_document": {},
+                "document_chunks": [],
+                "reference_documents": [self._snapshot_document_record(item) for item in self._reference_documents.values()],
+                "laboratory_focus": self.laboratory_focus_status(),
             }
         cursor = self.session.cursor
         chunks = document.chunks
+        main_record = self._main_document_record()
         return {
             **status,
             "current_chunk": self.session.current_chunk(),
@@ -452,7 +728,385 @@ class FusionReaderV2:
             "next_chunk": chunks[cursor + 1] if cursor + 1 < len(chunks) else "",
             "document_text": document.text,
             "notes": self.list_notes(doc_id=document.doc_id, chunk_index=None).get("items", []),
+            "main_document": self._snapshot_document_record(main_record) if main_record else {},
+            "document_chunks": [
+                {
+                    "chunk_number": index + 1,
+                    "text": chunk,
+                }
+                for index, chunk in enumerate(chunks)
+            ],
+            "reference_documents": [self._snapshot_document_record(item) for item in self._reference_documents.values()],
+            "laboratory_focus": self.laboratory_focus_status(),
         }
+
+    def _extract_navigation_plan(self, text: str) -> dict | None:
+        clean = " ".join(str(text or "").strip().replace("¿", "").replace("¡", "").split())
+        if not clean:
+            return None
+        plan: dict[str, object] = {}
+        block_match = re.search(
+            r"(?:^|\b)(?:and[aá]|anda|ir|ite|vamos|salt[aá]|salta|mostrame|mu[eé]strame|ll[eé]vame|llevame|abr[ií]|abre|quiero\s+ver|quiero\s+ir\s+a|ver)?"
+            r".*?\b(?:bloque|chunk|parte|secci[oó]n)\s+(\d{1,4})(?:\s+(?:de|del|en)\s+(.+?))?(?=\s+y\s+(?:busca|busc[aá]|buscar|encuentra|encontr[aá]|encontrar|ubica|ubic[aá]|d[oó]nde|donde)\b|$)",
+            clean,
+            flags=re.IGNORECASE,
+        )
+        if block_match:
+            plan["focus_chunk_number"] = int(block_match.group(1))
+            plan["focus_selector"] = str(block_match.group(2) or "").strip(" .,:;!?")
+        search_match = re.search(
+            r"\b(?:busca|busc[aá]|buscar|encuentra|encontr[aá]|encontrar|ubica|ubic[aá])\b\s*(?:d[oó]nde\s+(?:habla|dice)\s+de\s+)?(.+)$",
+            clean,
+            flags=re.IGNORECASE,
+        )
+        if search_match:
+            tail = str(search_match.group(1) or "").strip(" .,:;!?")
+            query, selector = self._split_search_tail(tail)
+            if query:
+                plan["search_query"] = query
+                plan["search_selector"] = selector
+        where_match = re.search(
+            r"\b(?:d[oó]nde\s+habla\s+de|d[oó]nde\s+dice|donde\s+habla\s+de|donde\s+dice)\s+(.+)$",
+            clean,
+            flags=re.IGNORECASE,
+        )
+        if where_match:
+            tail = str(where_match.group(1) or "").strip(" .,:;!?")
+            query, selector = self._split_search_tail(tail)
+            if query:
+                plan["search_query"] = query
+                plan["search_selector"] = selector
+        return plan or None
+
+    def _split_search_tail(self, tail: str) -> tuple[str, str]:
+        clean_tail = str(tail or "").strip(" .,:;!?")
+        if not clean_tail:
+            return "", ""
+        quote_match = re.search(r"[\"“”']([^\"“”']{2,})[\"“”']", clean_tail)
+        quoted = str(quote_match.group(1) or "").strip() if quote_match else ""
+        selector = ""
+        split_match = re.match(r"(.+?)\s+\ben\b\s+(.+)$", clean_tail, flags=re.IGNORECASE)
+        if split_match:
+            query = quoted or str(split_match.group(1) or "").strip(" .,:;!?")
+            selector = str(split_match.group(2) or "").strip(" .,:;!?")
+            return query, selector
+        return quoted or clean_tail, selector
+
+    def _extract_compare_plan(self, text: str) -> dict | None:
+        clean = " ".join(str(text or "").strip().replace("¿", "").replace("¡", "").split())
+        if not clean:
+            return None
+        if not re.search(r"\bcompar", clean, flags=re.IGNORECASE):
+            return None
+        lowered = clean.lower()
+        if " con " not in lowered:
+            return None
+        left_raw, right_raw = re.split(r"\bcon\b", clean, maxsplit=1, flags=re.IGNORECASE)
+        left_raw = re.sub(r"^.*?\bcompar[aá]\s+", "", left_raw, flags=re.IGNORECASE).strip(" .,:;!?")
+        right_raw = str(right_raw or "").strip(" .,:;!?")
+        if not left_raw or not right_raw:
+            return None
+        left = self._parse_compare_target(left_raw, prefer_focus=True)
+        right = self._parse_compare_target(right_raw, prefer_focus=False)
+        if not left or not right:
+            return None
+        return {"left": left, "right": right}
+
+    def _parse_compare_target(self, text: str, prefer_focus: bool = False) -> dict | None:
+        clean = str(text or "").strip(" .,:;!?")
+        if not clean:
+            return None
+        if re.search(r"\b(?:este|ese|actual)\s+bloque\b", clean, flags=re.IGNORECASE):
+            focus = self.laboratory_focus_status() if prefer_focus else {}
+            if focus:
+                return {
+                    "source": "focus",
+                    "doc_id": str(focus.get("doc_id") or ""),
+                    "title": str(focus.get("title") or ""),
+                    "chunk_number": int(focus.get("chunk_number") or 0),
+                }
+            status = self.session.status()
+            if status.get("doc_id"):
+                return {
+                    "source": "main",
+                    "doc_id": str(status.get("doc_id") or ""),
+                    "title": str(status.get("title") or ""),
+                    "chunk_number": int(status.get("current") or 0),
+                }
+        match = re.search(
+            r"\b(?:bloque|chunk|parte|secci[oó]n)\s+(\d{1,4})(?:\s+(?:de|del|en)\s+(.+))?$",
+            clean,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return {
+                "source": "explicit",
+                "doc_selector": str(match.group(2) or "").strip(" .,:;!?"),
+                "chunk_number": int(match.group(1)),
+            }
+        # fall back to current block of selected document
+        record = self._resolve_document_record(clean)
+        if record:
+            default_chunk = 1
+            if record.get("role") == "main":
+                default_chunk = int(self.session.status().get("current") or 1)
+            return {
+                "source": "document_only",
+                "doc_selector": clean,
+                "chunk_number": default_chunk,
+            }
+        return None
+
+    def _resolve_compare_target(self, target: dict) -> dict | None:
+        chunk_number = int(target.get("chunk_number") or 0)
+        if chunk_number <= 0:
+            return None
+        record = None
+        if target.get("source") == "focus":
+            record = self._focus_record()
+        if record is None and target.get("doc_id"):
+            record = self._resolve_document_record(str(target.get("doc_id") or ""))
+        if record is None:
+            record = self._resolve_document_record(str(target.get("doc_selector") or ""))
+        if record is None and self.session.document:
+            record = self._resolve_document_record(str(self.session.document.doc_id))
+        if not record:
+            return None
+        chunks = record.get("chunks")
+        if not isinstance(chunks, list) or chunk_number > len(chunks):
+            return None
+        item = chunks[chunk_number - 1]
+        return {
+            "doc_id": str(record.get("doc_id") or ""),
+            "title": str(record.get("title") or ""),
+            "role": str(record.get("role") or "reference"),
+            "source_type": str(record.get("source_type") or "text"),
+            "total": int(record.get("total") or len(chunks)),
+            "chunk_number": chunk_number,
+            "chunk_index": chunk_number - 1,
+            "text": str(item.get("text") or "").strip(),
+        }
+
+    def _compare_terms(self, text: str) -> list[str]:
+        return self._meaningful_search_terms(text)
+
+    def _compare_summary(self, left: dict, right: dict, dialogue: bool = False) -> str:
+        left_terms = set(self._compare_terms(left.get("text") or ""))
+        right_terms = set(self._compare_terms(right.get("text") or ""))
+        overlap = [term for term in left_terms.intersection(right_terms)]
+        overlap = sorted(overlap, key=len, reverse=True)[:6]
+        left_only = sorted(left_terms - right_terms, key=len, reverse=True)[:4]
+        right_only = sorted(right_terms - left_terms, key=len, reverse=True)[:4]
+        left_excerpt = self._navigation_excerpt(str(left.get("text") or ""), max_chars=190 if dialogue else 240)
+        right_excerpt = self._navigation_excerpt(str(right.get("text") or ""), max_chars=190 if dialogue else 240)
+        if dialogue:
+            parts = [
+                f"Comparé {left['title']} bloque {left['chunk_number']} con {right['title']} bloque {right['chunk_number']}.",
+                f"Coinciden en {', '.join(overlap[:3])}." if overlap else "No comparten vocabulario fuerte en esta muestra.",
+                f"El primero dice: {left_excerpt}",
+                f"El segundo dice: {right_excerpt}",
+            ]
+            return " ".join(parts)
+        lines = [
+            f"Comparación:",
+            f"- {left['title']} | bloque {left['chunk_number']} de {left['total']}: {left_excerpt}",
+            f"- {right['title']} | bloque {right['chunk_number']} de {right['total']}: {right_excerpt}",
+            f"Coincidencias: {', '.join(overlap) if overlap else 'no encontré coincidencias léxicas fuertes en esta muestra.'}",
+            f"Rasgos del primero: {', '.join(left_only) if left_only else 'sin rasgos diferenciales claros.'}",
+            f"Rasgos del segundo: {', '.join(right_only) if right_only else 'sin rasgos diferenciales claros.'}",
+        ]
+        return "\n".join(lines)
+
+    def _handle_compare_intent(self, text: str, dialogue: bool = False) -> dict | None:
+        plan = self._extract_compare_plan(text)
+        if not plan:
+            return None
+        left = self._resolve_compare_target(plan["left"])
+        right = self._resolve_compare_target(plan["right"])
+        if not left or not right:
+            return {
+                "ok": False,
+                "answer": "",
+                "model": "reader_compare",
+                "detail": "compare_target_not_found",
+                "error": "compare_target_not_found",
+            }
+        summary = self._compare_summary(left, right, dialogue=dialogue)
+        focus_record = self._resolve_document_record(str(right.get("doc_id") or right.get("title") or ""))
+        if not focus_record:
+            return {
+                "ok": False,
+                "answer": "",
+                "model": "reader_compare",
+                "detail": "document_not_found",
+                "error": "document_not_found",
+            }
+        focus = self._set_laboratory_focus(focus_record, int(right["chunk_index"]), reason="compare")
+        return {
+            "ok": True,
+            "answer": summary,
+            "model": "reader_compare",
+            "detail": "compare_blocks",
+            "doc_id": focus.get("doc_id") or "",
+            "title": focus.get("title") or "",
+            "current": focus.get("chunk_number") or 0,
+            "total": focus.get("total") or 0,
+            "comparison": {"left": left, "right": right},
+            "laboratory_focus": focus,
+        }
+
+    def _search_chunk_matches(self, query: str, selector: str = "", limit: int = 5) -> list[dict]:
+        selected_record = self._resolve_document_record(selector) if selector else None
+        records = [selected_record] if selected_record else self._all_document_records()
+        normalized_query = self._normalize_search_text(query)
+        terms = self._meaningful_search_terms(query)
+        matches: list[tuple[int, int, dict]] = []
+        for record in records:
+            if not record:
+                continue
+            chunks = record.get("chunks")
+            if not isinstance(chunks, list):
+                continue
+            for index, item in enumerate(chunks):
+                text = str(item.get("text") or "").strip()
+                if not text:
+                    continue
+                haystack = self._normalize_search_text(text)
+                score = 0
+                if normalized_query and normalized_query in haystack:
+                    score += 30 + len(terms)
+                score += sum(4 for term in terms if term and term in haystack)
+                if score <= 0:
+                    continue
+                matches.append(
+                    (
+                        score,
+                        -index,
+                        {
+                            "doc_id": str(record.get("doc_id") or ""),
+                            "title": str(record.get("title") or ""),
+                            "role": str(record.get("role") or "reference"),
+                            "source_type": str(record.get("source_type") or "text"),
+                            "total": int(record.get("total") or len(chunks)),
+                            "chunk_index": index,
+                            "chunk_number": int(item.get("chunk_number") or index + 1),
+                            "text": text,
+                        },
+                    )
+                )
+        matches.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return [item[2] for item in matches[: max(1, int(limit or 1))]]
+
+    def _navigation_excerpt(self, text: str, max_chars: int = 280) -> str:
+        excerpt = " ".join(str(text or "").split())
+        if len(excerpt) <= max_chars:
+            return excerpt
+        return excerpt[:max_chars].rstrip() + "..."
+
+    def _handle_navigation_intent(self, text: str, dialogue: bool = False) -> dict | None:
+        plan = self._extract_navigation_plan(text)
+        if not plan:
+            return None
+        focused_record: dict | None = None
+        if plan.get("focus_chunk_number"):
+            selected = self._resolve_document_record(str(plan.get("focus_selector") or ""))
+            if not selected:
+                return {
+                    "ok": False,
+                    "answer": "",
+                    "model": "reader_navigation",
+                    "detail": "document_not_found",
+                    "error": "document_not_found",
+                }
+            chunk_number = int(plan.get("focus_chunk_number") or 0)
+            chunks = selected.get("chunks") if isinstance(selected.get("chunks"), list) else []
+            if chunk_number < 1 or chunk_number > len(chunks):
+                return {
+                    "ok": False,
+                    "answer": "",
+                    "model": "reader_navigation",
+                    "detail": "chunk_out_of_bounds",
+                    "error": "chunk_out_of_bounds",
+                    "doc_id": selected.get("doc_id") or "",
+                    "title": selected.get("title") or "",
+                    "total": len(chunks),
+                }
+            if selected.get("role") == "main":
+                self.jump(chunk_number)
+                selected = self._resolve_document_record(selected.get("doc_id") or "") or selected
+            focused_record = selected
+            if not plan.get("search_query"):
+                focus = self._set_laboratory_focus(selected, chunk_number - 1, reason="focus_block")
+                excerpt = self._navigation_excerpt(focus["text"], max_chars=340 if dialogue else 460)
+                answer = (
+                    f"Quedé en {focus['title']}, bloque {focus['chunk_number']} de {focus['total']}. {excerpt}"
+                    if dialogue
+                    else f"Foco de laboratorio en {focus['title']}, bloque {focus['chunk_number']} de {focus['total']}.\n\n{excerpt}"
+                )
+                return {
+                    "ok": True,
+                    "answer": answer,
+                    "model": "reader_navigation",
+                    "detail": "focus_block",
+                    "doc_id": focus.get("doc_id") or "",
+                    "title": focus.get("title") or "",
+                    "current": focus.get("chunk_number") or 0,
+                    "total": focus.get("total") or 0,
+                    "laboratory_focus": focus,
+                }
+        if plan.get("search_query"):
+            selector = str(plan.get("search_selector") or "")
+            if not selector and focused_record:
+                selector = str(focused_record.get("doc_id") or focused_record.get("title") or "")
+            matches = self._search_chunk_matches(str(plan.get("search_query") or ""), selector=selector, limit=5)
+            if not matches:
+                return {
+                    "ok": False,
+                    "answer": "",
+                    "model": "reader_navigation",
+                    "detail": "search_no_matches",
+                    "error": "search_no_matches",
+                }
+            focus_record = self._resolve_document_record(matches[0].get("doc_id") or "") or self._resolve_document_record(matches[0].get("title") or "")
+            if not focus_record:
+                return {
+                    "ok": False,
+                    "answer": "",
+                    "model": "reader_navigation",
+                    "detail": "document_not_found",
+                    "error": "document_not_found",
+                }
+            focus = self._set_laboratory_focus(
+                focus_record,
+                int(matches[0]["chunk_index"]),
+                query=str(plan.get("search_query") or ""),
+                reason="search",
+            )
+            if dialogue:
+                answer = (
+                    f"Encontré {plan.get('search_query')} en {focus['title']}, bloque {focus['chunk_number']}. "
+                    f"{self._navigation_excerpt(focus['text'], max_chars=300)}"
+                )
+            else:
+                lines = [f"Encontré coincidencias para '{plan.get('search_query')}'."]
+                for item in matches[:3]:
+                    lines.append(
+                        f"- {item['title']} | bloque {item['chunk_number']} de {item['total']}: {self._navigation_excerpt(item['text'], max_chars=180)}"
+                    )
+                answer = "\n".join(lines)
+            return {
+                "ok": True,
+                "answer": answer,
+                "model": "reader_navigation",
+                "detail": "search_matches",
+                "doc_id": focus.get("doc_id") or "",
+                "title": focus.get("title") or "",
+                "current": focus.get("chunk_number") or 0,
+                "total": focus.get("total") or 0,
+                "laboratory_focus": focus,
+                "matches": matches,
+            }
+        return None
 
     def chat(self, message: str, model: str = "", chunk_index: int | None = None) -> dict:
         started = time.perf_counter()
@@ -501,10 +1155,22 @@ class FusionReaderV2:
                 "current": snapshot.get("current") or 0,
                 "total": snapshot.get("total") or 0,
             }
+        comparison = self._handle_compare_intent(message, dialogue=False)
+        if comparison is not None:
+            comparison["duration_ms"] = int((time.perf_counter() - started) * 1000)
+            if comparison.get("ok"):
+                self._remember_chat_turn(message, comparison.get("answer") or "")
+            return comparison
+        navigation = self._handle_navigation_intent(message, dialogue=False)
+        if navigation is not None:
+            navigation["duration_ms"] = int((time.perf_counter() - started) * 1000)
+            if navigation.get("ok"):
+                self._remember_chat_turn(message, navigation.get("answer") or "")
+            return navigation
         snapshot = self.reader_snapshot()
         with self._chat_lock:
             history = list(self._chat_history)
-        result = self.conversation.ask(message, snapshot=snapshot, model=model, history=history)
+        result = self.conversation.ask(message, snapshot=snapshot, model=model, history=history, reasoning_mode=self.reasoning_mode)
         if result.ok:
             self._remember_chat_turn(message, result.answer)
         return {
@@ -513,6 +1179,8 @@ class FusionReaderV2:
             "model": result.model,
             "detail": result.detail,
             "duration_ms": result.duration_ms or int((time.perf_counter() - started) * 1000),
+            "reasoning_mode": result.reasoning_mode or self.reasoning_mode,
+            "reasoning_passes": result.reasoning_passes or 1,
             "doc_id": snapshot.get("doc_id") or "",
             "title": snapshot.get("title") or "",
             "current": snapshot.get("current") or 0,
@@ -546,12 +1214,50 @@ class FusionReaderV2:
         }
 
     def dialogue_status(self) -> dict:
+        dialogue_reasoning = self._effective_reasoning_mode(dialogue=True)
         return {
             "ok": True,
             "stt": self.stt.health(),
             "tts": self.tts.health(),
             "turns": len(self._dialogue_history),
+            "reasoning": self.reasoning_status(),
+            "dialogue_reasoning": {
+                **self.conversation.reasoning_status(dialogue_reasoning["applied"]),
+                "requested_mode": dialogue_reasoning["requested"],
+                "applied_mode": dialogue_reasoning["applied"],
+                "degraded": dialogue_reasoning["degraded"],
+                "degraded_reason": dialogue_reasoning["reason"],
+            },
         }
+
+    def reasoning_status(self) -> dict:
+        info = self.conversation.reasoning_status(self.reasoning_mode)
+        info["selected"] = info.get("mode") == self.reasoning_mode
+        return info
+
+    def set_reasoning_mode(self, mode: str) -> dict:
+        profile = self.conversation.reasoning_status(mode)
+        self.reasoning_mode = str(profile.get("mode") or self.reasoning_mode or "thinking")
+        self._persist_session_state()
+        self._append_dialogue_trace(
+            {
+                "ts": time.time(),
+                "event": "reasoning_mode_changed",
+                "requested_mode": str(mode or ""),
+                "selected_mode": self.reasoning_mode,
+                "dialogue_allow_supreme": self.dialogue_allow_supreme,
+            }
+        )
+        out = self.reasoning_status()
+        dialogue_reasoning = self._effective_reasoning_mode(dialogue=True)
+        out["dialogue_reasoning"] = {
+            **self.conversation.reasoning_status(dialogue_reasoning["applied"]),
+            "requested_mode": dialogue_reasoning["requested"],
+            "applied_mode": dialogue_reasoning["applied"],
+            "degraded": dialogue_reasoning["degraded"],
+            "degraded_reason": dialogue_reasoning["reason"],
+        }
+        return out
 
     def dialogue_reset(self) -> dict:
         with self._dialogue_lock:
@@ -564,8 +1270,19 @@ class FusionReaderV2:
             return {"ok": False, "error": "empty_dialogue_text"}
         self._prioritize_dialogue()
         started = time.perf_counter()
+        reasoning = self._effective_reasoning_mode(dialogue=True)
+        trace_event = {
+            "ts": time.time(),
+            "event": "dialogue_turn_text",
+            "requested_mode": reasoning["requested"],
+            "applied_mode": reasoning["applied"],
+            "reasoning_degraded": reasoning["degraded"],
+            "degraded_reason": reasoning["reason"],
+            "chunk_index": chunk_index,
+            "text_preview": text[:220],
+        }
         if self._is_stop_dialogue_command(text):
-            return {
+            out = {
                 "ok": True,
                 "transcript": text,
                 "answer": "",
@@ -580,7 +1297,12 @@ class FusionReaderV2:
                 "trace": {"intent_ms": int((time.perf_counter() - started) * 1000), "server_text_total_ms": int((time.perf_counter() - started) * 1000)},
                 "duration_ms": int((time.perf_counter() - started) * 1000),
                 "voice_ok": True,
+                "reasoning_mode_requested": reasoning["requested"],
+                "reasoning_mode_applied": reasoning["applied"],
+                "reasoning_degraded": reasoning["degraded"],
             }
+            self._append_dialogue_trace({**trace_event, "ok": True, "detail": "dialogue_stopped", "duration_ms": out["duration_ms"]})
+            return out
         note_text = self._extract_note_command(text)
         intent_ms = int((time.perf_counter() - started) * 1000)
         if note_text:
@@ -592,7 +1314,7 @@ class FusionReaderV2:
                 created = self.create_note(note_text, chunk_index=selected_chunk)
             note_ms = int((time.perf_counter() - note_started) * 1000)
             if not created.get("ok"):
-                return {
+                out = {
                     "ok": False,
                     "transcript": text,
                     "answer": "",
@@ -601,7 +1323,12 @@ class FusionReaderV2:
                     "chat_ms": 0,
                     "trace": {"intent_ms": intent_ms, "note_ms": note_ms, "server_text_total_ms": int((time.perf_counter() - started) * 1000)},
                     "duration_ms": int((time.perf_counter() - started) * 1000),
+                    "reasoning_mode_requested": reasoning["requested"],
+                    "reasoning_mode_applied": reasoning["applied"],
+                    "reasoning_degraded": reasoning["degraded"],
                 }
+                self._append_dialogue_trace({**trace_event, "ok": False, "detail": out["detail"], "duration_ms": out["duration_ms"]})
+                return out
             note = created["note"]
             spoken_answer = self._note_saved_answer(note, spoken=True)
             if self.fast_note_ack:
@@ -615,7 +1342,7 @@ class FusionReaderV2:
                 self._dialogue_history.append({"role": "user", "content": text})
                 self._dialogue_history.append({"role": "assistant", "content": spoken_answer})
                 self._dialogue_history = self._dialogue_history[-16:]
-            return {
+            out = {
                 "ok": True,
                 "transcript": text,
                 "answer": spoken_answer,
@@ -636,7 +1363,21 @@ class FusionReaderV2:
                 "duration_ms": int((time.perf_counter() - started) * 1000),
                 "note": note,
                 "voice_ok": artifact.ok,
+                "reasoning_mode_requested": reasoning["requested"],
+                "reasoning_mode_applied": reasoning["applied"],
+                "reasoning_degraded": reasoning["degraded"],
             }
+            self._append_dialogue_trace(
+                {
+                    **trace_event,
+                    "ok": bool(out["ok"]),
+                    "detail": str(out.get("detail") or ""),
+                    "note": True,
+                    "tts_ok": bool(artifact.ok),
+                    "duration_ms": out["duration_ms"],
+                }
+            )
+            return out
         if self._looks_like_note_request(text):
             spoken_answer = "Sí, puedo guardar notas. Decime: tomá nota de, y lo que querés guardar."
             if self.fast_dialogue_ack:
@@ -646,7 +1387,7 @@ class FusionReaderV2:
                 tts_started = time.perf_counter()
                 artifact = self._synthesize_cached(spoken_answer)
                 tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
-            return {
+            out = {
                 "ok": True,
                 "transcript": text,
                 "answer": spoken_answer,
@@ -665,25 +1406,149 @@ class FusionReaderV2:
                 },
                 "duration_ms": int((time.perf_counter() - started) * 1000),
                 "voice_ok": artifact.ok,
+                "reasoning_mode_requested": reasoning["requested"],
+                "reasoning_mode_applied": reasoning["applied"],
+                "reasoning_degraded": reasoning["degraded"],
             }
+            self._append_dialogue_trace({**trace_event, "ok": True, "detail": "missing_note_text", "tts_ok": bool(artifact.ok), "duration_ms": out["duration_ms"]})
+            return out
+        comparison = self._handle_compare_intent(text, dialogue=True)
+        if comparison is not None:
+            spoken_answer = str(comparison.get("answer") or "").strip()
+            if not comparison.get("ok"):
+                out = {
+                    "ok": False,
+                    "transcript": text,
+                    "answer": "",
+                    "model": comparison.get("model") or "reader_compare",
+                    "detail": comparison.get("detail") or comparison.get("error") or "compare_failed",
+                    "chat_ms": 0,
+                    "duration_ms": int((time.perf_counter() - started) * 1000),
+                    "reasoning_mode_requested": reasoning["requested"],
+                    "reasoning_mode_applied": reasoning["applied"],
+                    "reasoning_degraded": reasoning["degraded"],
+                }
+                self._append_dialogue_trace({**trace_event, "ok": False, "detail": out["detail"], "duration_ms": out["duration_ms"]})
+                return out
+            if self.fast_dialogue_ack:
+                artifact = AudioArtifact(True, provider="text_ack", detail="fast_dialogue_ack")
+                tts_ms = 0
+            else:
+                tts_started = time.perf_counter()
+                artifact = self._synthesize_cached(spoken_answer)
+                tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
+            with self._dialogue_lock:
+                self._dialogue_history.append({"role": "user", "content": text})
+                self._dialogue_history.append({"role": "assistant", "content": spoken_answer})
+                self._dialogue_history = self._dialogue_history[-16:]
+            out = {
+                "ok": True,
+                "transcript": text,
+                "answer": spoken_answer,
+                "audio": str(artifact.path or ""),
+                "cached": artifact.cached,
+                "provider": artifact.provider,
+                "detail": comparison.get("detail") or artifact.detail,
+                "model": comparison.get("model") or "reader_compare",
+                "stt_ms": 0,
+                "chat_ms": 0,
+                "tts_ms": tts_ms,
+                "trace": {
+                    "intent_ms": intent_ms,
+                    "tts_ms": tts_ms,
+                    "server_text_total_ms": int((time.perf_counter() - started) * 1000),
+                },
+                "duration_ms": int((time.perf_counter() - started) * 1000),
+                "voice_ok": artifact.ok,
+                "laboratory_focus": comparison.get("laboratory_focus") or {},
+                "comparison": comparison.get("comparison") or {},
+                "reasoning_mode_requested": reasoning["requested"],
+                "reasoning_mode_applied": reasoning["applied"],
+                "reasoning_degraded": reasoning["degraded"],
+            }
+            self._append_dialogue_trace({**trace_event, "ok": True, "detail": str(out.get("detail") or ""), "tts_ok": bool(artifact.ok), "duration_ms": out["duration_ms"]})
+            return out
+        navigation = self._handle_navigation_intent(text, dialogue=True)
+        if navigation is not None:
+            spoken_answer = str(navigation.get("answer") or "").strip()
+            if not navigation.get("ok"):
+                out = {
+                    "ok": False,
+                    "transcript": text,
+                    "answer": "",
+                    "model": navigation.get("model") or "reader_navigation",
+                    "detail": navigation.get("detail") or navigation.get("error") or "navigation_failed",
+                    "chat_ms": 0,
+                    "duration_ms": int((time.perf_counter() - started) * 1000),
+                    "reasoning_mode_requested": reasoning["requested"],
+                    "reasoning_mode_applied": reasoning["applied"],
+                    "reasoning_degraded": reasoning["degraded"],
+                }
+                self._append_dialogue_trace({**trace_event, "ok": False, "detail": out["detail"], "duration_ms": out["duration_ms"]})
+                return out
+            if self.fast_dialogue_ack:
+                artifact = AudioArtifact(True, provider="text_ack", detail="fast_dialogue_ack")
+                tts_ms = 0
+            else:
+                tts_started = time.perf_counter()
+                artifact = self._synthesize_cached(spoken_answer)
+                tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
+            with self._dialogue_lock:
+                self._dialogue_history.append({"role": "user", "content": text})
+                self._dialogue_history.append({"role": "assistant", "content": spoken_answer})
+                self._dialogue_history = self._dialogue_history[-16:]
+            out = {
+                "ok": True,
+                "transcript": text,
+                "answer": spoken_answer,
+                "audio": str(artifact.path or ""),
+                "cached": artifact.cached,
+                "provider": artifact.provider,
+                "detail": navigation.get("detail") or artifact.detail,
+                "model": navigation.get("model") or "reader_navigation",
+                "stt_ms": 0,
+                "chat_ms": 0,
+                "tts_ms": tts_ms,
+                "trace": {
+                    "intent_ms": intent_ms,
+                    "tts_ms": tts_ms,
+                    "server_text_total_ms": int((time.perf_counter() - started) * 1000),
+                },
+                "duration_ms": int((time.perf_counter() - started) * 1000),
+                "voice_ok": artifact.ok,
+                "laboratory_focus": navigation.get("laboratory_focus") or {},
+                "matches": navigation.get("matches") or [],
+                "reasoning_mode_requested": reasoning["requested"],
+                "reasoning_mode_applied": reasoning["applied"],
+                "reasoning_degraded": reasoning["degraded"],
+            }
+            self._append_dialogue_trace({**trace_event, "ok": True, "detail": str(out.get("detail") or ""), "tts_ok": bool(artifact.ok), "duration_ms": out["duration_ms"]})
+            return out
         snapshot = self.reader_snapshot()
         with self._chat_lock:
             snapshot["laboratory_history"] = list(self._chat_history)
         with self._dialogue_lock:
             history = list(self._dialogue_history)
         chat_started = time.perf_counter()
-        result = self.conversation.ask_dialogue(text, snapshot=snapshot, history=history, model=model)
+        result = self.conversation.ask_dialogue(text, snapshot=snapshot, history=history, model=model, reasoning_mode=reasoning["applied"])
         chat_ms = result.duration_ms or int((time.perf_counter() - chat_started) * 1000)
         if not result.ok:
-            return {
+            out = {
                 "ok": False,
                 "transcript": text,
                 "answer": "",
                 "model": result.model,
                 "detail": result.detail,
                 "chat_ms": chat_ms,
+                "reasoning_mode": result.reasoning_mode or reasoning["applied"],
+                "reasoning_passes": result.reasoning_passes or 1,
+                "reasoning_mode_requested": reasoning["requested"],
+                "reasoning_mode_applied": reasoning["applied"],
+                "reasoning_degraded": reasoning["degraded"],
                 "duration_ms": int((time.perf_counter() - started) * 1000),
             }
+            self._append_dialogue_trace({**trace_event, "ok": False, "detail": out["detail"], "chat_ms": chat_ms, "duration_ms": out["duration_ms"]})
+            return out
         spoken_answer = self._shorten_dialogue_answer(result.answer)
         if self.fast_dialogue_ack:
             artifact = AudioArtifact(True, provider="text_ack", detail="fast_dialogue_ack")
@@ -697,7 +1562,7 @@ class FusionReaderV2:
                 self._dialogue_history.append({"role": "user", "content": text})
                 self._dialogue_history.append({"role": "assistant", "content": spoken_answer})
                 self._dialogue_history = self._dialogue_history[-16:]
-        return {
+        out = {
             "ok": bool(result.ok and artifact.ok),
             "transcript": text,
             "answer": spoken_answer,
@@ -709,6 +1574,11 @@ class FusionReaderV2:
             "stt_ms": 0,
             "chat_ms": chat_ms,
             "tts_ms": tts_ms,
+            "reasoning_mode": result.reasoning_mode or reasoning["applied"],
+            "reasoning_passes": result.reasoning_passes or 1,
+            "reasoning_mode_requested": reasoning["requested"],
+            "reasoning_mode_applied": reasoning["applied"],
+            "reasoning_degraded": reasoning["degraded"],
             "trace": {
                 "intent_ms": intent_ms,
                 "chat_ms": chat_ms,
@@ -717,6 +1587,19 @@ class FusionReaderV2:
             },
             "duration_ms": int((time.perf_counter() - started) * 1000),
         }
+        self._append_dialogue_trace(
+            {
+                **trace_event,
+                "ok": bool(out["ok"]),
+                "detail": str(out.get("detail") or ""),
+                "chat_ms": chat_ms,
+                "tts_ms": tts_ms,
+                "reasoning_passes": out["reasoning_passes"],
+                "duration_ms": out["duration_ms"],
+                "tts_ok": bool(artifact.ok),
+            }
+        )
+        return out
 
     def dialogue_turn_audio(self, path: str | Path, mime: str = "", model: str = "", chunk_index: int | None = None) -> dict:
         self._prioritize_dialogue()
@@ -725,7 +1608,7 @@ class FusionReaderV2:
         stt_elapsed_ms = int((time.perf_counter() - started) * 1000)
         if not transcript.ok:
             if transcript.detail == "hallucinated_transcript":
-                return {
+                out = {
                     "ok": True,
                     "ignored": True,
                     "transcript": transcript.text,
@@ -750,6 +1633,19 @@ class FusionReaderV2:
                     "duration_ms": int((time.perf_counter() - started) * 1000),
                     "voice_ok": True,
                 }
+                self._append_dialogue_trace(
+                    {
+                        "ts": time.time(),
+                        "event": "dialogue_turn_audio",
+                        "ok": True,
+                        "ignored": True,
+                        "detail": transcript.detail,
+                        "stt_provider": transcript.provider,
+                        "stt_ms": transcript.duration_ms,
+                        "duration_ms": out["duration_ms"],
+                    }
+                )
+                return out
             if transcript.detail in {"empty_transcript", "empty_audio"}:
                 spoken_answer = "No alcancé a escuchar una frase completa. Repetímela un poco más cerca o un poco más lento."
                 if self.fast_dialogue_ack:
@@ -759,7 +1655,7 @@ class FusionReaderV2:
                     tts_started = time.perf_counter()
                     artifact = self._synthesize_cached(spoken_answer)
                     tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
-                return {
+                out = {
                     "ok": True,
                     "transcript": transcript.text,
                     "answer": spoken_answer,
@@ -783,7 +1679,21 @@ class FusionReaderV2:
                     "duration_ms": int((time.perf_counter() - started) * 1000),
                     "voice_ok": artifact.ok,
                 }
-            return {
+                self._append_dialogue_trace(
+                    {
+                        "ts": time.time(),
+                        "event": "dialogue_turn_audio",
+                        "ok": True,
+                        "detail": transcript.detail,
+                        "stt_provider": transcript.provider,
+                        "stt_ms": transcript.duration_ms,
+                        "tts_ms": tts_ms,
+                        "duration_ms": out["duration_ms"],
+                        "tts_ok": bool(artifact.ok),
+                    }
+                )
+                return out
+            out = {
                 "ok": False,
                 "error": "transcription_failed",
                 "transcript": transcript.text,
@@ -799,6 +1709,19 @@ class FusionReaderV2:
                 },
                 "duration_ms": int((time.perf_counter() - started) * 1000),
             }
+            self._append_dialogue_trace(
+                {
+                    "ts": time.time(),
+                    "event": "dialogue_turn_audio",
+                    "ok": False,
+                    "detail": transcript.detail,
+                    "error": "transcription_failed",
+                    "stt_provider": transcript.provider,
+                    "stt_ms": transcript.duration_ms,
+                    "duration_ms": out["duration_ms"],
+                }
+            )
+            return out
         after_stt = time.perf_counter()
         out = self.dialogue_turn_text(transcript.text, model=model, chunk_index=chunk_index)
         text_turn_ms = int((time.perf_counter() - after_stt) * 1000)
@@ -813,6 +1736,20 @@ class FusionReaderV2:
             "server_total_ms": int((time.perf_counter() - started) * 1000),
         }
         out["duration_ms"] = int((time.perf_counter() - started) * 1000)
+        self._append_dialogue_trace(
+            {
+                "ts": time.time(),
+                "event": "dialogue_turn_audio",
+                "ok": bool(out.get("ok")),
+                "detail": str(out.get("detail") or ""),
+                "stt_provider": transcript.provider,
+                "stt_ms": transcript.duration_ms,
+                "reasoning_mode_requested": str(out.get("reasoning_mode_requested") or ""),
+                "reasoning_mode_applied": str(out.get("reasoning_mode_applied") or out.get("reasoning_mode") or ""),
+                "reasoning_degraded": bool(out.get("reasoning_degraded")),
+                "duration_ms": out["duration_ms"],
+            }
+        )
         return out
 
     def _prioritize_dialogue(self) -> None:
@@ -1107,11 +2044,24 @@ class FusionReaderV2:
             "current": int(status.get("current") or 0),
             "total": int(status.get("total") or 0),
             "updated_ts": time.time(),
+            "reasoning_mode": self.reasoning_mode,
+            "reference_documents": [
+                {
+                    "doc_id": str(item.get("doc_id") or ""),
+                    "title": str(item.get("title") or ""),
+                    "text": str(item.get("text") or ""),
+                    "source_path": str(item.get("source_path") or ""),
+                    "source_type": str(item.get("source_type") or ""),
+                }
+                for item in self._reference_documents.values()
+            ],
         }
-        if source_path:
-            payload["source_path"] = str(source_path)
-        if source_type:
-            payload["source_type"] = str(source_type)
+        selected_source_path = str(source_path or self._main_source_path or "")
+        selected_source_type = str(source_type or self._main_source_type or "")
+        if selected_source_path:
+            payload["source_path"] = selected_source_path
+        if selected_source_type:
+            payload["source_type"] = selected_source_type
         if text is not None:
             payload["text"] = str(text)
         else:
@@ -1139,9 +2089,27 @@ class FusionReaderV2:
 
     def _restore_session_state(self) -> None:
         raw = self._read_session_state()
+        self.reasoning_mode = str(raw.get("reasoning_mode") or self.reasoning_mode or "thinking")
+        self.reasoning_mode = str(self.conversation.reasoning_status(self.reasoning_mode).get("mode") or "thinking")
         doc_id = str(raw.get("doc_id") or "")
         title = str(raw.get("title") or "")
+        self._reference_documents = {}
         if not doc_id:
+            for item in raw.get("reference_documents") or []:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    record = self._document_record(
+                        str(item.get("doc_id") or item.get("title") or "consulta"),
+                        str(item.get("title") or "Consulta"),
+                        str(item.get("text") or ""),
+                        source_path=str(item.get("source_path") or ""),
+                        source_type=str(item.get("source_type") or ""),
+                    )
+                except Exception:
+                    continue
+                if record["text"].strip():
+                    self._reference_documents[record["doc_id"]] = record
             return
         source_path = str(raw.get("source_path") or "")
         text = ""
@@ -1158,12 +2126,29 @@ class FusionReaderV2:
             return
         self._reset_prepare_for_new_document()
         self.session.load(Document.from_text(doc_id, title or doc_id, text))
+        self._main_source_path = source_path
+        self._main_source_type = str(raw.get("source_type") or "")
         try:
             cursor = int(raw.get("cursor") or 0)
         except (TypeError, ValueError):
             cursor = 0
         total = len(self.session.document.chunks) if self.session.document else 0
         self.session.cursor = max(0, min(cursor, max(0, total - 1)))
+        for item in raw.get("reference_documents") or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                record = self._document_record(
+                    str(item.get("doc_id") or item.get("title") or "consulta"),
+                    str(item.get("title") or "Consulta"),
+                    str(item.get("text") or ""),
+                    source_path=str(item.get("source_path") or ""),
+                    source_type=str(item.get("source_type") or ""),
+                )
+            except Exception:
+                continue
+            if record["text"].strip() and record["doc_id"] != doc_id:
+                self._reference_documents[record["doc_id"]] = record
 
     def _extract_note_command(self, text: str) -> str:
         clean = " ".join(str(text or "").strip().replace("¿", "").replace("¡", "").split())
