@@ -1003,6 +1003,26 @@ class FusionReaderV2:
             return excerpt
         return excerpt[:max_chars].rstrip() + "..."
 
+    def _is_reflective_navigation_request(self, text: str) -> bool:
+        clean = " ".join(str(text or "").strip().replace("¿", "").replace("¡", "").split()).lower()
+        if not clean:
+            return False
+        if re.search(
+            r"\b(?:exactamente|literal|textual(?:mente)?|cita|citame|cit[aá]melo|recita|repite|leer|le[eé]me|leelo|le[eé]lo|que\s+dice(?:\s+exactamente)?)\b",
+            clean,
+            flags=re.IGNORECASE,
+        ):
+            return False
+        return bool(
+            re.search(
+                r"\b(?:pens(?:a|á|ar|emos)|filos[oó]fic|interpret|analiz|lectura|reflexion|reflexi[oó]n|opina|opin[aá]s|opinas|opin[ií]on|"
+                r"qu[eé]\s+ves|qu[eé]\s+interpret|qu[eé]\s+te\s+parece|qu[eé]\s+plantea|qu[eé]\s+implica|qu[eé]\s+significa|"
+                r"tension|problematiz|critic|latente|vuelo\s+propio|desarroll|pensamiento\s+cr[ií]tico)\b",
+                clean,
+                flags=re.IGNORECASE,
+            )
+        )
+
     def _handle_navigation_intent(self, text: str, dialogue: bool = False) -> dict | None:
         plan = self._extract_navigation_plan(text)
         if not plan:
@@ -1037,6 +1057,19 @@ class FusionReaderV2:
             focused_record = selected
             if not plan.get("search_query"):
                 focus = self._set_laboratory_focus(selected, chunk_number - 1, reason="focus_block")
+                if self._is_reflective_navigation_request(text):
+                    return {
+                        "ok": True,
+                        "answer": "",
+                        "model": "reader_navigation",
+                        "detail": "focus_block_context",
+                        "doc_id": focus.get("doc_id") or "",
+                        "title": focus.get("title") or "",
+                        "current": focus.get("chunk_number") or 0,
+                        "total": focus.get("total") or 0,
+                        "laboratory_focus": focus,
+                        "continue_with_llm": True,
+                    }
                 excerpt = self._navigation_excerpt(focus["text"], max_chars=340 if dialogue else 460)
                 answer = (
                     f"Quedé en {focus['title']}, bloque {focus['chunk_number']} de {focus['total']}. {excerpt}"
@@ -1470,60 +1503,63 @@ class FusionReaderV2:
             return out
         navigation = self._handle_navigation_intent(text, dialogue=True)
         if navigation is not None:
-            spoken_answer = str(navigation.get("answer") or "").strip()
-            if not navigation.get("ok"):
+            if navigation.get("continue_with_llm"):
+                trace_event["navigation_detail"] = str(navigation.get("detail") or "")
+            else:
+                spoken_answer = str(navigation.get("answer") or "").strip()
+                if not navigation.get("ok"):
+                    out = {
+                        "ok": False,
+                        "transcript": text,
+                        "answer": "",
+                        "model": navigation.get("model") or "reader_navigation",
+                        "detail": navigation.get("detail") or navigation.get("error") or "navigation_failed",
+                        "chat_ms": 0,
+                        "duration_ms": int((time.perf_counter() - started) * 1000),
+                        "reasoning_mode_requested": reasoning["requested"],
+                        "reasoning_mode_applied": reasoning["applied"],
+                        "reasoning_degraded": reasoning["degraded"],
+                    }
+                    self._append_dialogue_trace({**trace_event, "ok": False, "detail": out["detail"], "duration_ms": out["duration_ms"]})
+                    return out
+                if self.fast_dialogue_ack:
+                    artifact = AudioArtifact(True, provider="text_ack", detail="fast_dialogue_ack")
+                    tts_ms = 0
+                else:
+                    tts_started = time.perf_counter()
+                    artifact = self._synthesize_cached(spoken_answer)
+                    tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
+                with self._dialogue_lock:
+                    self._dialogue_history.append({"role": "user", "content": text})
+                    self._dialogue_history.append({"role": "assistant", "content": spoken_answer})
+                    self._dialogue_history = self._dialogue_history[-16:]
                 out = {
-                    "ok": False,
+                    "ok": True,
                     "transcript": text,
-                    "answer": "",
+                    "answer": spoken_answer,
+                    "audio": str(artifact.path or ""),
+                    "cached": artifact.cached,
+                    "provider": artifact.provider,
+                    "detail": navigation.get("detail") or artifact.detail,
                     "model": navigation.get("model") or "reader_navigation",
-                    "detail": navigation.get("detail") or navigation.get("error") or "navigation_failed",
+                    "stt_ms": 0,
                     "chat_ms": 0,
+                    "tts_ms": tts_ms,
+                    "trace": {
+                        "intent_ms": intent_ms,
+                        "tts_ms": tts_ms,
+                        "server_text_total_ms": int((time.perf_counter() - started) * 1000),
+                    },
                     "duration_ms": int((time.perf_counter() - started) * 1000),
+                    "voice_ok": artifact.ok,
+                    "laboratory_focus": navigation.get("laboratory_focus") or {},
+                    "matches": navigation.get("matches") or [],
                     "reasoning_mode_requested": reasoning["requested"],
                     "reasoning_mode_applied": reasoning["applied"],
                     "reasoning_degraded": reasoning["degraded"],
                 }
-                self._append_dialogue_trace({**trace_event, "ok": False, "detail": out["detail"], "duration_ms": out["duration_ms"]})
+                self._append_dialogue_trace({**trace_event, "ok": True, "detail": str(out.get("detail") or ""), "tts_ok": bool(artifact.ok), "duration_ms": out["duration_ms"]})
                 return out
-            if self.fast_dialogue_ack:
-                artifact = AudioArtifact(True, provider="text_ack", detail="fast_dialogue_ack")
-                tts_ms = 0
-            else:
-                tts_started = time.perf_counter()
-                artifact = self._synthesize_cached(spoken_answer)
-                tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
-            with self._dialogue_lock:
-                self._dialogue_history.append({"role": "user", "content": text})
-                self._dialogue_history.append({"role": "assistant", "content": spoken_answer})
-                self._dialogue_history = self._dialogue_history[-16:]
-            out = {
-                "ok": True,
-                "transcript": text,
-                "answer": spoken_answer,
-                "audio": str(artifact.path or ""),
-                "cached": artifact.cached,
-                "provider": artifact.provider,
-                "detail": navigation.get("detail") or artifact.detail,
-                "model": navigation.get("model") or "reader_navigation",
-                "stt_ms": 0,
-                "chat_ms": 0,
-                "tts_ms": tts_ms,
-                "trace": {
-                    "intent_ms": intent_ms,
-                    "tts_ms": tts_ms,
-                    "server_text_total_ms": int((time.perf_counter() - started) * 1000),
-                },
-                "duration_ms": int((time.perf_counter() - started) * 1000),
-                "voice_ok": artifact.ok,
-                "laboratory_focus": navigation.get("laboratory_focus") or {},
-                "matches": navigation.get("matches") or [],
-                "reasoning_mode_requested": reasoning["requested"],
-                "reasoning_mode_applied": reasoning["applied"],
-                "reasoning_degraded": reasoning["degraded"],
-            }
-            self._append_dialogue_trace({**trace_event, "ok": True, "detail": str(out.get("detail") or ""), "tts_ok": bool(artifact.ok), "duration_ms": out["duration_ms"]})
-            return out
         snapshot = self.reader_snapshot()
         with self._chat_lock:
             snapshot["laboratory_history"] = list(self._chat_history)

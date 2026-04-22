@@ -132,6 +132,12 @@ Fusion=7853.
   `ConversationCore`: Lucy Cunningham en version mas sobria, exigente y
   filosofico-tecnica, con prioridad por validez, genealogia conceptual,
   reconstruccion argumental, contradicciones e hipotesis de lectura.
+- Se corrigio una regresion importante en `Dialogar`: pedidos como "pensar
+  filosoficamente sobre el bloque 34" estaban cayendo en la ruta
+  `focus_block` de navegacion y devolvian casi una lectura del bloque. Ahora
+  esos pedidos siguen fijando el foco del laboratorio, pero continúan hacia
+  Lucy/LLM para responder interpretativamente en vez de quedar atrapados en el
+  atajo de navegacion.
 - Modo `Dialogar`: microfono del navegador, STT, Qwen/Ollama, respuesta por voz,
   y barge-in inicial desde el navegador.
 - STT persistente GPU con faster-whisper para evitar el costo de cargar Whisper

@@ -1105,6 +1105,27 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertEqual(out["detail"], "compare_blocks")
         self.assertIn("Comparé", out["answer"])
 
+    def test_dialogue_reflective_block_request_sets_focus_and_continues_with_llm(self):
+        chat_provider = NullChatProvider("Lucy piensa el bloque con vuelo propio.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Principal", "Principal uno.\n\nPrincipal dos.", prefetch=False)
+        app.add_reference_text(
+            "ref",
+            "ideas.docx",
+            "Primer bloque de consulta.\n\nBloque 2: la estadística del lenguaje revela un régimen de inteligibilidad.\n\nTercer bloque.",
+        )
+        out = app.dialogue_turn_text("Quiero que pensemos filosóficamente sobre el bloque 2 de ideas.docx")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "null")
+        self.assertNotEqual(out["detail"], "focus_block")
+        self.assertEqual(app.laboratory_focus_status()["chunk_number"], 2)
+        self.assertEqual(app.laboratory_focus_status()["title"], "ideas.docx")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("FOCO ACTUAL DEL LABORATORIO:", prompt)
+        self.assertIn("ideas.docx", prompt)
+        self.assertIn("la estadística del lenguaje revela un régimen de inteligibilidad", prompt)
+
     def test_chat_uses_recent_laboratory_text_without_document(self):
         chat_provider = NullChatProvider("Sí, lo veo.")
         app = test_app()
