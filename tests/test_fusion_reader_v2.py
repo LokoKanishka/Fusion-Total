@@ -373,6 +373,33 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("Borges", prompt)
         self.assertIn("No digas que te llamas Fusion", prompt)
 
+    def test_thinking_mode_chat_prompt_includes_lucy_persona(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("thinking")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("¿Qué ves?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Lucy Cunningham", prompt)
+        self.assertIn("filosofico-tecnica", prompt)
+        self.assertIn("genealogia conceptual", prompt)
+        self.assertIn("Priorizas validez", prompt)
+        self.assertIn("No digas que te llamas Fusion", prompt)
+
+    def test_thinking_mode_dialogue_prompt_includes_lucy_persona(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("thinking")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.dialogue_turn_text("¿Qué opinás del bloque?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Lucy Cunningham", prompt)
+        self.assertIn("sobria, exigente y filosofico-tecnica", prompt)
+        self.assertIn("validez", prompt)
+        self.assertIn("Borges", prompt)
+
     def test_supreme_reasoning_runs_three_passes(self):
         chat_provider = NullChatProvider("Respuesta final.")
         app = test_app()

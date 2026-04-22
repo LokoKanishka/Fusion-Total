@@ -128,6 +128,10 @@ Fusion=7853.
   `ConversationCore`: Lucy Cunningham, companera humana de lectura, intima,
   filosofica, calida, directa, problematizadora y con inspiracion en la actitud
   personal de Borges mas que en la imitacion de su escritura.
+- La personalidad de `Pensamiento` ya tiene una primera implementacion activa en
+  `ConversationCore`: Lucy Cunningham en version mas sobria, exigente y
+  filosofico-tecnica, con prioridad por validez, genealogia conceptual,
+  reconstruccion argumental, contradicciones e hipotesis de lectura.
 - Modo `Dialogar`: microfono del navegador, STT, Qwen/Ollama, respuesta por voz,
   y barge-in inicial desde el navegador.
 - STT persistente GPU con faster-whisper para evitar el costo de cargar Whisper
