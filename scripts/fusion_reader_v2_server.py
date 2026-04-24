@@ -1689,7 +1689,6 @@ INDEX_HTML = r"""<!doctype html>
       try {
         log('Generando voz neural...');
         const data = await api('/api/read', { play: false });
-        renderStatus(data);
         playAudio(data);
         log(`${data.cached ? 'Audio listo desde cache.' : 'Audio neural generado.'} Listo en ${data.ready_ms} ms; sintesis ${data.synthesis_ms || 0} ms.`);
       } catch (err) {

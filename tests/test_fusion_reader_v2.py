@@ -458,6 +458,16 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertNotIn(":7854", text)
         self.assertNotIn(":7852", text)
 
+    def test_server_read_current_does_not_render_audio_result_as_status(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        read_start = text.index("async function readCurrent()")
+        read_end = text.index("async function pollPrepare()", read_start)
+        read_current = text[read_start:read_end]
+        self.assertIn("const data = await api('/api/read'", read_current)
+        self.assertNotIn("renderStatus(data)", read_current)
+        self.assertIn("playAudio(data)", read_current)
+
     def test_voice_port_isolation_verifier_covers_doctora_memory_sources(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "verify_voice_port_isolation.sh").read_text(encoding="utf-8")
