@@ -698,7 +698,7 @@ INDEX_HTML = r"""<!doctype html>
         <strong>Soltá tu documento acá</strong>
         <span>TXT, MD, PDF, DOCX, ODT, RTF y más.</span>
         <button id="chooseFileBtn" class="primary compact-btn" type="button">Buscar Archivo</button>
-        <input id="fileInput" class="file-input" type="file" accept=".txt,.md,.markdown,.pdf,.doc,.docx,.odt,.ott,.rtf,.html,.htm,.csv,.log,text/plain,text/markdown,application/pdf,application/vnd.oasis.opendocument.text,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword">
+        <input id="fileInput" class="file-input" type="file" accept=".txt,.md,.markdown,.pdf,.doc,.docm,.docx,.dot,.dotx,.odt,.ott,.sxw,.pages,.rtf,.html,.htm,.csv,.log,text/plain,text/markdown,application/pdf,application/vnd.oasis.opendocument.text,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword">
       </div>
       <label class="toggle upload-toggle"><input id="autoReadToggle" type="checkbox" checked> Leer al cargar</label>
       <label class="toggle upload-toggle"><input id="referenceModeToggle" type="checkbox"> Agregar como consulta</label>
@@ -1581,7 +1581,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function canReadFile(file) {
       const name = file.name.toLowerCase();
-      const accepted = ['.txt', '.md', '.markdown', '.pdf', '.doc', '.docx', '.odt', '.ott', '.rtf', '.html', '.htm', '.csv', '.log'];
+      const accepted = ['.txt', '.md', '.markdown', '.pdf', '.doc', '.docm', '.docx', '.dot', '.dotx', '.odt', '.ott', '.sxw', '.pages', '.rtf', '.html', '.htm', '.csv', '.log'];
       return accepted.some(ext => name.endsWith(ext)) || file.type.startsWith('text/');
     }
 
@@ -1608,7 +1608,7 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
       if (!canReadFile(file)) {
-        log('Ese formato todavía no lo reconozco. Probá PDF, DOCX, ODT, RTF, TXT o MD.');
+        log('Ese formato todavía no lo reconozco. Probá PDF, DOCX/DOTX, ODT, RTF, TXT o MD.');
         els.uploadInfo.textContent = `${file.name}: formato no soportado todavía.`;
         return;
       }

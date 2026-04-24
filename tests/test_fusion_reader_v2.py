@@ -1686,6 +1686,13 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("Foco del laboratorio", server)
         self.assertNotIn("refreshStatus(", server)
 
+    def test_server_upload_ui_accepts_dotx_like_backend(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn(".dotx", server)
+        self.assertIn(".docm", server)
+        self.assertIn(".pages", server)
+        self.assertIn("DOCX/DOTX", server)
+
     def test_server_distinguishes_laboratory_notes_with_l_prefix(self):
         server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
         self.assertIn("const LAB_NOTES_DOC_ID = '__laboratory__';", server)
