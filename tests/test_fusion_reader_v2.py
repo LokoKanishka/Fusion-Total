@@ -78,6 +78,33 @@ class HallucinatedTranscriptSTTProvider(STTProvider):
         return TranscriptResult(False, text="¡Suscríbete!", provider=self.name, detail="hallucinated_transcript", duration_ms=12)
 
 
+class BrokenSTTProvider(STTProvider):
+    name = "broken_stt"
+
+    def health(self) -> dict:
+        return {"ok": False, "provider": self.name, "detail": "connection_refused"}
+
+    def transcribe_file(self, path: str | Path, mime: str = "", language: str = "es") -> TranscriptResult:
+        return TranscriptResult(False, provider=self.name, detail="connection_refused", duration_ms=33)
+
+
+class FailingChatProvider:
+    name = "failing_chat"
+
+    def __init__(self, detail: str = "connection_refused") -> None:
+        self.detail = detail
+        self.calls: list[tuple[list[dict], str, dict]] = []
+
+    def health(self) -> dict:
+        return {"ok": False, "provider": self.name, "model": "broken-local", "detail": self.detail}
+
+    def chat(self, messages: list[dict], model: str = "", think: bool | None = None, num_predict: int | None = None):
+        self.calls.append((messages, model, {"think": think, "num_predict": num_predict}))
+        from fusion_reader_v2.conversation import ChatResult
+
+        return ChatResult(False, model=model or "broken-local", detail=self.detail, duration_ms=41)
+
+
 class FakeExternalResearchBridge:
     def __init__(self, result: ExternalResearchResult, *, available: bool = True) -> None:
         self.result = result
@@ -746,6 +773,44 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("No alcancé", out["answer"])
         self.assertEqual(out["provider"], "null")
         self.assertTrue(out["audio"])
+
+    def test_dialogue_stt_failure_returns_human_answer_instead_of_silence(self):
+        app = test_app(stt=BrokenSTTProvider())
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        root = Path(tempfile.mkdtemp())
+        audio = root / "audio.webm"
+        audio.write_bytes(b"fake audio")
+        out = app.dialogue_turn_audio(audio, mime="audio/webm")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["error"], "transcription_failed")
+        self.assertEqual(out["failed_stage"], "stt")
+        self.assertEqual(out["stt_provider"], "broken_stt")
+        self.assertIn("No pude entender bien el audio", out["answer"])
+        self.assertTrue("audio" in out)
+
+    def test_dialogue_chat_failure_returns_human_answer_and_trace(self):
+        root = Path(tempfile.mkdtemp())
+        app = test_app(root=root)
+        app.conversation = ConversationCore(FailingChatProvider())
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        out = app.dialogue_turn_text("¿Qué opinás del bloque?")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["failed_stage"], "chat")
+        self.assertIn("Se cayó el diálogo local", out["answer"])
+        self.assertIn("chat_ms", out["trace"])
+        logged = (root / "dialogue_trace.jsonl").read_text(encoding="utf-8")
+        self.assertIn('"human_error": "Se cay', logged)
+        self.assertIn('"chat_provider": "ollama"', logged)
+
+    def test_dialogue_turn_text_keeps_text_when_tts_fails(self):
+        app = test_app(tts=FailingTTSProvider())
+        app.load_text("doc", "Doc", "Pantalla actual.\n\nOtro contexto.", prefetch=False)
+        out = app.dialogue_turn_text("¿Qué opinás del bloque?")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["answer"], "Entendido.")
+        self.assertFalse(out["voice_ok"])
+        self.assertEqual(out["audio"], "")
+        self.assertFalse(out["audio_available"])
 
     def test_dialogue_turn_text_defaults_to_neural_voice_not_browser_ack(self):
         provider = NullTTSProvider()
@@ -1454,6 +1519,41 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertEqual(len(bridge.calls), 1)
         self.assertTrue(provider.calls)
         self.assertNotIn("https://", provider.calls[-1][0])
+
+    def test_dialogue_external_research_keeps_text_when_tts_fails(self):
+        bridge = NullExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="Encontré estas fuentes sobre Diotima.\nFuentes:\n- Fuente A | https://ejemplo.test/a",
+                spoken_answer="Encontré estas fuentes sobre Diotima.",
+                detail="external_research_ok",
+                provider="searxng",
+                model="searxng-local",
+                sources=[{"title": "Fuente A", "url": "https://ejemplo.test/a", "note": "nota"}],
+            )
+        )
+        app = test_app(tts=FailingTTSProvider(), external_research=bridge)
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        out = app.dialogue_turn_text("busca afuera fuentes sobre Diotima y la escalera del amor")
+        self.assertTrue(out["ok"])
+        self.assertTrue(out["external_research"])
+        self.assertEqual(out["model"], "searxng-local")
+        self.assertIn("Fuentes:", out["answer"])
+        self.assertFalse(out["voice_ok"])
+        self.assertEqual(out["audio"], "")
+
+    def test_status_reports_runtime_services_without_ambiguous_ok(self):
+        app = test_app(stt=BrokenSTTProvider())
+        app.conversation = ConversationCore(FailingChatProvider())
+        app.set_reasoning_mode("supreme")
+        status = app.status()
+        dialogue = app.dialogue_status()
+        self.assertIn("services", status)
+        self.assertFalse(status["services"]["stt"]["ready"])
+        self.assertFalse(status["services"]["chat"]["ready"])
+        self.assertEqual(status["services"]["dialogue_reasoning"]["applied_mode"], "thinking")
+        self.assertTrue(dialogue["dialogue_reasoning"]["degraded"])
+        self.assertIn("external_research", dialogue)
 
     def test_chat_compare_uses_focus_and_explicit_target(self):
         app = test_app()

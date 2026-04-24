@@ -497,11 +497,179 @@ class FusionReaderV2:
             "message": f"{record['title']} ahora es el documento principal.",
         }
 
+    def _chat_health(self) -> dict:
+        provider = getattr(self.conversation, "provider", None)
+        if provider is None:
+            return {"ok": False, "provider": "unknown", "detail": "chat_provider_missing"}
+        health = provider.health() if hasattr(provider, "health") else {"ok": False, "provider": getattr(provider, "name", "unknown"), "detail": "chat_health_missing"}
+        out = dict(health or {})
+        out.setdefault("provider", getattr(provider, "name", "unknown"))
+        out.setdefault("model", getattr(provider, "default_model", "") or "")
+        return out
+
+    def _external_research_health(self) -> dict:
+        bridge = self.external_research
+        out = {
+            "provider": str(getattr(bridge, "name", "external_research") or "external_research"),
+            "ok": False,
+            "detail": "unavailable",
+        }
+        if hasattr(bridge, "available"):
+            try:
+                out["ok"] = bool(bridge.available())
+            except Exception as exc:
+                out["detail"] = str(exc)
+                return out
+        else:
+            out["detail"] = "bridge_has_no_available_probe"
+            return out
+        if hasattr(bridge, "base_url"):
+            out["url"] = str(getattr(bridge, "base_url") or "")
+        if hasattr(bridge, "command"):
+            out["command"] = str(getattr(bridge, "command") or "")
+        if hasattr(bridge, "agent"):
+            out["agent"] = str(getattr(bridge, "agent") or "")
+        if hasattr(bridge, "searxng"):
+            out["mode"] = "auto"
+            try:
+                out["searxng"] = {
+                    "provider": str(getattr(bridge.searxng, "name", "searxng") or "searxng"),
+                    "ok": bool(bridge.searxng.available()),
+                    "url": str(getattr(bridge.searxng, "base_url", "") or ""),
+                }
+            except Exception as exc:
+                out["searxng"] = {"provider": "searxng", "ok": False, "detail": str(exc)}
+            try:
+                out["openclaw"] = {
+                    "provider": str(getattr(bridge.openclaw, "name", "openclaw_bridge") or "openclaw_bridge"),
+                    "ok": bool(bridge.openclaw.available()),
+                    "agent": str(getattr(bridge.openclaw, "agent", "") or ""),
+                    "command": str(getattr(bridge.openclaw, "command", "") or ""),
+                }
+            except Exception as exc:
+                out["openclaw"] = {"provider": "openclaw_bridge", "ok": False, "detail": str(exc)}
+            out["detail"] = "ready" if out["ok"] else "all_external_bridges_unavailable"
+            return out
+        out["detail"] = "ready" if out["ok"] else "external_research_unavailable"
+        return out
+
+    def _dialogue_services_status(self) -> dict:
+        tts = dict(self.tts.health() or {})
+        stt = dict(self.stt.health() or {})
+        chat = self._chat_health()
+        external = self._external_research_health()
+        reasoning = self._effective_reasoning_mode(dialogue=True)
+        return {
+            "tts": {
+                **tts,
+                "ready": bool(tts.get("ok")),
+                "owner_valid": bool(tts.get("ok")) or "tts_owner" not in str(tts.get("detail") or ""),
+            },
+            "stt": {
+                **stt,
+                "ready": bool(stt.get("ok")),
+                "fallback_ready": bool(((stt.get("fallback") or {}).get("ok"))),
+            },
+            "chat": {
+                **chat,
+                "ready": bool(chat.get("ok")),
+            },
+            "external_research": {
+                **external,
+                "ready": bool(external.get("ok")),
+            },
+            "dialogue_reasoning": {
+                "requested_mode": reasoning["requested"],
+                "applied_mode": reasoning["applied"],
+                "degraded": reasoning["degraded"],
+                "degraded_reason": reasoning["reason"],
+            },
+        }
+
+    def _human_dialogue_error(self, detail: str, *, stage: str, provider: str = "") -> str:
+        clean_detail = str(detail or "").strip()
+        clean_provider = str(provider or "").strip()
+        if stage == "stt":
+            if clean_detail in {"empty_transcript", "empty_audio"}:
+                return "No alcancé a escuchar una frase completa. Repetímela un poco más cerca o un poco más lento."
+            if clean_detail == "hallucinated_transcript":
+                return ""
+            return "No pude entender bien el audio que llegó a Dialogar. Probemos otra vez con una frase más clara."
+        if stage == "chat":
+            if clean_detail == "empty_answer":
+                return "Me quedé sin respuesta útil del modelo local. Repetímelo en una frase corta y vuelvo a intentarlo."
+            if "http_" in clean_detail or "Connection refused" in clean_detail or "timed out" in clean_detail:
+                return "El modelo local de diálogo no respondió a tiempo desde Fusion. La lectura sigue sana; probemos otra vez en unos segundos."
+            return "Se cayó el diálogo local justo cuando estaba respondiendo. La lectura sigue sana; si querés, repetímelo y lo intento de nuevo."
+        if stage == "tts":
+            return "Pude preparar la respuesta, pero la voz neural no salió esta vez. Te dejo el texto y la lectura sigue disponible."
+        if stage == "external":
+            return "Salí a buscar afuera, pero esta vez no pude cerrar bien la consulta externa. Te dejo lo que alcancé a recuperar sin romper Dialogar."
+        return "Hubo un problema puntual en Dialogar, pero la lectura sigue sana."
+
+    def _finalize_dialogue_failure(
+        self,
+        *,
+        started: float,
+        transcript: str,
+        answer: str,
+        detail: str,
+        model: str,
+        provider: str,
+        stage: str,
+        artifact: AudioArtifact | None = None,
+        stt_provider: str = "",
+        stt_ms: int = 0,
+        chat_ms: int = 0,
+        tts_ms: int = 0,
+        reasoning: dict | None = None,
+        trace_extra: dict | None = None,
+    ) -> dict:
+        reasoning = reasoning or self._effective_reasoning_mode(dialogue=True)
+        chosen_answer = str(answer or self._human_dialogue_error(detail, stage=stage, provider=provider)).strip()
+        chosen_artifact = artifact
+        measured_tts_ms = int(tts_ms or 0)
+        if chosen_answer and chosen_artifact is None:
+            tts_started = time.perf_counter()
+            chosen_artifact = self._synthesize_cached(chosen_answer)
+            measured_tts_ms = chosen_artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
+        if chosen_artifact is None:
+            chosen_artifact = AudioArtifact(False, provider=provider or "null", detail="no_audio_attempt")
+        return {
+            "ok": True,
+            "transcript": transcript,
+            "answer": chosen_answer,
+            "audio": str(chosen_artifact.path or ""),
+            "cached": chosen_artifact.cached,
+            "provider": chosen_artifact.provider or provider,
+            "detail": detail,
+            "model": model,
+            "stt_provider": stt_provider,
+            "stt_ms": int(stt_ms or 0),
+            "chat_ms": int(chat_ms or 0),
+            "tts_ms": measured_tts_ms,
+            "duration_ms": int((time.perf_counter() - started) * 1000),
+            "voice_ok": bool(chosen_artifact.ok),
+            "audio_available": bool(chosen_artifact.ok and chosen_artifact.path),
+            "human_error": chosen_answer,
+            "failed_stage": stage,
+            "reasoning_mode_requested": reasoning["requested"],
+            "reasoning_mode_applied": reasoning["applied"],
+            "reasoning_degraded": reasoning["degraded"],
+            "trace": {
+                "chat_ms": int(chat_ms or 0),
+                "tts_ms": measured_tts_ms,
+                "server_text_total_ms": int((time.perf_counter() - started) * 1000),
+                **(trace_extra or {}),
+            },
+        }
+
     def status(self) -> dict:
         out = self.session.status()
         out["voice"] = self.voice.voice
         out["language"] = self.voice.language
         out["tts"] = self.tts.health()
+        out["services"] = self._dialogue_services_status()
         out["reasoning"] = self.reasoning_status()
         out["laboratory_mode"] = self.laboratory_mode_status()
         main_record = self._main_document_record()
@@ -1380,10 +1548,14 @@ class FusionReaderV2:
 
     def dialogue_status(self) -> dict:
         dialogue_reasoning = self._effective_reasoning_mode(dialogue=True)
+        services = self._dialogue_services_status()
         return {
             "ok": True,
-            "stt": self.stt.health(),
-            "tts": self.tts.health(),
+            "stt": services["stt"],
+            "tts": services["tts"],
+            "chat": services["chat"],
+            "external_research": services["external_research"],
+            "services": services,
             "turns": len(self._dialogue_history),
             "reasoning": self.reasoning_status(),
             "laboratory_mode": self.laboratory_mode_status(),
@@ -1470,6 +1642,7 @@ class FusionReaderV2:
             "reasoning_degraded": reasoning["degraded"],
             "degraded_reason": reasoning["reason"],
             "chunk_index": chunk_index,
+            "transcript": text,
             "text_preview": text[:220],
         }
         if self._is_stop_dialogue_command(text):
@@ -1671,15 +1844,15 @@ class FusionReaderV2:
                 tts_started = time.perf_counter()
                 artifact = self._synthesize_cached(spoken_answer)
                 tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
-            if result.ok and artifact.ok:
+            if result.ok and str(result.answer or "").strip():
                 with self._dialogue_lock:
                     self._dialogue_history.append({"role": "user", "content": text})
                     self._dialogue_history.append({"role": "assistant", "content": str(result.answer or "").strip()})
                     self._dialogue_history = self._dialogue_history[-16:]
             out = {
-                "ok": bool(result.ok and artifact.ok),
+                "ok": True,
                 "transcript": text,
-                "answer": str(result.answer or "").strip(),
+                "answer": str(result.answer or "").strip() or self._human_dialogue_error(str(result.detail or ""), stage="external", provider=str(result.provider or "")),
                 "audio": str(artifact.path or ""),
                 "cached": artifact.cached,
                 "provider": artifact.provider,
@@ -1706,17 +1879,24 @@ class FusionReaderV2:
                 "external_summary": result.summary,
                 "external_findings": list(result.findings),
                 "external_sources": list(result.sources),
+                "voice_ok": artifact.ok,
+                "audio_available": bool(artifact.ok and artifact.path),
+                "human_error": "" if result.ok else (str(result.answer or "").strip() or self._human_dialogue_error(str(result.detail or ""), stage="external", provider=str(result.provider or ""))),
             }
             self._append_dialogue_trace(
                 {
                     **trace_event,
-                    "ok": bool(out["ok"]),
+                    "ok": bool(result.ok),
                     "detail": str(out.get("detail") or ""),
+                    "human_error": str(out.get("human_error") or ""),
                     "external_research": True,
                     "external_provider": str(result.provider or ""),
                     "external_model": str(result.model or ""),
+                    "chat_provider": str(result.provider or ""),
+                    "tts_provider": str(artifact.provider or ""),
                     "external_ms": research_ms,
                     "tts_ok": bool(artifact.ok),
+                    "audio_available": bool(out.get("audio_available")),
                     "duration_ms": out["duration_ms"],
                 }
             )
@@ -1789,21 +1969,35 @@ class FusionReaderV2:
         result = self.conversation.ask_dialogue(text, snapshot=snapshot, history=history, model=model, reasoning_mode=reasoning["applied"])
         chat_ms = result.duration_ms or int((time.perf_counter() - chat_started) * 1000)
         if not result.ok:
-            out = {
-                "ok": False,
-                "transcript": text,
-                "answer": "",
-                "model": result.model,
-                "detail": result.detail,
-                "chat_ms": chat_ms,
-                "reasoning_mode": result.reasoning_mode or reasoning["applied"],
-                "reasoning_passes": result.reasoning_passes or 1,
-                "reasoning_mode_requested": reasoning["requested"],
-                "reasoning_mode_applied": reasoning["applied"],
-                "reasoning_degraded": reasoning["degraded"],
-                "duration_ms": int((time.perf_counter() - started) * 1000),
-            }
-            self._append_dialogue_trace({**trace_event, "ok": False, "detail": out["detail"], "chat_ms": chat_ms, "duration_ms": out["duration_ms"]})
+            out = self._finalize_dialogue_failure(
+                started=started,
+                transcript=text,
+                answer="",
+                detail=str(result.detail or "dialogue_failed"),
+                model=result.model or "ollama",
+                provider="ollama",
+                stage="chat",
+                chat_ms=chat_ms,
+                reasoning=reasoning,
+                trace_extra={"intent_ms": intent_ms},
+            )
+            out["reasoning_mode"] = result.reasoning_mode or reasoning["applied"]
+            out["reasoning_passes"] = result.reasoning_passes or 1
+            self._append_dialogue_trace(
+                {
+                    **trace_event,
+                    "ok": False,
+                    "detail": out["detail"],
+                    "human_error": str(out.get("human_error") or ""),
+                    "chat_provider": "ollama",
+                    "chat_model": str(out.get("model") or ""),
+                    "chat_ms": chat_ms,
+                    "tts_provider": str(out.get("provider") or ""),
+                    "tts_ok": bool(out.get("voice_ok")),
+                    "audio_available": bool(out.get("audio_available")),
+                    "duration_ms": out["duration_ms"],
+                }
+            )
             return out
         spoken_answer = self._shorten_dialogue_answer(result.answer)
         if self.fast_dialogue_ack:
@@ -1813,13 +2007,13 @@ class FusionReaderV2:
             tts_started = time.perf_counter()
             artifact = self._synthesize_cached(spoken_answer)
             tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
-        if artifact.ok:
+        if str(spoken_answer or "").strip():
             with self._dialogue_lock:
                 self._dialogue_history.append({"role": "user", "content": text})
                 self._dialogue_history.append({"role": "assistant", "content": spoken_answer})
                 self._dialogue_history = self._dialogue_history[-16:]
         out = {
-            "ok": bool(result.ok and artifact.ok),
+            "ok": True,
             "transcript": text,
             "answer": spoken_answer,
             "audio": str(artifact.path or ""),
@@ -1842,17 +2036,23 @@ class FusionReaderV2:
                 "server_text_total_ms": int((time.perf_counter() - started) * 1000),
             },
             "duration_ms": int((time.perf_counter() - started) * 1000),
+            "voice_ok": artifact.ok,
+            "audio_available": bool(artifact.ok and artifact.path),
         }
         self._append_dialogue_trace(
             {
                 **trace_event,
-                "ok": bool(out["ok"]),
+                "ok": True,
                 "detail": str(out.get("detail") or ""),
+                "chat_provider": "ollama",
+                "chat_model": str(out.get("model") or ""),
                 "chat_ms": chat_ms,
                 "tts_ms": tts_ms,
                 "reasoning_passes": out["reasoning_passes"],
                 "duration_ms": out["duration_ms"],
+                "tts_provider": str(artifact.provider or ""),
                 "tts_ok": bool(artifact.ok),
+                "audio_available": bool(out.get("audio_available")),
             }
         )
         return out
@@ -1949,22 +2149,25 @@ class FusionReaderV2:
                     }
                 )
                 return out
-            out = {
-                "ok": False,
-                "error": "transcription_failed",
-                "transcript": transcript.text,
-                "detail": transcript.detail,
-                "stt_provider": transcript.provider,
-                "stt_ms": transcript.duration_ms,
-                "trace": {
+            out = self._finalize_dialogue_failure(
+                started=started,
+                transcript=str(transcript.text or ""),
+                answer="",
+                detail=str(transcript.detail or "transcription_failed"),
+                model="reader_stt",
+                provider="reader_stt",
+                stage="stt",
+                stt_provider=str(transcript.provider or ""),
+                stt_ms=transcript.duration_ms,
+                trace_extra={
                     "stt_ms": transcript.duration_ms,
                     "stt_wall_ms": stt_elapsed_ms,
                     "stt_detail": transcript.detail,
                     "stt_timings": transcript.timings or {},
                     "server_total_ms": int((time.perf_counter() - started) * 1000),
                 },
-                "duration_ms": int((time.perf_counter() - started) * 1000),
-            }
+            )
+            out["error"] = "transcription_failed"
             self._append_dialogue_trace(
                 {
                     "ts": time.time(),
@@ -1972,8 +2175,13 @@ class FusionReaderV2:
                     "ok": False,
                     "detail": transcript.detail,
                     "error": "transcription_failed",
+                    "human_error": str(out.get("human_error") or ""),
+                    "transcript": str(transcript.text or ""),
                     "stt_provider": transcript.provider,
                     "stt_ms": transcript.duration_ms,
+                    "tts_provider": str(out.get("provider") or ""),
+                    "tts_ok": bool(out.get("voice_ok")),
+                    "audio_available": bool(out.get("audio_available")),
                     "duration_ms": out["duration_ms"],
                 }
             )
@@ -1998,11 +2206,17 @@ class FusionReaderV2:
                 "event": "dialogue_turn_audio",
                 "ok": bool(out.get("ok")),
                 "detail": str(out.get("detail") or ""),
+                "transcript": str(out.get("transcript") or ""),
+                "human_error": str(out.get("human_error") or ""),
                 "stt_provider": transcript.provider,
                 "stt_ms": transcript.duration_ms,
                 "reasoning_mode_requested": str(out.get("reasoning_mode_requested") or ""),
                 "reasoning_mode_applied": str(out.get("reasoning_mode_applied") or out.get("reasoning_mode") or ""),
                 "reasoning_degraded": bool(out.get("reasoning_degraded")),
+                "chat_provider": str(out.get("model") or ""),
+                "tts_provider": str(out.get("provider") or ""),
+                "tts_ok": bool(out.get("voice_ok", False)),
+                "audio_available": bool(out.get("audio_available", False)),
                 "duration_ms": out["duration_ms"],
             }
         )

@@ -35,6 +35,9 @@ class ReasoningProfile:
 class ChatProvider:
     name = "base"
 
+    def health(self) -> dict:
+        return {"ok": False, "provider": self.name, "detail": "not_implemented"}
+
     def chat(self, messages: list[dict], model: str = "", think: bool | None = None, num_predict: int | None = None) -> ChatResult:
         return ChatResult(False, model=model, detail="not_implemented")
 
@@ -50,6 +53,42 @@ class OllamaChatProvider(ChatProvider):
         self.num_predict = int(os.environ.get("FUSION_READER_CHAT_NUM_PREDICT", "1024" if self.think else "384"))
         self.normal_num_predict = int(os.environ.get("FUSION_READER_CHAT_NUM_PREDICT_NORMAL", "384"))
         self.thinking_num_predict = int(os.environ.get("FUSION_READER_CHAT_NUM_PREDICT_THINKING", str(max(self.num_predict, 1024 if self.think else 1536))))
+
+    def health(self) -> dict:
+        req = urllib.request.Request(f"{self.base_url}/api/tags", method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            return {
+                "ok": False,
+                "provider": self.name,
+                "url": self.base_url,
+                "model": self.default_model,
+                "detail": f"http_{exc.code}",
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "provider": self.name,
+                "url": self.base_url,
+                "model": self.default_model,
+                "detail": str(exc),
+            }
+        models = data.get("models") if isinstance(data, dict) else []
+        available = []
+        if isinstance(models, list):
+            available = [str(item.get("name") or item.get("model") or "") for item in models if isinstance(item, dict)]
+        model_present = self.default_model in available if available else None
+        return {
+            "ok": True,
+            "provider": self.name,
+            "url": self.base_url,
+            "model": self.default_model,
+            "model_present": model_present,
+            "available_models": available[:12],
+            "detail": "ready",
+        }
 
     def chat(self, messages: list[dict], model: str = "", think: bool | None = None, num_predict: int | None = None) -> ChatResult:
         started = time.perf_counter()
@@ -93,6 +132,9 @@ class NullChatProvider(ChatProvider):
     def __init__(self, answer: str = "Respuesta de prueba.") -> None:
         self.answer = answer
         self.calls: list[tuple[list[dict], str, dict]] = []
+
+    def health(self) -> dict:
+        return {"ok": True, "provider": self.name, "model": "null", "detail": "ready"}
 
     def chat(self, messages: list[dict], model: str = "", think: bool | None = None, num_predict: int | None = None) -> ChatResult:
         self.calls.append((messages, model, {"think": think, "num_predict": num_predict}))
