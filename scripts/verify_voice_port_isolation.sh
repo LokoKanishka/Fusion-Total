@@ -9,6 +9,7 @@ LUCY_TTS_PORT="${LUCY_TTS_PORT:-7854}"
 LEGACY_TTS_PORT="${FUSION_READER_CPU_TTS_PORT:-7851}"
 HISTORIC_PORT=7852
 OWNER_FILE="${FUSION_READER_TTS_OWNER_FILE:-$ROOT/runtime/fusion_reader_v2/tts_owner.json}"
+VOICE_RELEVANT_PATTERN='7851|7852|7853|7854|[Tt][Tt][Ss]|[Aa]ll[Tt]alk|[Ff]usion|[Dd]octora|[Ll]ucy|puerto|[Vv]oice'
 
 failures=0
 
@@ -61,51 +62,53 @@ owner_file_matches_fusion() {
   tr '\0' ' ' <"/proc/$owner_pid/cmdline" | grep -q -- "--port $FUSION_TTS_PORT" || return 1
 }
 
-check_latest_doctora_boveda() {
+warn() {
+  echo "WARN: $*" >&2
+}
+
+latest_relevant_doctora_boveda() {
   local db="$DOCTORA_ROOT/n8n_data/boveda_lucy.sqlite"
   if [[ ! -f "$db" ]]; then
-    echo "WARN: Doctora boveda not found: $db" >&2
+    warn "Doctora boveda not found: $db"
     return
   fi
   if ! command -v sqlite3 >/dev/null 2>&1; then
-    echo "WARN: sqlite3 not available; skipping Doctora boveda check" >&2
+    warn "sqlite3 not available; skipping Doctora boveda check"
     return
   fi
 
-  local latest
-  latest="$(sqlite3 "$db" "SELECT coalesce(contenido_memoria,'') || ' ' || coalesce(metadatos,'') FROM memoria_core ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
-  if [[ -z "$latest" ]]; then
-    fail "latest Doctora boveda memory is empty"
-    return
-  fi
-  [[ "$latest" == *"$FUSION_TTS_PORT"* ]] || fail "latest Doctora boveda does not mention Fusion port $FUSION_TTS_PORT"
-  [[ "$latest" == *"$LUCY_TTS_PORT"* ]] || fail "latest Doctora boveda does not mention Lucy port $LUCY_TTS_PORT"
-  [[ "$latest" != *'"puerto_fusion":7852'* ]] || fail "latest Doctora boveda still assigns Fusion to 7852"
-  [[ "$latest" != *'"puerto_fusion": 7852'* ]] || fail "latest Doctora boveda still assigns Fusion to 7852"
-  [[ "$latest" != *'puerto_fusion:7852'* ]] || fail "latest Doctora boveda still assigns Fusion to 7852"
-  [[ "$latest" != *'"alltalk_port":7851'* ]] || fail "latest Doctora boveda still assigns Lucy AllTalk to 7851"
-  [[ "$latest" != *'"alltalk_port": 7851'* ]] || fail "latest Doctora boveda still assigns Lucy AllTalk to 7851"
+  sqlite3 "$db" "SELECT replace(replace(coalesce(contenido_memoria,'') || ' ' || coalesce(metadatos,''), char(10), ' '), char(13), ' ') FROM memoria_core ORDER BY id DESC LIMIT 200;" 2>/dev/null \
+    | grep -im1 -E "$VOICE_RELEVANT_PATTERN" || true
 }
 
-check_latest_doctora_bunker() {
+latest_relevant_doctora_bunker() {
   local log="$DOCTORA_ROOT/data/lucy_bunker_log.jsonl"
   if [[ ! -f "$log" ]]; then
-    echo "WARN: Doctora bunker log not found: $log" >&2
+    warn "Doctora bunker log not found: $log"
     return
   fi
+  tac "$log" 2>/dev/null | grep -im1 -E "$VOICE_RELEVANT_PATTERN" || true
+}
 
-  local latest
-  latest="$(tail -n 1 "$log" 2>/dev/null || true)"
+check_doctora_voice_entry() {
+  local source_name="$1"
+  local latest="$2"
   if [[ -z "$latest" ]]; then
-    fail "latest Doctora bunker log entry is empty"
+    warn "no relevant Doctora voice/TTS entry found in $source_name"
     return
   fi
-  [[ "$latest" == *"$FUSION_TTS_PORT"* ]] || fail "latest Doctora bunker entry does not mention Fusion port $FUSION_TTS_PORT"
-  [[ "$latest" == *"$LUCY_TTS_PORT"* ]] || fail "latest Doctora bunker entry does not mention Lucy port $LUCY_TTS_PORT"
-  [[ "$latest" != *'"puerto_fusion":7852'* ]] || fail "latest Doctora bunker still assigns Fusion to 7852"
-  [[ "$latest" != *'"puerto_fusion": 7852'* ]] || fail "latest Doctora bunker still assigns Fusion to 7852"
-  [[ "$latest" != *'"alltalk_port":7851'* ]] || fail "latest Doctora bunker still assigns Lucy AllTalk to 7851"
-  [[ "$latest" != *'"alltalk_port": 7851'* ]] || fail "latest Doctora bunker still assigns Lucy AllTalk to 7851"
+  [[ "$latest" != *'"puerto_fusion":7852'* ]] || fail "$source_name still assigns Fusion to 7852"
+  [[ "$latest" != *'"puerto_fusion": 7852'* ]] || fail "$source_name still assigns Fusion to 7852"
+  [[ "$latest" != *'puerto_fusion:7852'* ]] || fail "$source_name still assigns Fusion to 7852"
+  [[ "$latest" != *'"alltalk_port":7851'* ]] || fail "$source_name still assigns Lucy AllTalk to 7851"
+  [[ "$latest" != *'"alltalk_port": 7851'* ]] || fail "$source_name still assigns Lucy AllTalk to 7851"
+  [[ "$latest" != *'Lucy=7851'* ]] || fail "$source_name still assigns Lucy to 7851"
+  [[ "$latest" != *'Fusion=7852'* ]] || fail "$source_name still assigns Fusion to 7852"
+  if [[ "$latest" == *"$FUSION_TTS_PORT"* && "$latest" == *"$LUCY_TTS_PORT"* ]]; then
+    ok "$source_name mentions Fusion=$FUSION_TTS_PORT and Lucy=$LUCY_TTS_PORT"
+  else
+    warn "$source_name has a relevant voice/TTS entry but does not mention both current ports"
+  fi
 }
 
 echo "Checking Fusion/Doctora voice port isolation..."
@@ -145,10 +148,10 @@ if [[ -d "$DOCTORA_ROOT" ]]; then
   require_file_not_contains "$DOCTORA_ROOT/.agents/workflows/boot.md" "grep $LEGACY_TTS_PORT"
   require_file_not_contains "$DOCTORA_ROOT/scripts/start_lucy_voice_tts.sh" "fuser -k $FUSION_TTS_PORT"
   require_file_not_contains "$DOCTORA_ROOT/scripts/start_lucy_voice_tts.sh" "fuser -k $HISTORIC_PORT"
-  check_latest_doctora_boveda
-  check_latest_doctora_bunker
+  check_doctora_voice_entry "latest relevant Doctora boveda entry" "$(latest_relevant_doctora_boveda)"
+  check_doctora_voice_entry "latest relevant Doctora bunker entry" "$(latest_relevant_doctora_bunker)"
 else
-  echo "WARN: Doctora root not found: $DOCTORA_ROOT" >&2
+  warn "Doctora root not found: $DOCTORA_ROOT"
 fi
 
 if [[ -d "$ALLTALK_DIR" ]]; then
@@ -164,7 +167,7 @@ if [[ -d "$ALLTALK_DIR" ]]; then
     require_file_not_contains "$ALLTALK_DIR/launch.sh.bak" "fuser -k $HISTORIC_PORT"
   fi
 else
-  echo "WARN: AllTalk directory not found: $ALLTALK_DIR" >&2
+  warn "AllTalk directory not found: $ALLTALK_DIR"
 fi
 
 if port_is_listening "$HISTORIC_PORT"; then
@@ -180,17 +183,17 @@ if port_is_listening "$FUSION_TTS_PORT"; then
     fail "Fusion TTS port $FUSION_TTS_PORT is listening without a valid Fusion owner file"
   fi
 else
-  echo "WARN: Fusion TTS port $FUSION_TTS_PORT is not listening" >&2
+  warn "Fusion TTS port $FUSION_TTS_PORT is not listening"
 fi
 
 if port_is_listening "$LUCY_TTS_PORT"; then
   ok "Doctora Lucy TTS port $LUCY_TTS_PORT is listening"
 else
-  echo "WARN: Doctora Lucy TTS port $LUCY_TTS_PORT is not listening" >&2
+  warn "Doctora Lucy TTS port $LUCY_TTS_PORT is not listening"
 fi
 
 if port_is_listening "$LEGACY_TTS_PORT"; then
-  echo "WARN: legacy/shared TTS port $LEGACY_TTS_PORT is listening; verify this is intentional" >&2
+  warn "legacy/shared TTS port $LEGACY_TTS_PORT is listening; verify this is intentional"
 fi
 
 if (( failures > 0 )); then

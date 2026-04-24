@@ -283,17 +283,31 @@ class FusionReaderV2Tests(unittest.TestCase):
             self.assertIn("owner_pid", text)
             self.assertNotIn('if [[ -z "$owner_pid" ]]; then\n    return 0', text)
 
+    def test_fusion_launcher_waits_for_owned_gpu_tts_before_cpu_fallback(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "start_fusion_reader_v2.sh").read_text(encoding="utf-8")
+        self.assertIn('FUSION_READER_GPU_TTS_WAIT_SECONDS', text)
+        self.assertIn('fusion_gpu_ready()', text)
+        self.assertIn('while (( $(date +%s) < gpu_wait_deadline )); do', text)
+        self.assertIn('sleep 1', text)
+        self.assertIn('owner valido', text)
+        self.assertNotIn("127.0.0.1:7852", text)
+
     def test_voice_port_isolation_verifier_covers_doctora_memory_sources(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "verify_voice_port_isolation.sh").read_text(encoding="utf-8")
         self.assertIn("n8n_data/boveda_lucy.sqlite", text)
         self.assertIn("data/lucy_bunker_log.jsonl", text)
         self.assertIn("Taverna-legacy/alltalk_tts", text)
+        self.assertIn("VOICE_RELEVANT_PATTERN", text)
+        self.assertIn("latest_relevant_doctora_boveda", text)
+        self.assertIn("latest_relevant_doctora_bunker", text)
+        self.assertIn("no relevant Doctora voice/TTS entry found", text)
         self.assertIn('"puerto_fusion":7852', text)
         self.assertIn('"alltalk_port":7851', text)
         self.assertIn("--port $HISTORIC_PORT", text)
-        self.assertIn("latest Doctora boveda", text)
-        self.assertIn("latest Doctora bunker", text)
+        self.assertIn("latest relevant Doctora boveda entry", text)
+        self.assertIn("latest relevant Doctora bunker entry", text)
 
     def test_read_current_prefetches_next(self):
         provider = NullTTSProvider()

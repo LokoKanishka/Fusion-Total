@@ -7,6 +7,7 @@ GPU_TTS_PORT="${FUSION_READER_GPU_TTS_PORT:-7853}"
 CPU_TTS_PORT="${FUSION_READER_CPU_TTS_PORT:-${DIRECT_CHAT_ALLTALK_PORT:-7851}}"
 GPU_TTS_URL="http://127.0.0.1:${GPU_TTS_PORT}"
 OWNER_FILE="${FUSION_READER_TTS_OWNER_FILE:-$ROOT/runtime/fusion_reader_v2/tts_owner.json}"
+GPU_TTS_WAIT_SECONDS="${FUSION_READER_GPU_TTS_WAIT_SECONDS:-25}"
 
 cd "$ROOT"
 
@@ -42,23 +43,37 @@ fusion_tts_owner_ok() {
   tr '\0' ' ' <"/proc/$owner_pid/cmdline" | grep -q -- "--port $GPU_TTS_PORT" || return 1
 }
 
+fusion_gpu_ready() {
+  curl -fsS --max-time 1 "${GPU_TTS_URL}/api/ready" >/dev/null 2>&1 && fusion_tts_owner_ok
+}
+
 if [[ -z "${FUSION_READER_ALLTALK_URL:-}" && "${FUSION_READER_GAME_COEXISTENCE_ACTIVE:-0}" == "1" ]]; then
   export FUSION_READER_ALLTALK_URL="http://127.0.0.1:${CPU_TTS_PORT}"
   echo "Modo convivencia GPU: usando TTS CPU/fallback: ${FUSION_READER_ALLTALK_URL}" >&2
 fi
 
 if [[ -z "${FUSION_READER_ALLTALK_URL:-}" ]]; then
-  if curl -fsS --max-time 1 "${GPU_TTS_URL}/api/ready" >/dev/null 2>&1; then
-    if fusion_tts_owner_ok; then
-      export FUSION_READER_ALLTALK_URL="$GPU_TTS_URL"
-      echo "AllTalk GPU Fusion detectado: ${FUSION_READER_ALLTALK_URL}"
-    else
-      export FUSION_READER_ALLTALK_URL="http://127.0.0.1:${CPU_TTS_PORT}"
-      echo "AllTalk en ${GPU_TTS_URL} no pertenece a Fusion; usando fallback: ${FUSION_READER_ALLTALK_URL}" >&2
-    fi
+  if fusion_gpu_ready; then
+    export FUSION_READER_ALLTALK_URL="$GPU_TTS_URL"
+    echo "AllTalk GPU Fusion detectado: ${FUSION_READER_ALLTALK_URL}"
   else
-    export FUSION_READER_ALLTALK_URL="http://127.0.0.1:${CPU_TTS_PORT}"
-    echo "AllTalk CPU/fallback: ${FUSION_READER_ALLTALK_URL}"
+    gpu_wait_deadline=$(( $(date +%s) + GPU_TTS_WAIT_SECONDS ))
+    while (( $(date +%s) < gpu_wait_deadline )); do
+      if fusion_gpu_ready; then
+        export FUSION_READER_ALLTALK_URL="$GPU_TTS_URL"
+        echo "AllTalk GPU Fusion detectado tras espera: ${FUSION_READER_ALLTALK_URL}"
+        break
+      fi
+      sleep 1
+    done
+    if [[ -z "${FUSION_READER_ALLTALK_URL:-}" ]]; then
+      export FUSION_READER_ALLTALK_URL="http://127.0.0.1:${CPU_TTS_PORT}"
+      if curl -fsS --max-time 1 "${GPU_TTS_URL}/api/ready" >/dev/null 2>&1; then
+        echo "AllTalk en ${GPU_TTS_URL} respondio Ready pero no tiene owner valido; usando fallback: ${FUSION_READER_ALLTALK_URL}" >&2
+      else
+        echo "AllTalk GPU Fusion no quedo listo tras ${GPU_TTS_WAIT_SECONDS}s; usando fallback: ${FUSION_READER_ALLTALK_URL}" >&2
+      fi
+    fi
   fi
 fi
 
