@@ -66,7 +66,7 @@ INDEX_HTML = r"""<!doctype html>
       height: 100vh;
       display: grid;
       grid-template-columns: minmax(220px, 270px) minmax(0, 1fr) minmax(220px, 270px);
-      grid-template-rows: minmax(0, 52vh) minmax(320px, 48vh);
+      grid-template-rows: minmax(0, 58vh) minmax(280px, 42vh);
     }
     aside, main, .lab {
       min-width: 0;
@@ -129,13 +129,13 @@ INDEX_HTML = r"""<!doctype html>
       border-radius: 8px;
       color: var(--text);
       background: #0b0e0d;
-      padding: 12px;
+      padding: 10px;
       cursor: pointer;
-      min-height: 150px;
+      min-height: 126px;
       display: grid;
       align-content: center;
       justify-items: center;
-      gap: 8px;
+      gap: 6px;
       text-align: center;
       outline: none;
     }
@@ -146,24 +146,25 @@ INDEX_HTML = r"""<!doctype html>
       background: #101814;
     }
     .upload-icon {
-      width: 38px;
-      height: 38px;
+      width: 30px;
+      height: 30px;
       border: 1px solid var(--line);
       border-radius: 8px;
       display: block;
-      padding-top: 5px;
+      padding-top: 2px;
       color: var(--accent);
-      font-size: 20px;
+      font-size: 18px;
       line-height: 1;
     }
     .upload-zone strong {
       display: block;
       overflow-wrap: anywhere;
-      font-size: 14px;
+      font-size: 13px;
     }
     .upload-zone button {
-      min-height: 36px;
-      padding: 7px 10px;
+      min-height: 24px;
+      padding: 3px 8px;
+      font-size: 11px;
     }
     .upload-zone span,
     .upload-info {
@@ -188,9 +189,9 @@ INDEX_HTML = r"""<!doctype html>
       transition: width .25s ease;
     }
     .notes-panel {
-      margin-top: 18px;
+      margin-top: 14px;
       border-top: 1px solid var(--line);
-      padding-top: 14px;
+      padding-top: 10px;
     }
     .reference-panel {
       display: grid;
@@ -205,14 +206,50 @@ INDEX_HTML = r"""<!doctype html>
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #080a0a;
-      padding: 10px;
-      display: grid;
-      gap: 6px;
+      padding: 0;
+      overflow: hidden;
     }
     .reference-card strong,
     .reference-card span,
     .reference-card p {
       overflow-wrap: anywhere;
+    }
+    .reference-card summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 10px;
+    }
+    .reference-card summary::-webkit-details-marker {
+      display: none;
+    }
+    .reference-title {
+      flex: 1;
+      min-width: 0;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    .reference-card-main .reference-title {
+      font-size: 13px;
+    }
+    .reference-caret {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.1;
+      flex: 0 0 auto;
+      margin-top: 2px;
+    }
+    .reference-card[open] .reference-caret {
+      transform: rotate(180deg);
+    }
+    .reference-content {
+      display: grid;
+      gap: 6px;
+      padding: 0 10px 10px;
     }
     .reference-meta,
     .reference-empty {
@@ -233,6 +270,7 @@ INDEX_HTML = r"""<!doctype html>
       font-size: 12px;
       line-height: 1.45;
       padding: 10px 12px;
+      min-height: 172px;
       overflow-wrap: anywhere;
     }
     .lab-focus strong {
@@ -244,13 +282,13 @@ INDEX_HTML = r"""<!doctype html>
       cursor: pointer;
       color: var(--accent-2);
       font-weight: 700;
-      min-height: 34px;
-      line-height: 34px;
+      min-height: 26px;
+      line-height: 26px;
       overflow-wrap: anywhere;
     }
     .note-input {
-      min-height: 74px;
-      margin-top: 8px;
+      min-height: 64px;
+      margin-top: 6px;
     }
     .note-list {
       display: grid;
@@ -370,7 +408,7 @@ INDEX_HTML = r"""<!doctype html>
     .dot.ok { background: var(--accent); }
     .reader {
       overflow: auto;
-      padding: 26px clamp(18px, 4vw, 56px) 18px;
+      padding: 30px clamp(18px, 4vw, 56px) 14px;
       display: flex;
       align-items: center;
     }
@@ -391,33 +429,34 @@ INDEX_HTML = r"""<!doctype html>
     }
     .controls {
       border-top: 1px solid var(--line);
-      padding: 10px 22px;
+      padding: 8px 22px 6px;
       display: grid;
-      gap: 8px;
+      gap: 6px;
       background: var(--panel);
     }
     .row {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
     }
     .toggle {
-      min-height: 40px;
+      min-height: 32px;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 8px 10px;
+      padding: 5px 8px;
       color: var(--muted);
       user-select: none;
+      font-size: 13px;
     }
     .upload-toggle {
-      min-height: 34px;
-      margin-top: 8px;
-      padding: 6px 8px;
-      font-size: 13px;
+      min-height: 26px;
+      margin-top: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
     }
     .toggle input {
       width: 17px;
@@ -425,13 +464,14 @@ INDEX_HTML = r"""<!doctype html>
       accent-color: var(--accent);
     }
     button {
-      min-height: 40px;
+      min-height: 32px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #101513;
       color: var(--text);
-      padding: 9px 13px;
+      padding: 6px 10px;
       cursor: pointer;
+      font-size: 13px;
     }
     button.primary {
       border-color: var(--accent);
@@ -442,32 +482,65 @@ INDEX_HTML = r"""<!doctype html>
     button.wide {
       width: 100%;
     }
+    button.compact-btn {
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.1;
+    }
+    .compact-toggle {
+      min-height: 24px;
+      padding: 3px 8px;
+      gap: 6px;
+      font-size: 11px;
+      line-height: 1.1;
+    }
+    .compact-toggle input {
+      width: 14px;
+      height: 14px;
+    }
     button:disabled {
       opacity: .55;
       cursor: not-allowed;
     }
     input[type="number"] {
       width: 84px;
-      min-height: 40px;
+      min-height: 32px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #080a0a;
       color: var(--text);
-      padding: 8px;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+    input.compact-input {
+      width: 72px;
+      min-height: 24px;
+      padding: 3px 8px;
+      font-size: 11px;
+      line-height: 1.1;
     }
     audio {
       width: 100%;
       min-height: 34px;
     }
+    .slim-audio {
+      width: min(100%, 1320px);
+      min-height: 18px;
+      height: 18px;
+      margin: 0;
+      display: block;
+    }
     textarea {
       width: 100%;
-      min-height: 116px;
+      min-height: 102px;
       resize: vertical;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #080a0a;
       color: var(--text);
-      padding: 10px;
+      padding: 8px 10px;
       line-height: 1.4;
     }
     .chatbox {
@@ -503,24 +576,26 @@ INDEX_HTML = r"""<!doctype html>
       font-style: italic;
     }
     .chat-input {
-      min-height: 82px;
+      min-height: 70px;
     }
-    .chat-actions {
-      display: grid;
-      grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr);
-      gap: 10px;
+    .lab-toolbar {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      overflow-x: auto;
+      padding-bottom: 2px;
     }
-    .reasoning-panel {
-      display: grid;
-      gap: 4px;
-      justify-items: end;
-      align-content: start;
+    .lab-toolbar::-webkit-scrollbar {
+      height: 6px;
     }
     .reasoning-tabs {
       display: flex;
       gap: 4px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
+      flex-wrap: nowrap;
+      align-items: center;
+      flex: 0 0 auto;
     }
     .reasoning-tab {
       min-height: 24px;
@@ -542,35 +617,26 @@ INDEX_HTML = r"""<!doctype html>
       color: var(--muted);
       font-size: 10px;
       line-height: 1.2;
-      text-align: right;
-    }
-    .dialogue-row {
-      display: grid;
-      grid-template-columns: minmax(140px, 220px) minmax(120px, 170px) minmax(0, 1fr);
-      gap: 10px;
-      align-items: center;
+      text-align: left;
+      white-space: nowrap;
+      flex: 0 0 auto;
     }
     .mode-toggle-btn.active {
       border-color: var(--accent-2);
       background: rgba(56, 198, 216, 0.14);
       color: var(--text);
     }
-    .dialogue-side {
-      display: grid;
-      gap: 6px;
-      min-width: 0;
-      align-items: start;
-    }
     .dialogue-info {
       color: var(--muted);
-      font-size: 13px;
+      font-size: 11px;
       line-height: 1.35;
-      overflow-wrap: anywhere;
+      white-space: nowrap;
+      flex: 0 0 auto;
     }
     .log {
       min-height: 18px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
       line-height: 1.4;
       overflow-wrap: anywhere;
     }
@@ -611,6 +677,14 @@ INDEX_HTML = r"""<!doctype html>
       .status {
         white-space: normal;
       }
+      .lab-toolbar {
+        flex-wrap: wrap;
+        overflow-x: visible;
+      }
+      .dialogue-info,
+      .reasoning-caption {
+        white-space: normal;
+      }
     }
   </style>
 </head>
@@ -623,21 +697,21 @@ INDEX_HTML = r"""<!doctype html>
         <div class="upload-icon">+</div>
         <strong>Soltá tu documento acá</strong>
         <span>TXT, MD, PDF, DOCX, ODT, RTF y más.</span>
-        <button id="chooseFileBtn" class="primary wide" type="button">Buscar Archivo</button>
+        <button id="chooseFileBtn" class="primary compact-btn" type="button">Buscar Archivo</button>
         <input id="fileInput" class="file-input" type="file" accept=".txt,.md,.markdown,.pdf,.doc,.docx,.odt,.ott,.rtf,.html,.htm,.csv,.log,text/plain,text/markdown,application/pdf,application/vnd.oasis.opendocument.text,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword">
       </div>
       <label class="toggle upload-toggle"><input id="autoReadToggle" type="checkbox" checked> Leer al cargar</label>
       <label class="toggle upload-toggle"><input id="referenceModeToggle" type="checkbox"> Agregar como consulta</label>
       <p id="uploadInfo" class="upload-info">Todavía no cargaste ningún texto.</p>
       <div class="progress-wrap" aria-hidden="true"><div id="importProgress" class="progress-bar"></div></div>
-      <button id="prepareBtn" class="wide" type="button">Preparar documento</button>
-      <button id="cancelPrepareBtn" class="wide" type="button">Cancelar preparación</button>
+      <button id="prepareBtn" class="compact-btn" type="button">Preparar documento</button>
+      <button id="cancelPrepareBtn" class="compact-btn" type="button">Cancelar preparación</button>
       <p id="prepareInfo" class="upload-info">Audio sin preparar.</p>
       <div class="progress-wrap" aria-hidden="true"><div id="prepareProgress" class="progress-bar"></div></div>
       <details class="notes-panel" open>
         <summary id="notesSummary">Notas del documento</summary>
         <textarea id="noteInput" class="note-input" placeholder="Escribí una nota para el bloque actual..."></textarea>
-        <button id="saveNoteBtn" class="primary wide" type="button">Guardar nota</button>
+        <button id="saveNoteBtn" class="primary compact-btn" type="button">Guardar nota</button>
         <p id="notesInfo" class="upload-info">Sin notas todavía.</p>
         <div id="notesList" class="note-list"></div>
       </details>
@@ -658,15 +732,15 @@ INDEX_HTML = r"""<!doctype html>
 
       <section class="controls">
         <div class="row">
-          <button id="prevBtn">Anterior</button>
-          <button id="readBtn" class="primary">Leer</button>
-          <button id="repeatBtn">Repetir</button>
-          <button id="nextBtn">Siguiente</button>
-          <input id="jumpInput" type="number" min="1" value="1" aria-label="Bloque">
-          <button id="jumpBtn">Ir</button>
-          <label class="toggle"><input id="continuousToggle" type="checkbox"> Continuo</label>
+          <button id="prevBtn" class="compact-btn">Anterior</button>
+          <button id="readBtn" class="primary compact-btn">Leer</button>
+          <button id="repeatBtn" class="compact-btn">Repetir</button>
+          <button id="nextBtn" class="compact-btn">Siguiente</button>
+          <input id="jumpInput" class="compact-input" type="number" min="1" value="1" aria-label="Bloque">
+          <button id="jumpBtn" class="compact-btn">Ir</button>
+          <label class="toggle compact-toggle"><input id="continuousToggle" type="checkbox"> Continuo</label>
         </div>
-        <audio id="player" controls></audio>
+        <audio id="player" class="slim-audio" controls></audio>
         <div id="log" class="log">Lista para cargar.</div>
       </section>
     </main>
@@ -678,24 +752,18 @@ INDEX_HTML = r"""<!doctype html>
         <div class="chat-msg system">Cargá un documento y preguntame por lo que está en pantalla.</div>
       </div>
       <textarea id="chatInput" class="chat-input" placeholder="Escribí sobre el texto actual..."></textarea>
-      <div class="chat-actions">
-        <button id="sendChatBtn" class="primary">Enviar</button>
-        <button id="clearLabHistoryBtn" type="button">Borrar historial</button>
-      </div>
-      <div class="dialogue-row">
-        <button id="dialogueBtn" class="primary">Dialogar</button>
-        <button id="freeModeBtn" class="mode-toggle-btn" type="button">Modo libre</button>
-        <div class="dialogue-side">
-          <div id="dialogueInfo" class="dialogue-info">Diálogo apagado.</div>
-          <div class="reasoning-panel">
-            <div class="reasoning-tabs" aria-label="Modo de razonamiento">
-              <button id="reasoningNormalBtn" class="reasoning-tab" type="button">Normal</button>
-              <button id="reasoningThinkingBtn" class="reasoning-tab" type="button">Pensar</button>
-              <button id="reasoningSupremeBtn" class="reasoning-tab" type="button">Supremo</button>
-            </div>
-            <div id="reasoningCaption" class="reasoning-caption">Pensamiento activo.</div>
-          </div>
+      <div class="lab-toolbar">
+        <button id="sendChatBtn" class="primary compact-btn">Enviar</button>
+        <button id="clearLabHistoryBtn" class="compact-btn" type="button">Borrar historial</button>
+        <button id="dialogueBtn" class="primary compact-btn">Dialogar</button>
+        <button id="freeModeBtn" class="mode-toggle-btn compact-btn" type="button">Modo libre</button>
+        <div class="reasoning-tabs" aria-label="Modo de razonamiento">
+          <button id="reasoningNormalBtn" class="reasoning-tab" type="button">Normal</button>
+          <button id="reasoningThinkingBtn" class="reasoning-tab" type="button">Pensar</button>
+          <button id="reasoningSupremeBtn" class="reasoning-tab" type="button">Supremo</button>
         </div>
+        <div id="dialogueInfo" class="dialogue-info">Diálogo apagado.</div>
+        <div id="reasoningCaption" class="reasoning-caption">Pensamiento activo.</div>
       </div>
       <audio id="dialoguePlayer"></audio>
     </section>
@@ -703,11 +771,16 @@ INDEX_HTML = r"""<!doctype html>
       <div class="reference-panel">
         <h2>Consulta</h2>
         <p class="sub">El lector sigue leyendo el principal. Estos textos solo apoyan el laboratorio.</p>
-        <div id="mainDocInfo" class="reference-card">
-          <strong>Documento principal</strong>
-          <span id="mainDocTitle">Ningún documento principal</span>
-          <span id="mainDocMeta" class="reference-meta">Sin lectura activa.</span>
-        </div>
+        <details id="mainDocInfo" class="reference-card reference-card-main">
+          <summary>
+            <span class="reference-title" id="mainDocTitle">Ningún documento principal</span>
+            <span class="reference-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="reference-content">
+            <strong>Documento principal</strong>
+            <span id="mainDocMeta" class="reference-meta">Sin lectura activa.</span>
+          </div>
+        </details>
         <div>
           <strong>Documentos de consulta</strong>
           <div id="referenceList" class="reference-list">
@@ -820,9 +893,26 @@ INDEX_HTML = r"""<!doctype html>
       const res = await fetch(path, options);
       const data = await res.json();
       if (!res.ok || data.ok === false) {
-        throw new Error(data.error || 'request_failed');
+        const err = new Error(data.error || 'request_failed');
+        err.data = data;
+        err.status = res.status;
+        throw err;
       }
       return data;
+    }
+
+    function renderGracefulResearchFailure(data, traceText='') {
+      if (!data || !data.external_research || !data.answer) {
+        return false;
+      }
+      addChatMessage('assistant', data.answer);
+      if (traceText) {
+        addChatMessage('system', traceText);
+      }
+      const info = dialogueModeSummary(data);
+      setDialogueInfo(`${laboratoryModeSummary()} ${info}${traceText ? ` | ${traceText}` : ''}`);
+      log(`Investigación externa incompleta: ${data.detail || data.error || 'external_research_failed'}. ${traceText}`.trim());
+      return true;
     }
 
     function setBusy(isBusy) {
@@ -1189,10 +1279,19 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
       for (const item of references) {
-        const card = document.createElement('div');
+        const card = document.createElement('details');
         card.className = 'reference-card';
-        const title = document.createElement('strong');
+        const summary = document.createElement('summary');
+        const title = document.createElement('span');
+        title.className = 'reference-title';
         title.textContent = item.title || item.doc_id || 'Consulta';
+        const caret = document.createElement('span');
+        caret.className = 'reference-caret';
+        caret.setAttribute('aria-hidden', 'true');
+        caret.textContent = '▾';
+        summary.append(title, caret);
+        const content = document.createElement('div');
+        content.className = 'reference-content';
         const meta = document.createElement('span');
         meta.className = 'reference-meta';
         meta.textContent = `${item.doc_id || ''}${item.source_type ? ` | ${item.source_type}` : ''}${item.total ? ` | ${item.total} bloques` : ''}`;
@@ -1210,7 +1309,8 @@ INDEX_HTML = r"""<!doctype html>
         removeBtn.textContent = 'Quitar';
         removeBtn.addEventListener('click', () => removeReference(item.doc_id));
         actions.append(promoteBtn, removeBtn);
-        card.append(title, meta, preview, actions);
+        content.append(meta, preview, actions);
+        card.append(summary, content);
         els.referenceList.appendChild(card);
       }
     }
@@ -1663,6 +1763,10 @@ INDEX_HTML = r"""<!doctype html>
         await refresh().catch(() => {});
         log(`Chat listo con ${data.model || 'modelo local'} en ${data.duration_ms || 0} ms. ${currentReasoningLabel()} (${data.reasoning_passes || 1} pasada${Number(data.reasoning_passes || 1) === 1 ? '' : 's'}).`);
       } catch (err) {
+        if (renderGracefulResearchFailure(err.data || null)) {
+          await refresh().catch(() => {});
+          return;
+        }
         addChatMessage('system', `Falló el chat: ${err.message}`);
         log(`Falló el chat: ${err.message}`);
       } finally {
@@ -1738,6 +1842,10 @@ INDEX_HTML = r"""<!doctype html>
       } catch (err) {
         if (pending && pending.isConnected) {
           pending.remove();
+        }
+        if (renderGracefulResearchFailure(err.data || null)) {
+          await refresh().catch(() => {});
+          return;
         }
         addChatMessage('system', `Falló el diálogo: ${err.message}`);
         setDialogueInfo(`Falló el diálogo: ${err.message}`);
@@ -2131,6 +2239,12 @@ INDEX_HTML = r"""<!doctype html>
         const data = await res.json();
         turnTrace.responseAt = performance.now();
         if (!res.ok || data.ok === false) {
+          const wallMs = Math.round(performance.now() - requestStartedAt);
+          const traceText = formatDialogueTrace(data, turnTrace, wallMs);
+          if (renderGracefulResearchFailure(data, traceText)) {
+            await refresh().catch(() => {});
+            return;
+          }
           const provider = data.stt_provider ? ` (${data.stt_provider})` : '';
           const detail = data.detail ? `: ${data.detail}` : '';
           throw new Error(`${data.error || 'dialogue_failed'}${provider}${detail}`);

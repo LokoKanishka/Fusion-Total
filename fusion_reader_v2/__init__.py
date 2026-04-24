@@ -4,6 +4,7 @@ from .documents import ImportedDocument, import_document_bytes, import_document_
 from .conversation import ChatResult, ConversationCore, NullChatProvider, OllamaChatProvider
 from .dialogue import AutoSTTProvider, FasterWhisperServerSTTProvider, NullSTTProvider, STTProvider, TranscriptResult, WhisperCliSTTProvider, default_stt_provider
 from .notes import ReaderNote, ReaderNotesStore
+from .openclaw_bridge import ExternalResearchBridge, ExternalResearchResult, NullExternalResearchBridge, OpenClawResearchBridge
 from .reader import Document, ReaderSession, split_text
 from .service import FusionReaderV2
 from .tts import AllTalkProvider, AudioArtifact, AudioCache, NullTTSProvider
@@ -17,13 +18,17 @@ __all__ = [
     "ChatResult",
     "ConversationCore",
     "Document",
+    "ExternalResearchBridge",
+    "ExternalResearchResult",
     "FusionReaderV2",
     "FasterWhisperServerSTTProvider",
     "ImportedDocument",
     "NullTTSProvider",
     "NullChatProvider",
+    "NullExternalResearchBridge",
     "NullSTTProvider",
     "OllamaChatProvider",
+    "OpenClawResearchBridge",
     "ReaderNote",
     "ReaderNotesStore",
     "ReaderSession",

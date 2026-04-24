@@ -1,10 +1,13 @@
+import json
 import os
+import subprocess
 import tempfile
 import time
 import unittest
 import zipfile
 from concurrent.futures import Future
 from pathlib import Path
+from unittest import mock
 
 from fusion_reader_v2 import (
     AudioArtifact,
@@ -12,12 +15,15 @@ from fusion_reader_v2 import (
     AllTalkProvider,
     AutoSTTProvider,
     ConversationCore,
+    ExternalResearchResult,
     FasterWhisperServerSTTProvider,
     FusionReaderV2,
     NullChatProvider,
+    NullExternalResearchBridge,
     NullSTTProvider,
     NullTTSProvider,
     OllamaChatProvider,
+    OpenClawResearchBridge,
     STTProvider,
     TranscriptResult,
     VoiceMetricsStore,
@@ -30,7 +36,7 @@ from fusion_reader_v2.dialogue import is_hallucinated_transcript
 from fusion_reader_v2.documents import clean_heading, repair_ocr_spacing, structured_plain_ocr_text
 
 
-def test_app(tts=None, stt=None, root: Path | None = None) -> FusionReaderV2:
+def test_app(tts=None, stt=None, root: Path | None = None, external_research=None) -> FusionReaderV2:
     root = root or Path(tempfile.mkdtemp())
     return FusionReaderV2(
         tts=tts or NullTTSProvider(),
@@ -39,6 +45,7 @@ def test_app(tts=None, stt=None, root: Path | None = None) -> FusionReaderV2:
         metrics=VoiceMetricsStore(root / "voice_metrics.jsonl"),
         notes=ReaderNotesStore(root / "notes"),
         conversation=ConversationCore(NullChatProvider("Entendido.")),
+        external_research=external_research or NullExternalResearchBridge(ExternalResearchResult(False, detail="bridge_unused")),
         session_state_path=root / "session_state.json",
     )
 
@@ -69,6 +76,73 @@ class HallucinatedTranscriptSTTProvider(STTProvider):
 
 
 class FusionReaderV2Tests(unittest.TestCase):
+    def test_openclaw_bridge_defaults_to_fusion_research_agent(self):
+        bridge = OpenClawResearchBridge(command="/bin/echo")
+        self.assertEqual(bridge.agent, "fusion-research")
+
+    def test_openclaw_bridge_humanizes_rate_limit_failures(self):
+        bridge = OpenClawResearchBridge(command="/bin/echo", timeout_seconds=3)
+        payload = {
+            "status": "ok",
+            "result": {
+                "stopReason": "error",
+                "meta": {"agentMeta": {"provider": "google", "model": "gemini-2.5-flash"}},
+                "payloads": [{"text": "⚠️ API rate limit reached. Please try again later. (429 quota)"}],
+            },
+        }
+        with mock.patch("fusion_reader_v2.openclaw_bridge.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess(["openclaw"], 0, stdout=json.dumps(payload), stderr="")
+            result = bridge.research("Buscá tesis sobre Fedro.")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.detail, "bridge_rate_limit")
+        self.assertIn("OpenClaw/Gemini", result.answer)
+        self.assertIn("rate limit", result.answer.lower())
+        self.assertIn("--agent", run.call_args.args[0])
+        self.assertIn("fusion-research", run.call_args.args[0])
+
+    def test_openclaw_bridge_retries_after_gateway_restart(self):
+        bridge = OpenClawResearchBridge(command="/bin/echo", timeout_seconds=3)
+        restart_payload = {
+            "status": "ok",
+            "result": {
+                "stopReason": "error",
+                "meta": {"agentMeta": {"provider": "google", "model": "gemini-2.5-flash"}},
+                "payloads": [{"text": "gateway closed (1012): service restart"}],
+            },
+        }
+        success_payload = {
+            "status": "ok",
+            "result": {
+                "stopReason": "completed",
+                "meta": {"agentMeta": {"provider": "google", "model": "gemini-2.5-flash"}},
+                "payloads": [
+                    {
+                        "text": json.dumps(
+                            {
+                                "ok": True,
+                                "query": "Fedro en El banquete",
+                                "summary": "Encontré una tesis relevante.",
+                                "findings": ["Una tesis doctoral lo presenta como apertura elogiosa del eros."],
+                                "sources": [{"title": "Universidad X", "url": "https://ejemplo.test/tesis", "note": "tesis doctoral"}],
+                                "suggested_followup": "",
+                                "error": "",
+                            }
+                        )
+                    }
+                ],
+            },
+        }
+        with mock.patch("fusion_reader_v2.openclaw_bridge.subprocess.run") as run, mock.patch("fusion_reader_v2.openclaw_bridge.time.sleep") as sleep:
+            run.side_effect = [
+                subprocess.CompletedProcess(["openclaw"], 0, stdout=json.dumps(restart_payload), stderr=""),
+                subprocess.CompletedProcess(["openclaw"], 0, stdout=json.dumps(success_payload), stderr=""),
+            ]
+            result = bridge.research("Buscá tesis sobre Fedro.")
+        self.assertTrue(result.ok)
+        self.assertEqual(run.call_count, 2)
+        sleep.assert_called_once()
+        self.assertIn("Encontré una tesis relevante.", result.answer)
+
     def test_split_text_keeps_short_paragraphs(self):
         chunks = split_text("Uno.\n\nDos.")
         self.assertEqual(chunks, ["Uno.", "Dos."])
@@ -1090,6 +1164,76 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("YouTube", out["answer"])
         self.assertEqual(app.laboratory_focus_status()["chunk_number"], 2)
 
+    def test_chat_explicit_external_research_uses_openclaw_bridge(self):
+        chat_provider = NullChatProvider("No deberia usarse el LLM local.")
+        bridge = NullExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="Sali a investigar afuera sobre Fedro.\nHallazgos:\n- Tesis A.\nFuentes:\n- Universidad X | https://ejemplo.test/tesis-a",
+                spoken_answer="Sali a investigar afuera sobre Fedro. Encontre una tesis relevante de la Universidad X.",
+                detail="external_research_ok",
+                provider="openclaw_bridge",
+                model="gemini-2.5-flash",
+                query="Fedro en El banquete",
+                summary="Encontre una tesis relevante de la Universidad X.",
+                findings=["Tesis A."],
+                sources=[{"title": "Universidad X", "url": "https://ejemplo.test/tesis-a", "note": "tesis doctoral"}],
+            )
+        )
+        app = test_app(external_research=bridge)
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        out = app.chat("Buscá en internet algunas tesis de doctorado sobre la postura de Fedro en El banquete.")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "gemini-2.5-flash")
+        self.assertTrue(out["external_research"])
+        self.assertEqual(len(bridge.calls), 1)
+        self.assertEqual(chat_provider.calls, [])
+        self.assertIn("Fedro", out["answer"])
+        self.assertEqual(out["external_sources"][0]["title"], "Universidad X")
+
+    def test_chat_document_search_stays_local_even_when_bridge_exists(self):
+        bridge = NullExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="No deberia activarse.",
+                provider="openclaw_bridge",
+                model="gemini-2.5-flash",
+            )
+        )
+        app = test_app(external_research=bridge)
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.add_reference_text(
+            "ref",
+            "Desgrabaciones.docx",
+            "Primera parte.\n\nAcá aparece YouTube como ejemplo pedagógico.\n\nCierre.",
+        )
+        out = app.chat("buscá dónde habla de YouTube en Desgrabaciones.docx")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "reader_navigation")
+        self.assertEqual(out["detail"], "search_matches")
+        self.assertEqual(len(bridge.calls), 0)
+
+    def test_chat_search_is_accent_insensitive(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Fedro habla con Socrates sobre eros.", prefetch=False)
+        out = app.chat("buscá dónde aparece Sócrates en el documento")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "reader_navigation")
+        self.assertEqual(out["detail"], "search_matches")
+        self.assertIn("Socrates", out["answer"])
+
+    def test_dialogue_search_no_matches_is_not_a_hard_failure(self):
+        provider = NullTTSProvider()
+        app = test_app(tts=provider)
+        app.load_text("doc", "Principal", "Fedro habla con Agatón.", prefetch=False)
+        out = app.dialogue_turn_text("buscá dónde aparece Sócrates en el documento completo")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["model"], "reader_navigation")
+        self.assertEqual(out["detail"], "search_no_matches")
+        self.assertIn("No encontré coincidencias", out["answer"])
+        self.assertTrue(provider.calls)
+
     def test_followup_chat_gets_laboratory_focus_in_context(self):
         chat_provider = NullChatProvider("Sí, sigo ese foco.")
         app = test_app()
@@ -1104,6 +1248,32 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("FOCO ACTUAL DEL LABORATORIO:", prompt)
         self.assertIn("Desgrabaciones.docx", prompt)
         self.assertIn("Dos consulta con YouTube.", prompt)
+
+    def test_dialogue_external_research_uses_bridge_and_keeps_urls_out_of_spoken_tts(self):
+        provider = NullTTSProvider()
+        bridge = NullExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="Sali a investigar afuera sobre Fedro.\nFuentes:\n- Universidad X | https://ejemplo.test/tesis-a",
+                spoken_answer="Sali a investigar afuera sobre Fedro. Encontre una tesis relevante de la Universidad X.",
+                detail="external_research_ok",
+                provider="openclaw_bridge",
+                model="gemini-2.5-flash",
+                query="Fedro en El banquete",
+                summary="Encontre una tesis relevante de la Universidad X.",
+                findings=["La tesis ve a Fedro como una entrada elogiosa al eros."],
+                sources=[{"title": "Universidad X", "url": "https://ejemplo.test/tesis-a", "note": "tesis doctoral"}],
+            )
+        )
+        app = test_app(tts=provider, external_research=bridge)
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        out = app.dialogue_turn_text("Buscá en la red tesis sobre Fedro en El banquete.")
+        self.assertTrue(out["ok"])
+        self.assertTrue(out["external_research"])
+        self.assertEqual(out["model"], "gemini-2.5-flash")
+        self.assertEqual(len(bridge.calls), 1)
+        self.assertTrue(provider.calls)
+        self.assertNotIn("https://", provider.calls[-1][0])
 
     def test_chat_compare_uses_focus_and_explicit_target(self):
         app = test_app()

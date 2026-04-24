@@ -1,6 +1,6 @@
 # Fusion Reader v2 - Estado de Continuidad
 
-Fecha: 2026-04-21, continuidad saneada
+Fecha: 2026-04-23, continuidad saneada
 
 Este archivo es la hoja corta para retomar el proyecto sin perderse. La bitacora
 detallada vive en:
@@ -157,6 +157,27 @@ Fusion=7853.
   creacion por voz/texto desde `Dialogar`.
 - Filtro anti-alucinaciones de STT para frases espurias de Whisper como
   "suscribete" o cierres de video antes de llegar al chat, notas o UI.
+- Bridge externo puntual Fusion -> OpenClaw para investigacion bajo pedido
+  explicito en el laboratorio. No toca la lectura.
+- Activacion actual del bridge: solo por pedidos claramente externos como
+  `busca en internet`, `busca en la red`, `investiga afuera` o pedidos
+  academicos explicitos tipo `busca tesis/papers/fuentes`.
+- OpenClaw se invoca como exoesqueleto externo desde `fusion_reader_v2`,
+  usando un agente dedicado `fusion-research` con `openclaw agent --agent
+  fusion-research --json`; Fusion no se convierte en OpenClaw ni delega la
+  lectura, y tampoco pisa el agente `main` que otros proyectos pueden usar.
+- El resultado externo vuelve al chat/dialogo como respuesta integrada de Lucy;
+  en `Dialogar`, la version hablada omite URLs para no arruinar la TTS.
+- El bridge vive en `fusion_reader_v2/openclaw_bridge.py` y hoy usa el runtime
+  real ya configurado en la maquina: OpenClaw con agente dedicado
+  `google/gemini-2.5-flash`, tools `web_search`/`web_fetch`, sin depender del
+  plugin Brave.
+- El bridge ahora reintenta fallos transitorios de gateway/workspace, y cuando
+  Gemini/OpenClaw devuelve cuota o `rate limit`, Lucy responde con un mensaje
+  humano en vez de exponer solo `bridge_rate_limit`.
+- La UI del laboratorio ya muestra esa respuesta humana tambien en `Dialogar`
+  por voz y por texto, en vez de tragarse el contenido util y dejar solo
+  `dialogue_failed`.
 
 ## API Actual
 
@@ -217,7 +238,7 @@ Validacion actual:
 
 ```text
 voice port isolation: OK
-v2: 95 tests OK
+v2: 109 tests OK
 ```
 
 Ultima validacion legacy registrada en memoria:
@@ -345,3 +366,42 @@ viendo que Fusion "no escucha", primero hacer recarga fuerte de la pestana
 - Seguir mejorando OCR fino en PDFs escaneados largos.
 - Cuando el usuario lo pida, preparar una limpieza de commit separando v2,
   docs, scripts GPU/STT y cambios legacy.
+
+## Cierre 2026-04-23
+
+- Se cerró la integración robusta del bridge puntual Fusion -> OpenClaw para
+  investigación externa bajo pedido explícito, sin tocar la ruta de lectura.
+- El bridge ahora usa el agente dedicado `fusion-research` en vez de `main`,
+  para no pisar otros proyectos que ya usan OpenClaw en esta máquina.
+- Se agregaron reintentos ante fallos transitorios de gateway/workspace.
+- Se humanizó el caso de cuota/rate limit: cuando Gemini/OpenClaw se limita,
+  Lucy responde con un mensaje entendible en vez de dejar solo
+  `bridge_rate_limit` o `dialogue_failed`.
+- La UI del laboratorio ya muestra esa respuesta humana tanto en chat como en
+  `Dialogar`.
+
+Validación de esta pasada:
+
+```text
+git HEAD base observado: 4c62cc9
+Fusion Reader v2 en 8010: OK
+Bridge real: agente fusion-research -> gemini-2.5-flash
+Estado real del backend externo al cierre: sigue devolviendo rate limit/cuota
+v2: 109 tests OK
+```
+
+Próximo paso natural al retomar:
+
+- volver a probar una búsqueda externa real en laboratorio
+- si Gemini/OpenClaw ya liberó cuota, validar el camino feliz completo
+- si sigue limitado, decidir si conviene agregar fallback externo opcional o
+  mantener solo el mensaje humano actual
+
+Recordatorio de continuidad importante:
+
+- al cerrar sesiones, persistir SIEMPRE en dos capas: memoria externa + archivo
+  local de continuidad
+- no asumir nunca que una búsqueda estrecha en memoria equivale a ausencia de
+  memoria
+- el problema de memoria de esta tanda no fue falta de guardado, sino una
+  recuperación anterior mal hecha que devolvió vacío

@@ -6,6 +6,7 @@ import threading
 import time
 import os
 import re
+import unicodedata
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,6 +15,7 @@ from .conversation import ConversationCore
 from .dialogue import STTProvider, default_stt_provider
 from .metrics import VoiceMetric, VoiceMetricsStore
 from .notes import ReaderNotesStore
+from .openclaw_bridge import ExternalResearchBridge, ExternalResearchResult, OpenClawResearchBridge
 from .reader import Document, ReaderSession
 from .tts import AllTalkProvider, AudioArtifact, AudioCache, TTSProvider
 
@@ -35,6 +37,7 @@ class FusionReaderV2:
         voice: VoiceSettings | None = None,
         metrics: VoiceMetricsStore | None = None,
         conversation: ConversationCore | None = None,
+        external_research: ExternalResearchBridge | None = None,
         stt: STTProvider | None = None,
         notes: ReaderNotesStore | None = None,
         prefetch_wait_seconds: float = 25.0,
@@ -48,6 +51,7 @@ class FusionReaderV2:
         self.voice = voice or VoiceSettings()
         self.metrics = metrics or VoiceMetricsStore()
         self.conversation = conversation or ConversationCore()
+        self.external_research = external_research or OpenClawResearchBridge()
         self.stt = stt or default_stt_provider()
         self.notes = notes or ReaderNotesStore()
         self.prefetch_wait_seconds = prefetch_wait_seconds
@@ -189,14 +193,16 @@ class FusionReaderV2:
         return records
 
     def _normalize_search_text(self, text: str) -> str:
-        return " ".join(str(text or "").strip().lower().replace("¿", "").replace("¡", "").split())
+        lowered = str(text or "").strip().lower().replace("¿", "").replace("¡", "")
+        plain = "".join(char for char in unicodedata.normalize("NFKD", lowered) if not unicodedata.combining(char))
+        return " ".join(plain.split())
 
     def _meaningful_search_terms(self, text: str) -> list[str]:
         stopwords = {
             "a", "al", "alguna", "alguno", "andá", "anda", "andar", "bloque", "busca", "buscá", "buscar",
-            "chunk", "con", "consulta", "de", "del", "donde", "dónde", "documento", "el", "en", "esa", "ese",
-            "esta", "este", "habla", "ir", "la", "las", "lo", "los", "main", "muestra", "mostrame", "muéstrame",
-            "para", "parte", "por", "principal", "quiero", "sección", "seccion", "sobre", "texto", "ver",
+            "chunk", "con", "consulta", "de", "del", "dice", "donde", "dónde", "documento", "el", "en", "esa", "ese",
+            "esta", "este", "exactamente", "habla", "ir", "la", "las", "lo", "los", "main", "muestra", "mostrame", "muéstrame",
+            "para", "parte", "por", "principal", "que", "qué", "quiero", "sección", "seccion", "sobre", "texto", "ver",
             "vamos", "y",
         }
         tokens = re.findall(r"[a-záéíóúñ0-9_./-]{3,}", self._normalize_search_text(text))
@@ -206,6 +212,114 @@ class FusionReaderV2:
                 continue
             out.append(token)
         return out
+
+    def _normalized_external_key(self, text: str) -> str:
+        lowered = str(text or "").lower()
+        plain = "".join(char for char in unicodedata.normalize("NFKD", lowered) if not unicodedata.combining(char))
+        return " ".join(plain.replace("¿", "").replace("¡", "").split())
+
+    def _looks_like_external_research_request(self, text: str) -> bool:
+        clean = self._normalized_external_key(text)
+        if not clean:
+            return False
+        explicit_markers = (
+            "busca en internet",
+            "buscar en internet",
+            "busca en la red",
+            "buscar en la red",
+            "busca en web",
+            "buscar en web",
+            "busca afuera",
+            "buscar afuera",
+            "investiga en internet",
+            "investigar en internet",
+            "investiga afuera",
+            "investigar afuera",
+            "trae fuentes externas",
+            "trae fuentes de internet",
+            "busca fuentes externas",
+            "googlea",
+            "googlealo",
+            "googleala",
+            "busca online",
+        )
+        if any(marker in clean for marker in explicit_markers):
+            return True
+        academic_markers = (
+            "tesis",
+            "tesis doctoral",
+            "tesis de doctorado",
+            "paper",
+            "papers",
+            "articulo",
+            "articulos",
+            "fuente",
+            "fuentes",
+            "repositorio",
+            "repositorios",
+            "universidad",
+            "universidades",
+            "bibliografia",
+            "journal",
+            "revista academica",
+            "revistas academicas",
+        )
+        leading_verbs = (
+            "busca",
+            "buscar",
+            "buscame",
+            "buscame",
+            "investiga",
+            "investigar",
+            "trae",
+            "traer",
+            "revisa",
+            "revisa",
+        )
+        if any(clean.startswith(verb + " ") for verb in leading_verbs) and any(marker in clean for marker in academic_markers):
+            return True
+        if ("trae" in clean or "busca" in clean or "investiga" in clean) and ("fuentes" in clean or "tesis" in clean or "papers" in clean or "articulos" in clean):
+            return True
+        return False
+
+    def _external_research_snapshot(self) -> dict:
+        snapshot = self.reader_snapshot()
+        with self._chat_lock:
+            snapshot["laboratory_history"] = list(self._chat_history)
+        with self._dialogue_lock:
+            snapshot["dialogue_history"] = list(self._dialogue_history)
+        return snapshot
+
+    def _run_external_research(self, message: str) -> ExternalResearchResult:
+        return self.external_research.research(message, snapshot=self._external_research_snapshot())
+
+    def _external_research_chat_response(self, message: str, started: float) -> dict | None:
+        if not self._looks_like_external_research_request(message):
+            return None
+        snapshot = self.session.status()
+        result = self._run_external_research(message)
+        answer = str(result.answer or "").strip()
+        if result.ok:
+            self._remember_chat_turn(message, answer)
+        return {
+            "ok": result.ok,
+            "answer": answer,
+            "model": result.model or "openclaw_bridge",
+            "detail": result.detail,
+            "duration_ms": result.duration_ms or int((time.perf_counter() - started) * 1000),
+            "reasoning_mode": self.reasoning_mode,
+            "reasoning_passes": 1,
+            "provider": result.provider or "openclaw_bridge",
+            "external_research": True,
+            "external_query": result.query or str(message or "").strip(),
+            "external_summary": result.summary,
+            "external_findings": list(result.findings),
+            "external_sources": list(result.sources),
+            "doc_id": snapshot.get("doc_id") or "",
+            "title": snapshot.get("title") or "",
+            "current": snapshot.get("current") or 0,
+            "total": snapshot.get("total") or 0,
+        }
 
     def _resolve_document_record(self, selector: str = "") -> dict | None:
         clean_selector = self._normalize_search_text(selector)
@@ -1007,6 +1121,15 @@ class FusionReaderV2:
             return excerpt
         return excerpt[:max_chars].rstrip() + "..."
 
+    def _search_no_matches_answer(self, query: str, dialogue: bool = False) -> str:
+        clean_query = str(query or "").strip() or "eso"
+        if dialogue:
+            return f"No encontré coincidencias para {clean_query} en los documentos cargados. Si querés, probamos otra forma de nombrarlo o busco por una frase más larga."
+        return (
+            f"No encontré coincidencias para '{clean_query}' en los documentos cargados.\n\n"
+            "Probá con otra forma de nombrarlo, sinónimos, o una frase más larga."
+        )
+
     def _is_reflective_navigation_request(self, text: str) -> bool:
         clean = " ".join(str(text or "").strip().replace("¿", "").replace("¡", "").split()).lower()
         if not clean:
@@ -1098,11 +1221,12 @@ class FusionReaderV2:
             matches = self._search_chunk_matches(str(plan.get("search_query") or ""), selector=selector, limit=5)
             if not matches:
                 return {
-                    "ok": False,
-                    "answer": "",
+                    "ok": True,
+                    "answer": self._search_no_matches_answer(str(plan.get("search_query") or ""), dialogue=dialogue),
                     "model": "reader_navigation",
                     "detail": "search_no_matches",
-                    "error": "search_no_matches",
+                    "error": "",
+                    "matches": [],
                 }
             focus_record = self._resolve_document_record(matches[0].get("doc_id") or "") or self._resolve_document_record(matches[0].get("title") or "")
             if not focus_record:
@@ -1198,6 +1322,9 @@ class FusionReaderV2:
             if comparison.get("ok"):
                 self._remember_chat_turn(message, comparison.get("answer") or "")
             return comparison
+        external = self._external_research_chat_response(message, started)
+        if external is not None:
+            return external
         navigation = self._handle_navigation_intent(message, dialogue=False)
         if navigation is not None:
             navigation["duration_ms"] = int((time.perf_counter() - started) * 1000)
@@ -1530,6 +1657,68 @@ class FusionReaderV2:
                 "reasoning_degraded": reasoning["degraded"],
             }
             self._append_dialogue_trace({**trace_event, "ok": True, "detail": str(out.get("detail") or ""), "tts_ok": bool(artifact.ok), "duration_ms": out["duration_ms"]})
+            return out
+        if self._looks_like_external_research_request(text):
+            research_started = time.perf_counter()
+            result = self._run_external_research(text)
+            research_ms = result.duration_ms or int((time.perf_counter() - research_started) * 1000)
+            spoken_answer = self._shorten_dialogue_answer(str(result.spoken_answer or result.answer or "").strip())
+            if self.fast_dialogue_ack:
+                artifact = AudioArtifact(True, provider="text_ack", detail="fast_dialogue_ack")
+                tts_ms = 0
+            else:
+                tts_started = time.perf_counter()
+                artifact = self._synthesize_cached(spoken_answer)
+                tts_ms = artifact.duration_ms or int((time.perf_counter() - tts_started) * 1000)
+            if result.ok and artifact.ok:
+                with self._dialogue_lock:
+                    self._dialogue_history.append({"role": "user", "content": text})
+                    self._dialogue_history.append({"role": "assistant", "content": str(result.answer or "").strip()})
+                    self._dialogue_history = self._dialogue_history[-16:]
+            out = {
+                "ok": bool(result.ok and artifact.ok),
+                "transcript": text,
+                "answer": str(result.answer or "").strip(),
+                "audio": str(artifact.path or ""),
+                "cached": artifact.cached,
+                "provider": artifact.provider,
+                "detail": result.detail or artifact.detail,
+                "model": result.model or "openclaw_bridge",
+                "stt_ms": 0,
+                "chat_ms": research_ms,
+                "tts_ms": tts_ms,
+                "trace": {
+                    "intent_ms": intent_ms,
+                    "external_ms": research_ms,
+                    "tts_ms": tts_ms,
+                    "server_text_total_ms": int((time.perf_counter() - started) * 1000),
+                },
+                "duration_ms": int((time.perf_counter() - started) * 1000),
+                "voice_ok": artifact.ok,
+                "reasoning_mode": self.reasoning_mode,
+                "reasoning_passes": 1,
+                "reasoning_mode_requested": reasoning["requested"],
+                "reasoning_mode_applied": reasoning["applied"],
+                "reasoning_degraded": reasoning["degraded"],
+                "external_research": True,
+                "external_query": result.query or text,
+                "external_summary": result.summary,
+                "external_findings": list(result.findings),
+                "external_sources": list(result.sources),
+            }
+            self._append_dialogue_trace(
+                {
+                    **trace_event,
+                    "ok": bool(out["ok"]),
+                    "detail": str(out.get("detail") or ""),
+                    "external_research": True,
+                    "external_provider": str(result.provider or ""),
+                    "external_model": str(result.model or ""),
+                    "external_ms": research_ms,
+                    "tts_ok": bool(artifact.ok),
+                    "duration_ms": out["duration_ms"],
+                }
+            )
             return out
         navigation = self._handle_navigation_intent(text, dialogue=True)
         if navigation is not None:
