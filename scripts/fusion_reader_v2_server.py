@@ -49,6 +49,7 @@ INDEX_HTML = r"""<!doctype html>
       --accent: #21d07a;
       --accent-2: #38c6d8;
       --danger: #ff7474;
+      --warn: #ffc857;
     }
     * { box-sizing: border-box; }
     body {
@@ -406,6 +407,7 @@ INDEX_HTML = r"""<!doctype html>
       flex: 0 0 auto;
     }
     .dot.ok { background: var(--accent); }
+    .dot.warn { background: var(--warn); }
     .reader {
       overflow: auto;
       padding: 30px clamp(18px, 4vw, 56px) 14px;
@@ -1095,13 +1097,32 @@ INDEX_HTML = r"""<!doctype html>
       els.jumpInput.value = data.current || 1;
       els.chunk.textContent = data.text || 'Subí un TXT o MD para empezar.';
       els.chunk.classList.toggle('empty', !data.text);
-      const ttsOk = Boolean(data.tts && data.tts.ok);
+      const ttsState = describeTtsStatus(data);
+      const ttsOk = ttsState.state !== 'down';
       els.ttsDot.classList.toggle('ok', ttsOk);
-      els.ttsStatus.textContent = ttsOk ? 'TTS listo' : 'TTS no disponible';
+      els.ttsDot.classList.toggle('warn', ttsState.state === 'fallback');
+      els.ttsStatus.textContent = ttsState.label;
       renderPrepareStatus(data.prepare);
       if (shouldRefreshNotes) {
         refreshNotes().catch(() => {});
       }
+    }
+
+    function describeTtsStatus(data) {
+      const services = data && data.services && typeof data.services === 'object' ? data.services : {};
+      const tts = services.tts && typeof services.tts === 'object' ? services.tts : data && data.tts || {};
+      const ok = Boolean(tts && (tts.ready || tts.ok));
+      if (!ok) {
+        return { state: 'down', label: 'TTS no disponible' };
+      }
+      const url = String(tts.url || '');
+      if (url.includes(':7853')) {
+        return { state: 'gpu', label: 'TTS GPU 7853 listo' };
+      }
+      if (url.includes(':7851')) {
+        return { state: 'fallback', label: 'TTS CPU 7851 fallback - voz mas lenta' };
+      }
+      return { state: 'ready', label: 'TTS listo' };
     }
 
     function currentReasoningMode() {

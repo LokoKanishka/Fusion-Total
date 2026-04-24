@@ -37,6 +37,16 @@ Los endpoints de Fusion ahora exponen un bloque `services` para leer rápido:
 - `dialogue_reasoning.applied_mode`
 - `dialogue_reasoning.degraded`
 
+## Indicador TTS en la UI
+
+La etiqueta superior de voz distingue la ruta de síntesis:
+
+- `TTS GPU 7853 listo`: ruta preferida, baja latencia.
+- `TTS CPU 7851 fallback - voz mas lenta`: modo degradado; suele ocurrir con convivencia GPU/juego activo y puede subir mucho la espera de Dialogar.
+- `TTS no disponible`: no hay voz utilizable.
+
+Si Dialogar parece lento, mirar primero esa etiqueta o `services.tts.url` en `/api/status`.
+
 ## Verify
 
 ```bash

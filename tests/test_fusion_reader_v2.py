@@ -446,6 +446,18 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn('owner valido', text)
         self.assertNotIn("127.0.0.1:7852", text)
 
+    def test_server_ui_surfaces_tts_gpu_and_cpu_fallback_modes(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("describeTtsStatus", text)
+        self.assertIn("TTS GPU 7853 listo", text)
+        self.assertIn("TTS CPU 7851 fallback - voz mas lenta", text)
+        self.assertIn("TTS no disponible", text)
+        self.assertIn("TTS listo", text)
+        self.assertIn("services.tts", text)
+        self.assertNotIn(":7854", text)
+        self.assertNotIn(":7852", text)
+
     def test_voice_port_isolation_verifier_covers_doctora_memory_sources(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "verify_voice_port_isolation.sh").read_text(encoding="utf-8")
