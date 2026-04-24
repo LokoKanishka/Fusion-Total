@@ -2,6 +2,14 @@
 
 Fecha: 2026-04-17
 
+Nota 2026-04-24:
+
+```text
+Este archivo conserva mediciones y decisiones de rendimiento históricas.
+La validación operativa vigente ya no se registra acá: ver
+FUSION_READER_V2_STATE.md y docs/OPERATIONS.md.
+```
+
 Este documento resume el diagnostico y la solucion aplicada para reducir el
 tiempo entre navegar a un bloque y escucharlo con voz neural.
 
@@ -192,18 +200,6 @@ Fallback CPU:
 ./scripts/start_fusion_reader_v2.sh
 ```
 
-## Validacion
-
-```bash
-python3 -m unittest tests.test_fusion_reader_v2 -v
-```
-
-Resultado observado:
-
-```text
-55 tests OK
-```
-
 ## Estado recomendado
 
 Para lectura diaria en esta maquina:
@@ -256,11 +252,9 @@ POST /api/prepare/start -> generated=2, percent=100
 POST /api/read -> provider=cache, cached=true, ready_ms=0
 ```
 
-Validacion:
-
-```text
-55 tests OK
-```
+Validacion historica: este documento conserva resultados de la etapa en la que
+la suite v2 todavía estaba en crecimiento. No usar sus conteos como fuente
+canónica actual.
 
 ## Proximo paso de rendimiento fino
 

@@ -1,5 +1,12 @@
 # Fusion Reader v2 - Auditoria de Orden
 
+Nota 2026-04-24:
+
+```text
+Archivo archivado. Conserva una auditoría anterior de orden del repo y ya no es
+fuente viva de estado operativo.
+```
+
 Fecha: 2026-04-19
 
 Nota 2026-04-21:

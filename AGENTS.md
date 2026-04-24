@@ -4,11 +4,14 @@
 
 This repo is a **voice-first conversational reader**.
 
-The agent working here is not a general assistant, browser agent, desktop automation tool, YouTube integrator, or workflow orchestrator. It is a specialist in building a neural-voice reading product.
+The active product is not a general assistant, browser agent, desktop
+automation tool, YouTube integrator, or workflow orchestrator. It is a
+specialist in building a neural-voice reading product.
 
 ## North Star
 
-The product succeeds only if reading by voice feels human, clear, comfortable, and continuous.
+The product succeeds only if reading by voice feels human, clear, comfortable,
+and continuous.
 
 Everything else exists to support that:
 
@@ -21,29 +24,30 @@ Everything else exists to support that:
 - conversation about the current reading
 - TTS/STT
 
-If voice quality or voice latency is bad, fix that before polishing secondary features.
+If voice quality or voice latency is bad, fix that before polishing secondary
+features.
 
 ## Current Architecture Direction
 
-The old prototype remains as a lab and compatibility reference.
+The old prototype remains as lab and compatibility reference.
 
-The new product is built in parallel under:
+The active product lives under:
 
 ```text
 fusion_reader_v2/
 ```
 
-The root blueprint is:
+Read these first before architectural changes:
 
-```text
-FUSION_READER_V2_BLUEPRINT.md
-```
-
-Always read that file before making architectural changes.
+1. `AGENTS.md`
+2. `FUSION_READER_V2_BLUEPRINT.md`
+3. `FUSION_READER_V2_STATE.md`
+4. `docs/ARCHITECTURE.md`
+5. `docs/OPENCLAW_SEARXNG_COEXISTENCE.md`
 
 ## Allowed Product Operations
 
-- Load TXT/MD/PDF reading documents.
+- Load TXT/MD/PDF/DOCX/ODT reading documents.
 - Split text into natural voice chunks.
 - Read, pause, resume, repeat, navigate, bookmark.
 - Generate neural TTS.
@@ -51,18 +55,43 @@ Always read that file before making architectural changes.
 - Prefetch upcoming chunks.
 - List and test voices.
 - Accept voice/STT commands for reader control.
-- Chat only about the active document, current chunk, recent reading context, or notes.
+- Chat only about the active document, current chunk, recent reading context,
+  notes, or explicit laboratory context.
 - Route local/cloud models only for reader conversations.
+- Run explicit external research only when the user clearly asks to search
+  outside the reader, using Fusion's isolated provider path.
 
 ## Prohibited Product Operations
 
-- No browser automation.
-- No YouTube/web integration.
+- No browser automation as a product feature.
+- No YouTube integration as a product feature.
 - No n8n workflows.
 - No desktop file operations as product features.
 - No general assistant tasks.
 - No unrelated tools or browsing inside the product.
 - No SillyTavern full transplant.
+- No fixes to Fusion by mutating Antigravity, Doctora, Telegram, or OpenClaw
+  `main`.
+- No Brave/global `web_search` changes as a shortcut for Fusion.
+
+## External Research Boundary
+
+Fusion has a narrow exception for web research:
+
+```text
+default external provider: auto
+auto order: SearXNG local -> OpenClaw agent fusion-research fallback
+```
+
+Rules:
+
+- External research only activates under explicit requests like
+  `busca en internet`, `investiga afuera`, `busca fuentes`, `busca tesis`.
+- Reading must remain isolated from that lane.
+- `SearXNG` local is the preferred path.
+- `OpenClaw` fallback must use `fusion-research`, never `main`.
+- Never fix Fusion by changing Brave or global OpenClaw web search.
+- Antigravity/Doctora/Telegram is another system and must not be touched.
 
 ## Voice Engine
 
@@ -99,7 +128,8 @@ fixing GPU voice. Use the isolated GPU environment documented in the blueprint.
 
 - Prefer new code in `fusion_reader_v2/`.
 - Keep the monolith/prototype working until v2 surpasses it.
-- Use provider contracts for TTS. Fusion must depend on its own `TTSProvider`, not on SillyTavern internals.
+- Use provider contracts for TTS. Fusion must depend on its own `TTSProvider`,
+  not on SillyTavern internals.
 - Cache audio by text + voice + language.
 - Prefetch next chunk while current audio plays.
 - Keep chunks natural for spoken reading, not arbitrary byte slices.
@@ -112,10 +142,11 @@ When resuming work:
 
 1. Read this file.
 2. Read `FUSION_READER_V2_BLUEPRINT.md`.
-3. Check memory if available.
+3. Read `FUSION_READER_V2_STATE.md`.
 4. Run `git status --short`.
 5. Do not revert user changes.
-6. Continue v2 under `fusion_reader_v2/` unless the user explicitly asks to fix the old prototype.
+6. Continue v2 under `fusion_reader_v2/` unless the user explicitly asks to fix
+   the old prototype.
 
 ## Testing
 

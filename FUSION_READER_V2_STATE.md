@@ -1,407 +1,100 @@
-# Fusion Reader v2 - Estado de Continuidad
+# Fusion Reader v2 — Estado de Continuidad
 
-Fecha: 2026-04-23, continuidad saneada
+Fecha: 2026-04-24
 
-Este archivo es la hoja corta para retomar el proyecto sin perderse. La bitacora
-detallada vive en:
+Esta es la hoja corta para retomar el proyecto sin perderse. La historia larga
+vive en `docs/HISTORY.md` y en los documentos históricos de diseño.
 
-- `FUSION_READER_V2_BLUEPRINT.md`
-- `FUSION_READER_V2_PERFORMANCE.md`
-- `FUSION_READER_V2_DIALOGUE.md`
-- `FUSION_READER_V2_PERSONALITY_WORKBOOK.md`
-- `task.md`
+## Norte
 
-## Norte del Producto
+Fusion Reader v2 es un lector conversacional por voz neural.
 
-Fusion Reader v2 es un lector conversacional por voz neural. No es asistente
-general, navegador, automatizador de escritorio ni orquestador de herramientas.
-
-La ruta critica de lectura debe quedar siempre separada del LLM:
+La ruta crítica de lectura debe quedar separada del LLM:
 
 ```text
 Lectura:
 Documento -> Chunker -> TTS -> Audio -> Navegador
 
-Dialogo:
-Microfono -> STT -> ConversationCore/Ollama -> TTS -> Navegador
+Diálogo:
+Micrófono -> STT -> ConversationCore/Ollama -> TTS -> Navegador
 ```
 
-Si STT, Ollama o el dialogo fallan, `Leer` debe seguir funcionando.
+Si STT, Ollama o el diálogo fallan, `Leer` debe seguir funcionando.
 
-## Estado Actual
+## Estado actual
 
-- Camino principal: `fusion_reader_v2/`.
-- Prototipo viejo: `scripts/openclaw_direct_chat.py`, queda como laboratorio.
-- Servidor v2: `scripts/fusion_reader_v2_server.py`.
-- UI: `http://127.0.0.1:8010/`.
-- TTS preferido: AllTalk/XTTS GPU propio de Fusion en `http://127.0.0.1:7853`.
-- TTS fallback: AllTalk/XTTS CPU en `http://127.0.0.1:7851`.
-- TTS de Doctora Lucy/Antigravity: `http://127.0.0.1:7854`; Fusion no debe
-  usarlo ni reiniciarlo.
-- Voz default: `female_03.wav`.
-- Lectura, dialogo y notas usan AllTalk/XTTS por defecto; la voz local del
-  navegador (`text_ack`) queda solo como opt-in con `FUSION_READER_FAST_*_ACK=1`.
-- Idioma default: `es`.
-- STT preferido para `Dialogar`: faster-whisper server en `http://127.0.0.1:8021`.
-- STT fallback: `whisper` CLI; si Fusion arranca con `PATH` reducido, se usa
-  `/home/linuxbrew/.linuxbrew/bin/whisper` cuando existe.
-- Chat/dialogo: Ollama `qwen3:14b-q8_0` en `http://127.0.0.1:11434`.
-- El modelo `qwen3:14b-q8_0` esta descargado en Ollama y queda como default
-  por calidad de lectura filosofica y manejo de texto largo; `qwen3:14b` queda
-  como opcion mas rapida si se necesita menor latencia.
-- Chat/dialogo ahora expone tres modos persistentes de razonamiento en la UI:
-  `Normal`, `Pensamiento` y `Pensamiento supremo`.
-- Default actual de producto: `Pensamiento`, o sea una sola pasada con
-  `think:true`.
-- `Pensamiento supremo` hace tres pasadas internas
-  (borrador -> revision -> respuesta final) y queda pensado para laboratorio
-  profundo, no para la ruta critica de lectura.
-- Excepcion de convivencia: si el guardian GPU detecta conflicto con juego y
-  activa `FUSION_READER_GAME_COEXISTENCE_ACTIVE=1`, Fusion baja por defecto a
-  `Normal` con menor presupuesto para no pelear por latencia.
-- Modo academico/acceso directo: usa `qwen3:14b-q8_0`,
-  `FUSION_READER_CHAT_THINK=1` y
-  `FUSION_READER_CHAT_NUM_PREDICT=1536`.
-- Entorno GPU RTX 5090: `/home/lucy-ubuntu/fusion_reader_envs/alltalk_gpu_5090_py311`.
+- Camino principal: `fusion_reader_v2/`
+- Prototipo legacy: `scripts/openclaw_direct_chat.py`
+- UI/API v2: `http://127.0.0.1:8010`
+- TTS principal Fusion: `http://127.0.0.1:7853`
+- TTS fallback CPU: `http://127.0.0.1:7851`
+- TTS Doctora/Antigravity: `http://127.0.0.1:7854`
+- STT principal: `http://127.0.0.1:8021`
+- LLM local: Ollama `qwen3:14b-q8_0`
+- Voz default: `female_03.wav`
+- Idioma default: `es`
 
-Comandos de arranque recomendados:
+## Fronteras de voz
+
+- Fusion no usa `7852`.
+- Fusion no usa `7854`.
+- Fusion solo confía en `7853` si existe
+  `runtime/fusion_reader_v2/tts_owner.json` con `owner=fusion_reader_v2`.
+- `verify_voice_port_isolation.sh` es la frontera operativa.
+
+## Investigación externa vigente
+
+Estado actual:
+
+```text
+provider default: auto
+auto order: SearXNG local -> OpenClaw fusion-research fallback
+```
+
+Reglas:
+
+- solo se activa bajo pedido explícito externo;
+- la lectura no depende de esa vía;
+- `SearXNG` local es el camino preferido;
+- `OpenClaw` fallback usa `fusion-research`, nunca `main`;
+- no usar Brave/global `web_search` para arreglar Fusion;
+- Antigravity/Telegram usa `OpenClaw main` y no debe tocarse.
+
+## Validación vigente
+
+```text
+tests.test_fusion_reader_v2: 119 OK
+verify_voice_port_isolation.sh: OK
+legacy reader safety: 35 tests OK
+```
+
+Último commit relevante:
+
+```text
+3a46eab Add isolated SearXNG research bridge for Fusion
+```
+
+## Arranque recomendado
 
 ```bash
 ./scripts/start_reader_neural_tts_gpu_5090.sh
 ./scripts/start_fusion_reader_v2_stt.sh
 ./scripts/start_fusion_reader_v2.sh
-# O, para lectura filosofica con modelo Q8 + thinking:
-./scripts/start_fusion_reader_v2_academic.sh
 ```
 
-`start_fusion_reader_v2.sh` detecta automaticamente AllTalk GPU de Fusion en
-`7853`; si no esta disponible, usa el fallback CPU en `7851`.
+## Pendientes reales
 
-Decision de convivencia del 2026-04-18:
+- probar `Dialogar` con micrófono real en más escenarios;
+- ajustar fino VAD/barge-in según ruido ambiente y eco;
+- afinar warmup/keep-hot de AllTalk GPU;
+- mejorar OCR fino para PDFs escaneados largos;
+- subir calidad del filtrado/ranking académico en la ruta `SearXNG` de Fusion.
 
-```text
-Fusion no autodetecta ni reclama 7852.
-7852 puede pertenecer a otros agentes locales y responder Ready sin ser el TTS
-aislado de Fusion.
-Fusion tampoco confia ciegamente en cualquier servicio que responda Ready en
-`7853`: el lanzador exige `runtime/fusion_reader_v2/tts_owner.json` con
-`owner=fusion_reader_v2` antes de usarlo como GPU TTS propio.
-```
+## Fuentes vivas
 
-Decision de convivencia reforzada del 2026-04-19:
-
-```text
-AllTalkProvider rechaza en runtime `7854` (Doctora Lucy) y `7852`
-(historico/no asignado), incluso si llegan por FUSION_READER_ALLTALK_URL.
-Doctora Lucy fue actualizada en boot.md, VOICE_PORTS.md, AGENTS/GEMINI,
-SQLite boveda y bunker JSONL para que su fuente viva diga Lucy=7854 y
-Fusion=7853.
-```
-
-## Capacidades Implementadas
-
-- Carga de documentos desde navegador.
-- Importacion TXT, MD, PDF, DOCX, ODT, RTF, HTML y formatos de oficina via
-  LibreOffice cuando aplica.
-- Un documento principal de lectura y multiples documentos de consulta para el
-  laboratorio, sin romper la ruta critica de `/api/read`.
-- PDF con `pdftotext`; si no hay texto suficiente, OCR con Tesseract `spa+eng`.
-- OCR para PDFs escaneados con paginas, encabezados y columnas.
-- Texto convertido guardado en `runtime/fusion_reader_v2/imported_texts/`.
-- Chunks naturales para lectura hablada, default actual 420 caracteres.
-- TTS por contrato propio (`TTSProvider`), no dependiente de SillyTavern.
-- Cache de audio por texto + voz + idioma en `runtime/fusion_reader_v2/audio_cache/`.
-- Prefetch configurable alrededor del cursor, default `FUSION_READER_PREFETCH_AHEAD=3`.
-- Modo continuo: al terminar un audio, avanza y lee el siguiente bloque.
-- Preparar documento: cachea todos los chunks en background.
-- Metricas de voz por evento, proveedor, documento y chunk lento.
-- Chat textual de laboratorio separado de `/api/read`.
-- Selector persistente de razonamiento en laboratorio con `Normal`,
-  `Pensamiento` y `Pensamiento supremo`.
-- `Dialogar` ahora guarda trazas persistentes en
-  `runtime/fusion_reader_v2/dialogue_trace.jsonl` con modo pedido, modo
-  aplicado, degradacion, STT, chat y TTS por turno.
-- Si el usuario deja el modo global en `Pensamiento supremo`, `Dialogar` por
-  voz lo degrada a `Pensamiento` por defecto para cuidar latencia oral; el chat
-  textual puede seguir usando `Supremo` real.
-- La personalidad de `Normal` ya tiene una primera implementacion activa en
-  `ConversationCore`: Lucy Cunningham, companera humana de lectura, intima,
-  filosofica, calida, directa, problematizadora y con inspiracion en la actitud
-  personal de Borges mas que en la imitacion de su escritura.
-- La personalidad de `Pensamiento` ya tiene una primera implementacion activa en
-  `ConversationCore`: Lucy Cunningham en version mas sobria, exigente y
-  filosofico-tecnica, con prioridad por validez, genealogia conceptual,
-  reconstruccion argumental, contradicciones e hipotesis de lectura.
-- Por decision explicita de producto, `Pensamiento supremo` comparte
-  exactamente la misma personalidad que `Pensamiento`; la diferencia entre
-  ambos queda solo en la profundidad del procesamiento, no en identidad,
-  tono ni postura intelectual.
-- El laboratorio ahora tiene un `Modo libre` persistente, separado del modo de
-  razonamiento: cuando esta activo, Lucy puede conversar sobre temas no
-  anclados al documento y usar texto/foco/consultas como contexto opcional en
-  vez de obligacion. La lectura principal no cambia.
-- Se corrigio una regresion importante en `Dialogar`: pedidos como "pensar
-  filosoficamente sobre el bloque 34" estaban cayendo en la ruta
-  `focus_block` de navegacion y devolvian casi una lectura del bloque. Ahora
-  esos pedidos siguen fijando el foco del laboratorio, pero continúan hacia
-  Lucy/LLM para responder interpretativamente en vez de quedar atrapados en el
-  atajo de navegacion.
-- Modo `Dialogar`: microfono del navegador, STT, Qwen/Ollama, respuesta por voz,
-  y barge-in inicial desde el navegador.
-- STT persistente GPU con faster-whisper para evitar el costo de cargar Whisper
-  por cada frase.
-- Modo `Dialogar` estabilizado con pre-roll de microfono, silencio mas tolerante,
-  captura PCM en navegador y empaquetado `audio/wav` directo para STT, prioridad
-  sobre `Preparar documento` y respuestas habladas mas breves.
-- Notas por documento/bloque con panel compacto, renombrado, edicion, borrado y
-  creacion por voz/texto desde `Dialogar`.
-- Filtro anti-alucinaciones de STT para frases espurias de Whisper como
-  "suscribete" o cierres de video antes de llegar al chat, notas o UI.
-- Bridge externo puntual Fusion -> OpenClaw para investigacion bajo pedido
-  explicito en el laboratorio. No toca la lectura.
-- Activacion actual del bridge: solo por pedidos claramente externos como
-  `busca en internet`, `busca en la red`, `investiga afuera` o pedidos
-  academicos explicitos tipo `busca tesis/papers/fuentes`.
-- OpenClaw se invoca como exoesqueleto externo desde `fusion_reader_v2`,
-  usando un agente dedicado `fusion-research` con `openclaw agent --agent
-  fusion-research --json`; Fusion no se convierte en OpenClaw ni delega la
-  lectura, y tampoco pisa el agente `main` que otros proyectos pueden usar.
-- El resultado externo vuelve al chat/dialogo como respuesta integrada de Lucy;
-  en `Dialogar`, la version hablada omite URLs para no arruinar la TTS.
-- El bridge vive en `fusion_reader_v2/openclaw_bridge.py` y hoy usa el runtime
-  real ya configurado en la maquina: OpenClaw con agente dedicado
-  `google/gemini-2.5-flash`, tools `web_search`/`web_fetch`, sin depender del
-  plugin Brave.
-- El bridge ahora reintenta fallos transitorios de gateway/workspace, y cuando
-  Gemini/OpenClaw devuelve cuota o `rate limit`, Lucy responde con un mensaje
-  humano en vez de exponer solo `bridge_rate_limit`.
-- La UI del laboratorio ya muestra esa respuesta humana tambien en `Dialogar`
-  por voz y por texto, en vez de tragarse el contenido util y dejar solo
-  `dialogue_failed`.
-
-## API Actual
-
-```text
-GET  /
-GET  /health
-GET  /api/status
-GET  /api/library
-GET  /api/voice/voices
-GET  /api/voice/metrics
-GET  /api/voice/metrics/summary
-GET  /api/voice/metrics/documents
-GET  /api/voice/metrics/chunks
-GET  /api/import-status?id=<job_id>
-GET  /api/prepare/status
-GET  /api/notes
-GET  /api/dialogue/status
-GET  /audio/<archivo.wav>
-HEAD /audio/<archivo.wav>
-
-POST /api/load
-POST /api/import
-POST /api/import-file
-POST /api/import-file/start
-POST /api/read
-POST /api/next
-POST /api/previous
-POST /api/jump
-POST /api/prepare/start
-POST /api/prepare/cancel
-POST /api/notes/create
-POST /api/notes/update
-POST /api/notes/rename
-POST /api/notes/delete
-POST /api/chat
-POST /api/dialogue/turn
-POST /api/dialogue/reset
-POST /api/reasoning/mode
-POST /api/voice/test
-```
-
-Para documentos grandes, la UI debe usar `POST /api/import-file/start` y luego
-consultar `GET /api/import-status?id=<job_id>` para mostrar progreso.
-
-## Verificacion Rapida
-
-```bash
-curl -s http://127.0.0.1:7853/api/ready
-curl -s http://127.0.0.1:8021/health
-curl -s http://127.0.0.1:8010/api/status
-curl -s http://127.0.0.1:8010/api/dialogue/status
-./scripts/verify_voice_port_isolation.sh
-python3 -m unittest tests.test_fusion_reader_v2 -v
-python3 -m unittest tests.test_reader_mode tests.test_reader_library tests.test_reader_command_stress -v
-```
-
-Validacion actual:
-
-```text
-voice port isolation: OK
-v2: 109 tests OK
-```
-
-Ultima validacion legacy registrada en memoria:
-
-```text
-legacy reader safety: 35 tests OK
-```
-
-Estado operativo al cierre:
-
-```text
-Fusion Reader v2: http://127.0.0.1:8010
-AllTalk GPU:      http://127.0.0.1:7853
-STT server GPU:   http://127.0.0.1:8021
-Ollama:           http://127.0.0.1:11434
-Documento activo: Análisis Filosófico de _“El giro estadístico del logos”_ y su Audio Complementario
-Bloque activo:    11 de 387
-Preparacion:      idle; ventana de prefetch activa alrededor del cursor
-```
-
-El fallback CPU `7851` puede quedar vivo, pero Fusion debe preferir su GPU
-aislada solo en `7853`.
-
-Nota de reparacion 2026-04-20: si la UI muestra `TTS no disponible` con
-`tts_owner_pid_stale`, verificar `runtime/fusion_reader_v2/tts_owner.json` contra
-el PID real de `7853`. La reparacion limpia es reiniciar AllTalk GPU con
-`./scripts/start_reader_neural_tts_gpu_5090.sh`, no desactivar el chequeo de
-dueno. En esta pasada se recupero `7853` con owner valido, STT `8021`, Fusion
-`8010`, y se restauro el documento activo anterior.
-
-Nota de red local 2026-04-20: esta maquina tenia cable `eno1` y Wi-Fi `wlp9s0`
-activos a la vez en la misma LAN `192.168.0.0/24`, con conflicto ARP/IP y rutas
-alternando. Se dejo `Perfil 1` por cable como ruta principal (`metric 50`) y el
-Wi-Fi `Fibertel Wifi125 2.4 Ghz` como respaldo (`metric 800`). Para que el usuario
-no dependa de comandos, se creo un guardian local:
-`/home/lucy-ubuntu/.local/bin/fusion-network-guardian.sh`, con autostart en
-`/home/lucy-ubuntu/.config/autostart/fusion-network-guardian.desktop`. El guardian
-mantiene Wi-Fi apagado mientras el cable tiene internet y lo prende/conecta como
-backup si el cable falla.
-
-Nota de modelo 2026-04-20: `qwen3:14b-q8_0` esta descargado en Ollama y queda
-como modelo default de Fusion por calidad en lectura filosofica y manejo de texto.
-`scripts/start_fusion_reader_v2.sh` exporta ese modelo si no hay override,
-`fusion_reader_v2/conversation.py` lo usa como fallback interno, y el acceso
-directo `/home/lucy-ubuntu/Escritorio/fusion.desktop` pasa por
-`/home/lucy-ubuntu/.local/bin/fusion-reader-launcher`, que abre Fusion en modo
-academico con `FUSION_READER_CHAT_THINK=1`, `NUM_PREDICT=1536` y temperatura
-`0.35`. Validacion de esta pasada: modelo cargado en Ollama `100% GPU`, contexto
-`32768`, keep_alive aproximado 30 minutos.
-
-Nota de laboratorio 2026-04-20: el chat textual y `Dialogar` por voz ya no
-quedan ciegos al material pegado en el propio chat cuando no hay documento
-cargado o cuando el usuario pregunta "ves lo que acabo de poner". `FusionReaderV2.chat`
-conserva un historial reciente separado de la ruta de lectura y `dialogue_turn_text`
-lo inyecta en el snapshot oral; `ConversationCore` lo entrega como
-`MATERIAL RECIENTE DEL LABORATORIO`. El documento activo sigue siendo una fuente,
-pero no la unica fuente del laboratorio. Validacion: prueba real HTTP con
-`qwen3:14b-q8_0` reconocio texto pegado sin documento, y
-`tests.test_fusion_reader_v2` quedo en 60 OK.
-
-Nota de continuidad de respuestas 2026-04-20: se detecto que el laboratorio
-escrito dejaba frases/listas inconclusas con `qwen3:14b-q8_0` porque el perfil
-academico usaba `FUSION_READER_CHAT_NUM_PREDICT=512` con thinking activado. Se
-subio el perfil academico/acceso directo a `1536`, el fallback interno con
-thinking a `1024`, y el prompt ahora pide cerrar pocas ideas completas antes de
-abrir listas largas. El recorte de voz de `Dialogar` subio a 520 caracteres y
-ya no termina con `...` cuando corta por longitud. Validacion:
-`tests.test_fusion_reader_v2` quedo en 63 OK.
-
-Nota de limpieza de laboratorio 2026-04-20: la UI del panel Laboratorio ahora
-tiene boton `Borrar historial`. Llama `POST /api/laboratory/reset` (alias
-`/api/chat/reset`), limpia el panel visible y borra tanto `_chat_history` como
-`_dialogue_history`, de modo que el texto pegado y los turnos de `Dialogar` dejan
-de condicionar respuestas nuevas. Validacion: `tests.test_fusion_reader_v2`
-quedo en 65 OK.
-
-Nota de estabilidad GPU 2026-04-20: tras un cuelgue duro de la maquina, el boot
-anterior mostro 96 eventos `NVRM` del driver NVIDIA entre 18:52 y 19:18,
-despues de lanzar Baldur's Gate 3/Steam mientras la maquina tambien tenia cargas
-CUDA de lectura/LLM. No hubo evidencias de OOM, disco, filesystem ni temperatura
-en los logs revisados. La medicion posterior con BG3 activo mostro carga media,
-no saturacion: ~5.2 GiB VRAM para BG3, ~6.5 GiB VRAM total, ~23-26% GPU,
-~123-125 W y ~4.7 GiB RAM del proceso. Por eso la prevencion no debe ser
-"cerrar el juego". Se agrego `scripts/fusion_reader_gpu_guard.sh` como detector
-de convivencia y se ajustaron los lanzadores para modo convivencia:
-`open_fusion_reader.sh` usa STT CPU/int8 y AllTalk CPU fallback cuando detecta
-BG3/Steam app `1086940`; `start_fusion_reader_v2.sh` mantiene Fusion abierto
-pero reduce chat a `think=0`, `num_ctx=8192` y `num_predict=384`, y prefiere TTS
-CPU fallback. La politica default es advertir, no bloquear. Solo bloquea si se
-exporta `FUSION_READER_GPU_CONFLICT_POLICY=block`; se puede forzar GPU completa
-con `FUSION_READER_ALLOW_GPU_WITH_GAMES=1` o desactivar el modo con
-`FUSION_READER_GAME_COEXISTENCE=0`.
-
-Nota de captura STT 2026-04-21: `Dialogar` ya no depende de `MediaRecorder`
-ni de contenedores WebM para la captura principal. La UI arma PCM en el
-navegador y lo sube como `audio/wav`, porque los WebM intermitentes estaban
-rompiendo transcripciones con `EBML header parsing failed`. Si el usuario sigue
-viendo que Fusion "no escucha", primero hacer recarga fuerte de la pestana
-(`Ctrl+Shift+R` en Chromium) y luego revisar los logs del STT buscando
-`convert_failed` o `empty_transcript`.
-
-## Archivos de Referencia
-
-- `AGENTS.md`: reglas raiz del agente.
-- `FUSION_READER_V2_BLUEPRINT.md`: arquitectura y contratos.
-- `FUSION_READER_V2_PERFORMANCE.md`: GPU TTS, prefetch y preparar documento.
-- `FUSION_READER_V2_DIALOGUE.md`: diseno e implementacion de `Dialogar`.
-- `README.md`: uso general.
-- `task.md`: tablero corto de misiones y pendientes.
-
-## Pendientes Reales
-
-- Diseñar personalidad profunda de Fusion por modo (`Normal`, `Pensamiento`,
-  `Supremo`) sin volverlo asistente general.
-- Completar `FUSION_READER_V2_PERSONALITY_WORKBOOK.md` con decisiones del
-  usuario y luego cablear esa personalidad en `ConversationCore`.
-- Probar en navegador la nueva dinamica `principal + consulta` y afinar la UI
-  de promocion/quitado si hace falta menos friccion.
-- Seguir probando `Dialogar` con microfono real, especialmente interrupcion
-  natural mientras Fusion habla.
-- Ajustar VAD/barge-in segun ruido ambiente y eco si vuelve a cortar tarde,
-  temprano o si captura audio de la respuesta.
-- Afinar warmup/keep-hot de AllTalk GPU para reducir primera sintesis lenta.
-- Agregar pausa/reanudar como estado real de lectura.
-- Seguir mejorando OCR fino en PDFs escaneados largos.
-- Cuando el usuario lo pida, preparar una limpieza de commit separando v2,
-  docs, scripts GPU/STT y cambios legacy.
-
-## Cierre 2026-04-23
-
-- Se cerró la integración robusta del bridge puntual Fusion -> OpenClaw para
-  investigación externa bajo pedido explícito, sin tocar la ruta de lectura.
-- El bridge ahora usa el agente dedicado `fusion-research` en vez de `main`,
-  para no pisar otros proyectos que ya usan OpenClaw en esta máquina.
-- Se agregaron reintentos ante fallos transitorios de gateway/workspace.
-- Se humanizó el caso de cuota/rate limit: cuando Gemini/OpenClaw se limita,
-  Lucy responde con un mensaje entendible en vez de dejar solo
-  `bridge_rate_limit` o `dialogue_failed`.
-- La UI del laboratorio ya muestra esa respuesta humana tanto en chat como en
-  `Dialogar`.
-
-Validación de esta pasada:
-
-```text
-git HEAD base observado: 4c62cc9
-Fusion Reader v2 en 8010: OK
-Bridge real: agente fusion-research -> gemini-2.5-flash
-Estado real del backend externo al cierre: sigue devolviendo rate limit/cuota
-v2: 109 tests OK
-```
-
-Próximo paso natural al retomar:
-
-- volver a probar una búsqueda externa real en laboratorio
-- si Gemini/OpenClaw ya liberó cuota, validar el camino feliz completo
-- si sigue limitado, decidir si conviene agregar fallback externo opcional o
-  mantener solo el mensaje humano actual
-
-Recordatorio de continuidad importante:
-
-- al cerrar sesiones, persistir SIEMPRE en dos capas: memoria externa + archivo
-  local de continuidad
-- no asumir nunca que una búsqueda estrecha en memoria equivale a ausencia de
-  memoria
-- el problema de memoria de esta tanda no fue falta de guardado, sino una
-  recuperación anterior mal hecha que devolvió vacío
+- Reglas raíz: `AGENTS.md`
+- Arquitectura: `docs/ARCHITECTURE.md`
+- Operación: `docs/OPERATIONS.md`
+- Convivencia OpenClaw/SearXNG: `docs/OPENCLAW_SEARXNG_COEXISTENCE.md`
+- Personalidad: `docs/PERSONALITY.md`
+- Historia: `docs/HISTORY.md`

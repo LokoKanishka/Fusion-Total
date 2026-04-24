@@ -3,6 +3,14 @@
 Fecha base: 2026-04-17
 Actualizado: 2026-04-21
 
+Nota 2026-04-24:
+
+```text
+Este archivo queda como documento de diseño e implementación histórica del modo
+Dialogar. El estado operativo vigente vive en docs/ARCHITECTURE.md,
+docs/OPERATIONS.md y FUSION_READER_V2_STATE.md.
+```
+
 Este documento nacio como diseno del modo `Dialogar` y hoy funciona como hoja
 de continuidad de su implementacion real.
 
@@ -215,8 +223,9 @@ del usuario es el boton unico.
 ## Regla de producto
 
 El laboratorio conversa sobre el documento. No se convierte en asistente general,
-no navega la web, no automatiza escritorio y no ejecuta herramientas externas
-no relacionadas con la lectura.
+no automatiza escritorio y no ejecuta herramientas externas no relacionadas con
+la lectura. La única excepción vigente es la investigación externa explícita por
+provider aislado de Fusion, documentada fuera de este archivo.
 
 ## Estado implementado 2026-04-17
 

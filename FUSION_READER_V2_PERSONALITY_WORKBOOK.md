@@ -2,6 +2,13 @@
 
 Fecha: 2026-04-22
 
+Nota 2026-04-24:
+
+```text
+Este workbook queda como material de diseño. La síntesis operativa vigente de
+personalidad está en docs/PERSONALITY.md.
+```
+
 ## Proposito
 
 Este archivo existe para definir una personalidad profunda y consistente de

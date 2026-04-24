@@ -1,5 +1,13 @@
 # Fusion Reader v2 - Blueprint Voice First
 
+Nota 2026-04-24:
+
+```text
+Este archivo sigue siendo la fuente de intencion arquitectonica y decisiones de
+diseño. El estado operativo vigente vive en FUSION_READER_V2_STATE.md y en
+docs/ARCHITECTURE.md.
+```
+
 Fecha: 2026-04-16
 
 ## Norte
@@ -51,6 +59,14 @@ Fusion Reader v2
     voice/test
     voice/voices
     chat
+```
+
+Actualizacion 2026-04-24:
+
+```text
+La arquitectura viva ya incluye una via acotada de investigacion externa:
+SearXNG local primero, OpenClaw fusion-research solo como fallback. Esa
+capacidad sigue fuera de la ruta critica de lectura.
 ```
 
 ## Separacion lectura / conversacion
@@ -415,48 +431,6 @@ GET /api/voice/metrics/chunks?doc_id=<id>&limit=<n>
 Agrupa por documento + chunk y devuelve los chunks mas lentos. Sirve para saber
 si la demora viene de un bloque largo, falta de cache, prefetch lento o sintesis
 real lenta.
-
-## Estado operativo guardado
-
-Validacion conocida:
-
-```bash
-python3 -m unittest tests.test_fusion_reader_v2 -v
-python3 -m unittest tests.test_reader_mode tests.test_reader_library tests.test_reader_command_stress -v
-```
-
-Resultado observado:
-
-```text
-v2: 51 tests OK
-legacy reader: 35 tests OK
-```
-
-Arranque:
-
-```bash
-./scripts/start_reader_neural_tts_gpu_5090.sh
-./scripts/start_fusion_reader_v2.sh
-```
-
-Fallback CPU:
-
-```bash
-./scripts/start_reader_neural_tts.sh
-./scripts/start_fusion_reader_v2.sh
-```
-
-AllTalk debe responder:
-
-```bash
-curl -s http://127.0.0.1:7853/api/ready
-```
-
-Fusion Reader v2 debe responder:
-
-```bash
-curl -s http://127.0.0.1:8010/api/status
-```
 
 ## Proximo trabajo recomendado
 
