@@ -15,7 +15,8 @@ from .conversation import ConversationCore
 from .dialogue import STTProvider, default_stt_provider
 from .metrics import VoiceMetric, VoiceMetricsStore
 from .notes import ReaderNotesStore
-from .openclaw_bridge import ExternalResearchBridge, ExternalResearchResult, OpenClawResearchBridge
+from .local_web_bridge import default_external_research_bridge
+from .openclaw_bridge import ExternalResearchBridge, ExternalResearchResult
 from .reader import Document, ReaderSession
 from .tts import AllTalkProvider, AudioArtifact, AudioCache, TTSProvider
 
@@ -51,7 +52,7 @@ class FusionReaderV2:
         self.voice = voice or VoiceSettings()
         self.metrics = metrics or VoiceMetricsStore()
         self.conversation = conversation or ConversationCore()
-        self.external_research = external_research or OpenClawResearchBridge()
+        self.external_research = external_research or default_external_research_bridge()
         self.stt = stt or default_stt_provider()
         self.notes = notes or ReaderNotesStore()
         self.prefetch_wait_seconds = prefetch_wait_seconds

@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import subprocess
 import tempfile
 import time
@@ -13,6 +14,7 @@ from fusion_reader_v2 import (
     AudioArtifact,
     AudioCache,
     AllTalkProvider,
+    AutoExternalResearchBridge,
     AutoSTTProvider,
     ConversationCore,
     ExternalResearchResult,
@@ -24,6 +26,7 @@ from fusion_reader_v2 import (
     NullTTSProvider,
     OllamaChatProvider,
     OpenClawResearchBridge,
+    SearxngResearchBridge,
     STTProvider,
     TranscriptResult,
     VoiceMetricsStore,
@@ -75,10 +78,133 @@ class HallucinatedTranscriptSTTProvider(STTProvider):
         return TranscriptResult(False, text="¡Suscríbete!", provider=self.name, detail="hallucinated_transcript", duration_ms=12)
 
 
+class FakeExternalResearchBridge:
+    def __init__(self, result: ExternalResearchResult, *, available: bool = True) -> None:
+        self.result = result
+        self.available_value = available
+        self.calls: list[tuple[str, dict]] = []
+
+    def available(self) -> bool:
+        return self.available_value
+
+    def research(self, request: str, snapshot: dict | None = None) -> ExternalResearchResult:
+        self.calls.append((str(request or ""), dict(snapshot or {})))
+        return self.result
+
+
+class FakeUrlOpenResponse:
+    def __init__(self, payload: str, status: int = 200) -> None:
+        self.payload = payload.encode("utf-8")
+        self.status = status
+
+    def read(self) -> bytes:
+        return self.payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
 class FusionReaderV2Tests(unittest.TestCase):
     def test_openclaw_bridge_defaults_to_fusion_research_agent(self):
         bridge = OpenClawResearchBridge(command="/bin/echo")
         self.assertEqual(bridge.agent, "fusion-research")
+
+    def test_searxng_bridge_parses_results(self):
+        bridge = SearxngResearchBridge(base_url="http://127.0.0.1:8080", timeout_seconds=2)
+        payload = {
+            "results": [
+                {
+                    "title": "Plato on Friendship and Eros - Stanford Encyclopedia of Philosophy",
+                    "url": "https://plato.stanford.edu/entries/plato-friendship/",
+                    "content": "Plato discusses love and friendship primarily in the Symposium and the Lysis.",
+                }
+            ]
+        }
+        with mock.patch("fusion_reader_v2.local_web_bridge.urlopen", return_value=FakeUrlOpenResponse(json.dumps(payload))):
+            result = bridge.research("busca en internet eros en platon")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.provider, "searxng")
+        self.assertEqual(result.model, "searxng-local")
+        self.assertTrue(result.sources)
+        self.assertEqual(result.sources[0]["url"], "https://plato.stanford.edu/entries/plato-friendship/")
+        self.assertIn("Fuentes:", result.answer)
+        self.assertIn("https://plato.stanford.edu/entries/plato-friendship/", result.answer)
+        self.assertNotIn("https://", result.spoken_answer)
+
+    def test_searxng_bridge_handles_no_results(self):
+        bridge = SearxngResearchBridge(base_url="http://127.0.0.1:8080", timeout_seconds=2)
+        with mock.patch("fusion_reader_v2.local_web_bridge.urlopen", return_value=FakeUrlOpenResponse(json.dumps({"results": []}))):
+            result = bridge.research("busca papers imposibles")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.detail, "searxng_no_results")
+        self.assertIn("No encontré resultados útiles", result.answer)
+
+    def test_searxng_bridge_handles_timeout(self):
+        bridge = SearxngResearchBridge(base_url="http://127.0.0.1:8080", timeout_seconds=2)
+        with mock.patch("fusion_reader_v2.local_web_bridge.urlopen", side_effect=socket.timeout("timeout")):
+            result = bridge.research("busca tesis sobre diotima")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.detail, "searxng_timeout")
+        self.assertIn("SearXNG local", result.answer)
+
+    def test_auto_external_research_prefers_searxng_without_calling_openclaw(self):
+        searxng = FakeExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="SearXNG respondió.",
+                spoken_answer="SearXNG respondió.",
+                detail="external_research_ok",
+                provider="searxng",
+                model="searxng-local",
+            )
+        )
+        openclaw = FakeExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="OpenClaw respondió.",
+                spoken_answer="OpenClaw respondió.",
+                detail="external_research_ok",
+                provider="openclaw_bridge",
+                model="gemini-2.5-flash",
+            )
+        )
+        bridge = AutoExternalResearchBridge(searxng=searxng, openclaw=openclaw)
+        result = bridge.research("busca en internet una fuente sobre eros")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.provider, "searxng")
+        self.assertEqual(len(searxng.calls), 1)
+        self.assertEqual(len(openclaw.calls), 0)
+
+    def test_auto_external_research_falls_back_to_openclaw_when_searxng_is_unavailable(self):
+        searxng = FakeExternalResearchBridge(
+            ExternalResearchResult(
+                False,
+                answer="SearXNG caído.",
+                spoken_answer="SearXNG caído.",
+                detail="searxng_unavailable",
+                provider="searxng",
+                model="searxng-local",
+            )
+        )
+        openclaw = FakeExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="OpenClaw respondió.",
+                spoken_answer="OpenClaw respondió.",
+                detail="external_research_ok",
+                provider="openclaw_bridge",
+                model="gemini-2.5-flash",
+            )
+        )
+        bridge = AutoExternalResearchBridge(searxng=searxng, openclaw=openclaw)
+        result = bridge.research("busca papers sobre Diotima")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.provider, "openclaw_bridge")
+        self.assertEqual(len(searxng.calls), 1)
+        self.assertEqual(len(openclaw.calls), 1)
 
     def test_openclaw_bridge_humanizes_rate_limit_failures(self):
         bridge = OpenClawResearchBridge(command="/bin/echo", timeout_seconds=3)
@@ -1227,6 +1353,46 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertEqual(out["model"], "reader_navigation")
         self.assertEqual(out["detail"], "search_matches")
         self.assertEqual(len(bridge.calls), 0)
+
+    def test_chat_normal_question_does_not_activate_external_research(self):
+        bridge = NullExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="No deberia activarse.",
+                provider="searxng",
+                model="searxng-local",
+            )
+        )
+        chat_provider = NullChatProvider("Recuerdo el contexto actual del laboratorio.")
+        app = test_app(external_research=bridge)
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        out = app.chat("¿Qué recordás del contexto actual del laboratorio?")
+        self.assertTrue(out["ok"])
+        self.assertFalse(out.get("external_research", False))
+        self.assertEqual(len(bridge.calls), 0)
+        self.assertTrue(chat_provider.calls)
+
+    def test_chat_explicit_academic_search_activates_external_research(self):
+        bridge = NullExternalResearchBridge(
+            ExternalResearchResult(
+                True,
+                answer="Sali a investigar afuera sobre Diotima.\nFuentes:\n- Stanford | https://ejemplo.test/diotima",
+                spoken_answer="Sali a investigar afuera sobre Diotima. Encontré una fuente relevante.",
+                detail="external_research_ok",
+                provider="searxng",
+                model="searxng-local",
+                query="Diotima y la escalera del amor",
+                summary="Encontré una fuente relevante sobre Diotima.",
+                sources=[{"title": "Stanford", "url": "https://ejemplo.test/diotima", "note": "entrada académica"}],
+            )
+        )
+        app = test_app(external_research=bridge)
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        out = app.chat("busca tesis o papers sobre Diotima y la escalera del amor")
+        self.assertTrue(out["external_research"])
+        self.assertEqual(out["provider"], "searxng")
+        self.assertEqual(len(bridge.calls), 1)
 
     def test_chat_search_is_accent_insensitive(self):
         app = test_app()
