@@ -2057,9 +2057,36 @@ class FusionReaderV2:
         )
         return out
 
-    def dialogue_turn_audio(self, path: str | Path, mime: str = "", model: str = "", chunk_index: int | None = None) -> dict:
+    def dialogue_turn_audio(self, path: str | Path, mime: str = "", model: str = "", chunk_index: int | None = None, audio_meta: dict | None = None) -> dict:
         self._prioritize_dialogue()
         started = time.perf_counter()
+        audio_path = Path(path)
+        audio_meta = audio_meta or {}
+
+        def _meta_int(name: str, default: int = 0) -> int:
+            try:
+                return max(0, int(float(str(audio_meta.get(name, "") or default))))
+            except Exception:
+                return default
+
+        def _meta_float(name: str, default: float = 0.0) -> float:
+            try:
+                return max(0.0, float(str(audio_meta.get(name, "") or default)))
+            except Exception:
+                return default
+
+        def _meta_text(name: str, default: str = "") -> str:
+            return str(audio_meta.get(name, "") or default)[:80]
+
+        audio_trace = {
+            "audio_size_bytes": _meta_int("audio_size_bytes", audio_path.stat().st_size if audio_path.exists() else 0),
+            "audio_mime": str(mime or "")[:80],
+            "capture_ms": _meta_int("capture_ms"),
+            "mic_rms": round(_meta_float("mic_rms"), 6),
+            "mic_peak": round(_meta_float("mic_peak"), 6),
+            "voice_detected": _meta_text("voice_detected") in {"1", "true", "True", "yes", "si", "sí"},
+            "cut_reason": _meta_text("cut_reason", "unknown"),
+        }
         transcript = self.stt.transcribe_file(path, mime=mime, language=self.voice.language)
         stt_elapsed_ms = int((time.perf_counter() - started) * 1000)
         if not transcript.ok:
@@ -2079,6 +2106,7 @@ class FusionReaderV2:
                     "chat_ms": 0,
                     "tts_ms": 0,
                     "trace": {
+                        **audio_trace,
                         "stt_ms": transcript.duration_ms,
                         "stt_wall_ms": stt_elapsed_ms,
                         "stt_detail": transcript.detail,
@@ -2096,6 +2124,7 @@ class FusionReaderV2:
                         "ok": True,
                         "ignored": True,
                         "detail": transcript.detail,
+                        **audio_trace,
                         "stt_provider": transcript.provider,
                         "stt_ms": transcript.duration_ms,
                         "duration_ms": out["duration_ms"],
@@ -2125,6 +2154,7 @@ class FusionReaderV2:
                     "chat_ms": 0,
                     "tts_ms": tts_ms,
                     "trace": {
+                        **audio_trace,
                         "stt_ms": transcript.duration_ms,
                         "stt_wall_ms": stt_elapsed_ms,
                         "stt_detail": transcript.detail,
@@ -2141,6 +2171,7 @@ class FusionReaderV2:
                         "event": "dialogue_turn_audio",
                         "ok": True,
                         "detail": transcript.detail,
+                        **audio_trace,
                         "stt_provider": transcript.provider,
                         "stt_ms": transcript.duration_ms,
                         "tts_ms": tts_ms,
@@ -2160,6 +2191,7 @@ class FusionReaderV2:
                 stt_provider=str(transcript.provider or ""),
                 stt_ms=transcript.duration_ms,
                 trace_extra={
+                    **audio_trace,
                     "stt_ms": transcript.duration_ms,
                     "stt_wall_ms": stt_elapsed_ms,
                     "stt_detail": transcript.detail,
@@ -2175,6 +2207,7 @@ class FusionReaderV2:
                     "ok": False,
                     "detail": transcript.detail,
                     "error": "transcription_failed",
+                    **audio_trace,
                     "human_error": str(out.get("human_error") or ""),
                     "transcript": str(transcript.text or ""),
                     "stt_provider": transcript.provider,
@@ -2193,6 +2226,7 @@ class FusionReaderV2:
         out["stt_ms"] = transcript.duration_ms
         out["trace"] = {
             **(out.get("trace") if isinstance(out.get("trace"), dict) else {}),
+            **audio_trace,
             "stt_ms": transcript.duration_ms,
             "stt_wall_ms": stt_elapsed_ms,
             "stt_timings": transcript.timings or {},
@@ -2206,6 +2240,7 @@ class FusionReaderV2:
                 "event": "dialogue_turn_audio",
                 "ok": bool(out.get("ok")),
                 "detail": str(out.get("detail") or ""),
+                **audio_trace,
                 "transcript": str(out.get("transcript") or ""),
                 "human_error": str(out.get("human_error") or ""),
                 "stt_provider": transcript.provider,

@@ -76,6 +76,16 @@ Regla:
 5. si el navegador niega micrófono, Dialogar debe mostrar el motivo y `Leer` debe seguir sano
 6. si hubo barge-in extraño, detener y volver a activar `Dialogar`
 
+La traza de Dialogar muestra diagnóstico de captura:
+
+- `WAV`: tamaño enviado al servidor.
+- `RMS` y `pico`: amplitud de la señal capturada.
+- `voz sí/no`: si el audio superó el umbral local de voz.
+- `corte`: motivo del corte local, normalmente `silence` o `timeout`.
+- `Mic`: etiqueta del dispositivo si el navegador la expone.
+
+Si `WAV` existe pero `RMS`/`pico` son casi cero, el navegador está entregando silencio o el micrófono equivocado. Si hay amplitud razonable pero `hallucinated_transcript`, ajustar después umbrales/duración o revisar STT, sin tocar `Leer`.
+
 ## Si STT 8021 está caído
 
 1. revisar `curl -s http://127.0.0.1:8021/health`

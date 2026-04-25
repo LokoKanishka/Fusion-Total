@@ -468,6 +468,52 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertNotIn("renderStatus(data)", read_current)
         self.assertIn("playAudio(data)", read_current)
 
+    def test_dialogue_microphone_capture_diagnostics_are_exposed(self):
+        root = Path(__file__).resolve().parents[1]
+        server = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        service = (root / "fusion_reader_v2" / "service.py").read_text(encoding="utf-8")
+        for token in (
+            "dialoguePcmStats",
+            "mic_rms",
+            "mic_peak",
+            "voice_detected",
+            "cut_reason",
+            "audio_size_bytes",
+            "Mic:",
+        ):
+            self.assertIn(token, server)
+        self.assertIn("audio_meta", service)
+        self.assertIn("audio_size_bytes", service)
+        self.assertIn("audio_mime", service)
+        self.assertNotIn("API_KEY", server)
+        self.assertNotIn("TOKEN", server)
+
+    def test_dialogue_audio_trace_keeps_microphone_diagnostics(self):
+        app = test_app(stt=EmptyTranscriptSTTProvider())
+        with tempfile.NamedTemporaryFile(suffix=".wav") as handle:
+            handle.write(b"RIFF" + b"\0" * 2400)
+            handle.flush()
+            out = app.dialogue_turn_audio(
+                handle.name,
+                mime="audio/wav",
+                audio_meta={
+                    "audio_size_bytes": "2444",
+                    "capture_ms": "850",
+                    "mic_rms": "0.031",
+                    "mic_peak": "0.14",
+                    "voice_detected": "1",
+                    "cut_reason": "silence",
+                },
+            )
+        trace = out["trace"]
+        self.assertEqual(trace["audio_size_bytes"], 2444)
+        self.assertEqual(trace["audio_mime"], "audio/wav")
+        self.assertEqual(trace["capture_ms"], 850)
+        self.assertEqual(trace["mic_rms"], 0.031)
+        self.assertEqual(trace["mic_peak"], 0.14)
+        self.assertTrue(trace["voice_detected"])
+        self.assertEqual(trace["cut_reason"], "silence")
+
     def test_voice_port_isolation_verifier_covers_doctora_memory_sources(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "verify_voice_port_isolation.sh").read_text(encoding="utf-8")

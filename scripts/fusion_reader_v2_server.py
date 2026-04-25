@@ -883,6 +883,8 @@ INDEX_HTML = r"""<!doctype html>
       turnStartedAt: 0,
       finalizeTimeoutId: 0,
       captureStopAt: 0,
+      captureStopReason: '',
+      micDeviceLabel: '',
       sampleRate: 48000
     };
 
@@ -959,6 +961,11 @@ INDEX_HTML = r"""<!doctype html>
       const parts = [
         `Traza turno ${trace && trace.turnId || '?'}`,
         `audio ${fmtMs(recordedMs)}`,
+        `WAV ${Math.round(Number(trace && (trace.audioSizeBytes || trace.blobSize) || 0) / 1024)}KB`,
+        `RMS ${Number(trace && trace.micRms || 0).toFixed(4)}`,
+        `pico ${Number(trace && trace.micPeak || 0).toFixed(4)}`,
+        `voz ${trace && trace.voiceDetected ? 'sí' : 'no'}`,
+        `corte ${trace && trace.captureStopReason || 'n/d'}`,
         `silencio corte ${fmtMs(dialogue.silenceStopMs)}`,
         `flush ${fmtMs(trace && trace.flushWaitMs || 0)}`,
         `subida+servidor ${fmtMs(uploadAndServerMs)}`,
@@ -1928,6 +1935,8 @@ INDEX_HTML = r"""<!doctype html>
             sampleSize: 16
           }
         });
+        const audioTrack = dialogue.stream.getAudioTracks()[0];
+        dialogue.micDeviceLabel = audioTrack && audioTrack.label ? audioTrack.label : 'Micrófono activo';
         dialogue.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         dialogue.sampleRate = dialogue.audioContext.sampleRate || 48000;
         const source = dialogue.audioContext.createMediaStreamSource(dialogue.stream);
@@ -1952,7 +1961,7 @@ INDEX_HTML = r"""<!doctype html>
         dialogue.noiseFloor = 0.012;
         dialogue.lastTick = performance.now();
         els.dialogueBtn.textContent = 'Detener diálogo';
-        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. ${laboratoryModeSummary()} Hacé una pausa corta y respondo.`);
+        setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. ${laboratoryModeSummary()} Hacé una pausa corta y respondo. Mic: ${dialogue.micDeviceLabel}`);
         monitorDialogue();
       } catch (err) {
         setDialogueInfo(`No pude abrir el micrófono: ${err.message}`);
@@ -2001,6 +2010,8 @@ INDEX_HTML = r"""<!doctype html>
       dialogue.pcmChunks = [];
       dialogue.pcmPreRoll = [];
       dialogue.pcmPreRollSamples = 0;
+      dialogue.captureStopReason = '';
+      dialogue.micDeviceLabel = '';
       dialogue.finalizing = false;
       els.dialogueBtn.textContent = 'Dialogar';
       setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
@@ -2102,6 +2113,32 @@ INDEX_HTML = r"""<!doctype html>
       return chunk.length;
     }
 
+    function dialoguePcmStats(chunks) {
+      let samples = 0;
+      let sumSquares = 0;
+      let peak = 0;
+      for (const chunk of chunks || []) {
+        if (!chunk) {
+          continue;
+        }
+        for (let i = 0; i < chunk.length; i += 1) {
+          const sample = Number(chunk[i] || 0);
+          const abs = Math.abs(sample);
+          peak = Math.max(peak, abs);
+          sumSquares += sample * sample;
+          samples += 1;
+        }
+      }
+      const rms = samples ? Math.sqrt(sumSquares / samples) : 0;
+      return {
+        samples,
+        rms,
+        peak,
+        durationMs: samples && dialogue.sampleRate ? Math.round(samples * 1000 / dialogue.sampleRate) : 0,
+        voiceDetected: peak >= Math.max(dialogue.minThreshold, dialogue.noiseFloor * dialogue.thresholdMultiplier)
+      };
+    }
+
     function trimPcmPreRoll() {
       const limit = dialoguePreRollLimitSamples();
       while (dialogue.pcmPreRoll.length > 1 && dialogue.pcmPreRollSamples > limit) {
@@ -2183,7 +2220,17 @@ INDEX_HTML = r"""<!doctype html>
       dialogue.finalizing = false;
       dialogue.captureStopAt = 0;
       dialogue.finalizeTimeoutId = 0;
+      const stats = dialoguePcmStats(dialogue.pcmChunks);
       const blob = encodeDialogueWav(dialogue.pcmChunks, dialogue.sampleRate);
+      if (dialogue.trace) {
+        dialogue.trace.audioSamples = stats.samples;
+        dialogue.trace.captureDurationMs = stats.durationMs;
+        dialogue.trace.micRms = stats.rms;
+        dialogue.trace.micPeak = stats.peak;
+        dialogue.trace.voiceDetected = stats.voiceDetected;
+        dialogue.trace.audioSizeBytes = blob.size;
+        dialogue.trace.audioMime = blob.type || 'audio/wav';
+      }
       dialogue.pcmChunks = [];
       sendDialogueAudio(blob, 'audio/wav');
     }
@@ -2207,7 +2254,8 @@ INDEX_HTML = r"""<!doctype html>
         chunkNumber: dialogue.chunkIndex === null || dialogue.chunkIndex === undefined ? null : dialogue.chunkIndex + 1,
         silenceStopMs: dialogue.silenceStopMs,
         finalFlushMs: dialogue.finalFlushMs,
-        flushWaitMs: dialogueFlushWaitMs()
+        flushWaitMs: dialogueFlushWaitMs(),
+        micDeviceLabel: dialogue.micDeviceLabel
       };
       dialogue.silenceMs = 0;
       setDialogueInfo('Te escucho...');
@@ -2221,9 +2269,12 @@ INDEX_HTML = r"""<!doctype html>
       dialogue.finalizing = true;
       dialogue.captureStopAt = performance.now() + dialogueFlushWaitMs();
       const heardMs = Math.max(0, performance.now() - (dialogue.turnStartedAt || performance.now()));
+      const elapsed = Math.max(0, performance.now() - (dialogue.startedAt || performance.now()));
+      dialogue.captureStopReason = elapsed >= dialogue.maxRecordMs ? 'timeout' : 'silence';
       if (dialogue.trace) {
         dialogue.trace.speechStopAt = performance.now();
         dialogue.trace.recordedMs = heardMs;
+        dialogue.trace.captureStopReason = dialogue.captureStopReason;
       }
       setDialogueInfo(`Procesando (${Math.round(heardMs)} ms de audio)...`);
       if (dialogue.finalizeTimeoutId) {
@@ -2245,15 +2296,23 @@ INDEX_HTML = r"""<!doctype html>
       }
       dialogue.processing = true;
       const requestStartedAt = performance.now();
-      const turnTrace = dialogue.trace ? { ...dialogue.trace, sendStartedAt: requestStartedAt, blobSize: blob.size } : { sendStartedAt: requestStartedAt, blobSize: blob.size };
+      const audioMime = mimeType || blob.type || 'audio/webm';
+      const turnTrace = dialogue.trace ? { ...dialogue.trace, sendStartedAt: requestStartedAt, blobSize: blob.size, audioMime } : { sendStartedAt: requestStartedAt, blobSize: blob.size, audioMime };
       try {
         const params = new URLSearchParams({ filename: 'dialogue.wav' });
+        params.set('audio_size_bytes', String(blob.size || 0));
+        params.set('capture_ms', String(Math.round(turnTrace.captureDurationMs || turnTrace.recordedMs || 0)));
+        params.set('mic_rms', String(Number(turnTrace.micRms || 0).toFixed(6)));
+        params.set('mic_peak', String(Number(turnTrace.micPeak || 0).toFixed(6)));
+        params.set('voice_detected', turnTrace.voiceDetected ? '1' : '0');
+        params.set('cut_reason', String(turnTrace.captureStopReason || 'unknown'));
+        params.set('mime', String(audioMime));
         if (dialogue.chunkIndex !== null && dialogue.chunkIndex !== undefined) {
           params.set('chunk_index', String(dialogue.chunkIndex));
         }
         const res = await fetch(`/api/dialogue/turn?${params.toString()}`, {
           method: 'POST',
-          headers: { 'Content-Type': mimeType || blob.type || 'audio/webm' },
+          headers: { 'Content-Type': audioMime },
           body: blob
         });
         const data = await res.json();
@@ -2718,9 +2777,17 @@ class Handler(BaseHTTPRequestHandler):
                 filename = str((params.get("filename") or ["dialogue.webm"])[0])
                 raw_chunk_index = (params.get("chunk_index") or [None])[0]
                 chunk_index = int(raw_chunk_index) if raw_chunk_index not in (None, "") else None
+                audio_meta = {
+                    "audio_size_bytes": str((params.get("audio_size_bytes") or [""])[0]),
+                    "capture_ms": str((params.get("capture_ms") or [""])[0]),
+                    "mic_rms": str((params.get("mic_rms") or [""])[0]),
+                    "mic_peak": str((params.get("mic_peak") or [""])[0]),
+                    "voice_detected": str((params.get("voice_detected") or [""])[0]),
+                    "cut_reason": str((params.get("cut_reason") or [""])[0]),
+                }
                 tmp_path = self._read_body_to_temp(filename)
                 try:
-                    self._result(200, APP.dialogue_turn_audio(tmp_path, mime=content_type, model=str((params.get("model") or [""])[0]), chunk_index=chunk_index))
+                    self._result(200, APP.dialogue_turn_audio(tmp_path, mime=content_type, model=str((params.get("model") or [""])[0]), chunk_index=chunk_index, audio_meta=audio_meta))
                 finally:
                     tmp_path.unlink(missing_ok=True)
                 return
