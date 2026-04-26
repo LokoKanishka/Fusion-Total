@@ -49,6 +49,27 @@ Propiedades:
 - TTS neural por defecto para respuesta oral;
 - `Dialogar` puede degradar `Supremo -> Pensamiento` para cuidar latencia oral.
 
+## Modos de razonamiento
+
+Componentes principales:
+
+- `fusion_reader_v2/conversation.py`
+- `fusion_reader_v2/service.py`
+
+Modos disponibles:
+
+1. **Normal**: 1 pasada, `think=false`. Respuesta directa.
+2. **Pensamiento**: 1 pasada, `think=true`. Uso de fase de pensamiento nativa de Ollama.
+3. **Supremo**: 3 pasadas (`borrador -> revisión -> final`). Auto-crítica interna.
+4. **Contrapunto**: 3 pasadas dialécticas.
+   - **Tesis**: Lucy Cunningham genera la respuesta base.
+   - **Antítesis**: Un auditor crítico busca fallos y omisiones.
+   - **Síntesis**: Lucy integra la tensión en una respuesta final "con cicatriz".
+
+Regla de degradación:
+
+- En modo `Dialogar` (voz), los modos `Supremo` y `Contrapunto` degradan automáticamente a `Pensamiento` para mantener la latencia por debajo de los 3-5 segundos.
+
 ## Notas
 
 Componentes:

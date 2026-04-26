@@ -94,10 +94,10 @@ class FusionReaderV2:
         applied = requested
         degraded = False
         reason = ""
-        if dialogue and requested == "supreme" and not self.dialogue_allow_supreme:
+        if dialogue and requested in {"supreme", "contrapunto"} and not self.dialogue_allow_supreme:
             applied = "thinking"
             degraded = True
-            reason = "dialogue_supreme_degraded_to_thinking"
+            reason = f"dialogue_{requested}_degraded_to_thinking"
         return {
             "requested": requested,
             "applied": applied,

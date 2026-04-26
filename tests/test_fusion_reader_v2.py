@@ -782,6 +782,75 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn('"requested_mode": "supreme"', logged)
         self.assertIn('"applied_mode": "thinking"', logged)
 
+    def test_reasoning_catalog_includes_contrapunto(self):
+        app = test_app()
+        catalog = app.conversation.reasoning_catalog()
+        modes = [item["mode"] for item in catalog]
+        self.assertIn("contrapunto", modes)
+        contrapunto = next(item for item in catalog if item["mode"] == "contrapunto")
+        self.assertIn("Contrapunto", contrapunto["label"])
+        self.assertEqual(contrapunto["passes"], 3)
+        self.assertTrue(contrapunto["think"])
+
+    def test_contrapunto_textual_runs_three_passes(self):
+        chat_provider = NullChatProvider("Respuesta final dialéctica.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("contrapunto")
+        app.load_text("doc", "Doc", "Contexto base.", prefetch=False)
+        out = app.chat("Analizá este fragmento.")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["reasoning_mode"], "contrapunto")
+        self.assertEqual(out["reasoning_passes"], 3)
+        self.assertEqual(len(chat_provider.calls), 3)
+        # Verificar que al menos una llamada es del Auditor/Crítico
+        found_auditor = False
+        for call in chat_provider.calls:
+            msgs = call[0]
+            for m in msgs:
+                if m["role"] == "system" and ("Auditor" in m["content"] or "Critico" in m["content"] or "Antitesis" in m["content"]):
+                    found_auditor = True
+                    break
+        self.assertTrue(found_auditor, "No se encontró el rol de Auditor/Crítico en las llamadas al provider")
+        self.assertEqual(out["detail"], "contrapunto_dialectical_3pass")
+
+    def test_contrapunto_does_not_break_supreme(self):
+        chat_provider = NullChatProvider("Respuesta final supreme.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("supreme")
+        app.load_text("doc", "Doc", "Contexto.", prefetch=False)
+        out = app.chat("Pensá profundo.")
+        self.assertEqual(out["reasoning_mode"], "supreme")
+        self.assertEqual(out["reasoning_passes"], 3)
+        self.assertEqual(out["detail"], "supreme_3pass")
+
+    def test_dialogue_degrades_contrapunto_to_thinking(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("contrapunto")
+        app.load_text("doc", "Doc", "Contexto.", prefetch=False)
+        out = app.dialogue_turn_text("¿Qué ves?")
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["reasoning_mode_requested"], "contrapunto")
+        self.assertEqual(out["reasoning_mode_applied"], "thinking")
+        self.assertTrue(out["reasoning_degraded"])
+        # Verificar vía dialogue_status que la razón es correcta
+        status = app.dialogue_status()
+        self.assertEqual(status["dialogue_reasoning"]["degraded_reason"], "dialogue_contrapunto_degraded_to_thinking")
+
+    def test_server_ui_contains_contrapunto_button(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn('id="reasoningContrapuntoBtn"', text)
+        self.assertIn("Contrapunto", text)
+        self.assertIn("setReasoningMode('contrapunto')", text)
+        # Verificar que no se eliminaron los anteriores
+        self.assertIn('id="reasoningNormalBtn"', text)
+        self.assertIn('id="reasoningThinkingBtn"', text)
+        self.assertIn('id="reasoningSupremeBtn"', text)
+
     def test_dialogue_turn_text_answers_with_audio_without_touching_reader_tts_path(self):
         provider = NullTTSProvider()
         app = test_app(tts=provider)

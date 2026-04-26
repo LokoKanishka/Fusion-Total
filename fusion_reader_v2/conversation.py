@@ -183,6 +183,16 @@ class ConversationCore:
                 review_num_predict=supreme_review_num_predict,
                 final_num_predict=supreme_final_num_predict,
             ),
+            "contrapunto": ReasoningProfile(
+                key="contrapunto",
+                label="Contrapunto",
+                description="Dialectica critica entre dos perspectivas para una respuesta profunda.",
+                think=True,
+                num_predict=supreme_num_predict,
+                passes=3,
+                review_num_predict=supreme_review_num_predict,
+                final_num_predict=supreme_final_num_predict,
+            ),
         }
 
     def reasoning_catalog(self) -> list[dict]:
@@ -241,6 +251,8 @@ class ConversationCore:
                 reasoning_mode=profile.key,
                 reasoning_passes=1,
             )
+        if profile.key == "contrapunto":
+            return self._run_contrapunto(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode)
         return self._run_supreme(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode)
 
     def _run_supreme(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool, reasoning_mode: str = "") -> ChatResult:
@@ -334,6 +346,112 @@ class ConversationCore:
             reasoning_passes=profile.passes,
         )
 
+    def _run_contrapunto(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool, reasoning_mode: str = "") -> ChatResult:
+        total_ms = 0
+        # PASO 1: TESIS (Lucy Cunningham)
+        tesis = self.provider.chat(messages, model=model, think=True, num_predict=profile.num_predict)
+        total_ms += tesis.duration_ms
+        if not tesis.ok:
+            return ChatResult(
+                False,
+                model=tesis.model,
+                detail=tesis.detail,
+                duration_ms=total_ms,
+                reasoning_mode=profile.key,
+                reasoning_passes=1,
+            )
+
+        transcript = self._messages_as_text(messages)
+        persona_overlay = self._persona_overlay(reasoning_mode or profile.key, dialogue=dialogue)
+
+        # PASO 2: ANTITESIS (El Critico)
+        # El critico es una instancia que no es Lucy y busca fallos en la tesis.
+        antitesis_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Sos el Auditor de Contrapunto de Fusion Reader v2. "
+                    "Tu trabajo es ser el abogado del diablo. No sos Lucy. "
+                    "Analiza la respuesta (TESIS) frente al CONTEXTO DEL LECTOR. "
+                    "Busca: contradicciones, omisiones graves, falta de rigor filosofico, "
+                    "o si la respuesta fue demasiado complaciente con el usuario. "
+                    "Responde en español con un tono seco, directo y puramente analitico. "
+                    "Menciona especificamente que parte del texto contradice o debilita la tesis."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"CONTEXTO DEL LECTOR:\n{transcript}\n\nTESIS PROPUESTA:\n{tesis.answer}",
+            },
+        ]
+        antitesis = self.provider.chat(antitesis_messages, model=model, think=True, num_predict=profile.review_num_predict or profile.num_predict)
+        total_ms += antitesis.duration_ms
+        if not antitesis.ok:
+            return ChatResult(
+                True,
+                answer=tesis.answer,
+                model=tesis.model,
+                detail="contrapunto_antitesis_failed_fallback",
+                duration_ms=total_ms,
+                reasoning_mode=profile.key,
+                reasoning_passes=1,
+            )
+
+        # PASO 3: SINTESIS (Lucy Cunningham)
+        # Lucy recibe la critica y decide como integrar esa tension en su respuesta final.
+        sintesis_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Sos Lucy Cunningham. Se te ha presentado una critica externa (CONTRA-ARGUMENTO) "
+                    "a tu respuesta inicial (TESIS). "
+                    "Tu tarea es redactar la respuesta final al usuario. "
+                    "No ignores la critica: integrala. Podes aceptar el error, refinar tu postura, "
+                    "o explicar por que mantenes tu tesis a pesar del contra-argumento. "
+                    "Manten tu identidad calida, bohemia y Borgesiana, pero mostra la cicatriz del debate. "
+                    "Que se note que hubo una tension intelectual resuelta. "
+                    + (
+                        "Si es dialogo oral, entrega solo una o dos frases cortas pero densas. "
+                        if dialogue
+                        else "Si es chat, entrega una respuesta estructurada que reconozca la complejidad."
+                    )
+                    + "\n\n"
+                    + persona_overlay
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"CONVERSACION BASE:\n{transcript}\n\n"
+                    f"TU TESIS INICIAL:\n{tesis.answer}\n\n"
+                    f"CONTRA-ARGUMENTO CRITICO:\n{antitesis.answer}\n\n"
+                    "Escribi ahora tu sintesis final para el lector."
+                ),
+            },
+        ]
+        sintesis = self.provider.chat(sintesis_messages, model=model, think=True, num_predict=profile.final_num_predict or profile.num_predict)
+        total_ms += sintesis.duration_ms
+        if not sintesis.ok:
+            return ChatResult(
+                True,
+                answer=tesis.answer,
+                model=tesis.model,
+                detail="contrapunto_sintesis_failed_fallback",
+                duration_ms=total_ms,
+                reasoning_mode=profile.key,
+                reasoning_passes=2,
+            )
+
+        return ChatResult(
+            True,
+            answer=sintesis.answer,
+            model=sintesis.model,
+            detail="contrapunto_dialectical_3pass",
+            duration_ms=total_ms,
+            reasoning_mode=profile.key,
+            reasoning_passes=profile.passes,
+        )
+
     def _messages_as_text(self, messages: list[dict]) -> str:
         lines: list[str] = []
         for item in messages:
@@ -396,7 +514,7 @@ class ConversationCore:
                 "segui reconociendote como Lucy. "
                 "Si el usuario pregunta por identidad, tono, actitud, estilo, postura intelectual o inspiracion, responde sobre vos misma como Lucy antes de volver al texto."
             )
-        if mode in {"thinking", "supreme"}:
+        if mode in {"thinking", "supreme", "contrapunto"}:
             if dialogue:
                 return (
                     "Tu nombre es Lucy Cunningham. Esta identidad tiene prioridad sobre cualquier etiqueta tecnica del sistema. "

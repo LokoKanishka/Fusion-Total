@@ -1,6 +1,6 @@
 # Fusion Reader v2 — Estado de Continuidad
 
-Fecha: 2026-04-24
+Fecha: 2026-04-26
 
 Esta es la hoja corta para retomar el proyecto sin perderse. La historia larga
 vive en `docs/HISTORY.md` y en los documentos históricos de diseño.
@@ -33,6 +33,8 @@ Si STT, Ollama o el diálogo fallan, `Leer` debe seguir funcionando.
 - LLM local: Ollama `qwen3:14b-q8_0`
 - Voz default: `female_03.wav`
 - Idioma default: `es`
+- Razonamiento activo: `thinking` (default)
+- Modos de razonamiento: `normal`, `thinking`, `supreme`, `contrapunto`
 
 ## Fronteras de voz
 
@@ -63,7 +65,7 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 119 OK
+tests.test_fusion_reader_v2: 135 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 ```

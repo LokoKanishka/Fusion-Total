@@ -763,6 +763,7 @@ INDEX_HTML = r"""<!doctype html>
           <button id="reasoningNormalBtn" class="reasoning-tab" type="button">Normal</button>
           <button id="reasoningThinkingBtn" class="reasoning-tab" type="button">Pensar</button>
           <button id="reasoningSupremeBtn" class="reasoning-tab" type="button">Supremo</button>
+          <button id="reasoningContrapuntoBtn" class="reasoning-tab" type="button">Contrapunto</button>
         </div>
         <div id="dialogueInfo" class="dialogue-info">Diálogo apagado.</div>
         <div id="reasoningCaption" class="reasoning-caption">Pensamiento activo.</div>
@@ -832,6 +833,7 @@ INDEX_HTML = r"""<!doctype html>
       reasoningNormalBtn: document.getElementById('reasoningNormalBtn'),
       reasoningThinkingBtn: document.getElementById('reasoningThinkingBtn'),
       reasoningSupremeBtn: document.getElementById('reasoningSupremeBtn'),
+      reasoningContrapuntoBtn: document.getElementById('reasoningContrapuntoBtn'),
       freeModeBtn: document.getElementById('freeModeBtn'),
       reasoningCaption: document.getElementById('reasoningCaption'),
       dialogueBtn: document.getElementById('dialogueBtn'),
@@ -1153,6 +1155,9 @@ INDEX_HTML = r"""<!doctype html>
       if (applied === 'supreme') {
         return 'Pensamiento supremo';
       }
+      if (applied === 'contrapunto') {
+        return 'Contrapunto';
+      }
       if (applied === 'normal') {
         return 'Normal';
       }
@@ -1171,7 +1176,7 @@ INDEX_HTML = r"""<!doctype html>
     function pendingThoughtLabel() {
       const mode = currentReasoningMode();
       const scope = currentLaboratoryMode() === 'free' ? 'con laboratorio libre' : 'con el documento abierto';
-      if (mode === 'supreme') {
+      if (mode === 'supreme' || mode === 'contrapunto') {
         return `Repensando en profundidad ${scope}...`;
       }
       if (mode === 'normal') {
@@ -1186,13 +1191,14 @@ INDEX_HTML = r"""<!doctype html>
       const buttons = {
         normal: els.reasoningNormalBtn,
         thinking: els.reasoningThinkingBtn,
-        supreme: els.reasoningSupremeBtn
+        supreme: els.reasoningSupremeBtn,
+        contrapunto: els.reasoningContrapuntoBtn
       };
       Object.entries(buttons).forEach(([key, button]) => {
         button.classList.toggle('active', key === mode);
         button.setAttribute('aria-pressed', key === mode ? 'true' : 'false');
       });
-      const label = String(item.label || (mode === 'supreme' ? 'Pensamiento supremo' : mode === 'normal' ? 'Normal' : 'Pensamiento'));
+      const label = String(item.label || (mode === 'supreme' ? 'Pensamiento supremo' : mode === 'contrapunto' ? 'Contrapunto' : mode === 'normal' ? 'Normal' : 'Pensamiento'));
       const description = String(item.description || '');
       const passes = Number(item.passes || (mode === 'supreme' ? 3 : 1));
       const think = Object.prototype.hasOwnProperty.call(item, 'think') ? Boolean(item.think) : mode !== 'normal';
@@ -2405,6 +2411,7 @@ INDEX_HTML = r"""<!doctype html>
     els.reasoningNormalBtn.addEventListener('click', () => setReasoningMode('normal'));
     els.reasoningThinkingBtn.addEventListener('click', () => setReasoningMode('thinking'));
     els.reasoningSupremeBtn.addEventListener('click', () => setReasoningMode('supreme'));
+    els.reasoningContrapuntoBtn.addEventListener('click', () => setReasoningMode('contrapunto'));
     els.freeModeBtn.addEventListener('click', () => setLaboratoryMode(currentLaboratoryMode() === 'free' ? 'document' : 'free'));
     els.dialogueBtn.addEventListener('click', toggleDialogue);
     els.chatInput.addEventListener('keydown', event => {
