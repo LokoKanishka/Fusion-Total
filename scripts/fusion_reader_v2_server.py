@@ -1918,12 +1918,32 @@ INDEX_HTML = r"""<!doctype html>
       await startDialogue();
     }
 
+    async function microphonePermissionState() {
+      if (!navigator.permissions || !navigator.permissions.query) {
+        return '';
+      }
+      try {
+        const permission = await navigator.permissions.query({ name: 'microphone' });
+        return permission && permission.state ? permission.state : '';
+      } catch (_) {
+        return '';
+      }
+    }
+
     async function startDialogue() {
       if (!navigator.mediaDevices || !(window.AudioContext || window.webkitAudioContext)) {
         setDialogueInfo('Tu navegador no permite grabar audio desde esta página.');
         return;
       }
       try {
+        const permissionState = await microphonePermissionState();
+        if (permissionState === 'denied') {
+          setDialogueInfo('El micrófono está bloqueado en el navegador. Permitilo para usar Dialogar.');
+          return;
+        }
+        if (permissionState === 'prompt') {
+          setDialogueInfo('Permiso de micrófono pendiente. Aprobalo en el navegador para empezar a escuchar.');
+        }
         api('/api/prepare/cancel', {}).catch(() => {});
         dialogue.stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -1964,6 +1984,11 @@ INDEX_HTML = r"""<!doctype html>
         setDialogueInfo(`Escuchando... ${currentReasoningLabel()}. ${laboratoryModeSummary()} Hacé una pausa corta y respondo. Mic: ${dialogue.micDeviceLabel}`);
         monitorDialogue();
       } catch (err) {
+        const permissionState = await microphonePermissionState();
+        if (permissionState === 'denied' || (err && err.name === 'NotAllowedError')) {
+          setDialogueInfo('El micrófono está bloqueado o fue rechazado. Permitilo en el navegador y volvé a intentar.');
+          return;
+        }
         setDialogueInfo(`No pude abrir el micrófono: ${err.message}`);
       }
     }

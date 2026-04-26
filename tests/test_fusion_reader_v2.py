@@ -488,6 +488,13 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertNotIn("API_KEY", server)
         self.assertNotIn("TOKEN", server)
 
+    def test_dialogue_ui_reports_microphone_permission_states(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("async function microphonePermissionState()", server)
+        self.assertIn("Permiso de micrófono pendiente. Aprobalo en el navegador para empezar a escuchar.", server)
+        self.assertIn("El micrófono está bloqueado en el navegador. Permitilo para usar Dialogar.", server)
+        self.assertIn("El micrófono está bloqueado o fue rechazado. Permitilo en el navegador y volvé a intentar.", server)
+
     def test_dialogue_audio_trace_keeps_microphone_diagnostics(self):
         app = test_app(stt=EmptyTranscriptSTTProvider())
         with tempfile.NamedTemporaryFile(suffix=".wav") as handle:
