@@ -851,6 +851,17 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn('id="reasoningThinkingBtn"', text)
         self.assertIn('id="reasoningSupremeBtn"', text)
 
+    def test_contrapunto_synthesis_prompt_has_style_restrictions(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "fusion_reader_v2" / "conversation.py").read_text(encoding="utf-8")
+        # Verificar que existen las restricciones de estilo en el código fuente
+        self.assertIn("EMPEZA DIRECTAMENTE", source)
+        self.assertIn("NO USES ENCABEZADOS", source)
+        self.assertIn("No menciones borradores ni revisiones", source)
+        self.assertIn("BORRADOR PREVIO", source)
+        self.assertIn("NOTAS DE MEJORA", source)
+        self.assertIn("Sos la voz final de Fusion Reader v2", source)
+
     def test_dialogue_turn_text_answers_with_audio_without_touching_reader_tts_path(self):
         provider = NullTTSProvider()
         app = test_app(tts=provider)

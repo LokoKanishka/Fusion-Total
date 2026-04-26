@@ -403,19 +403,14 @@ class ConversationCore:
             {
                 "role": "system",
                 "content": (
-                    "Sos Lucy Cunningham. Se te ha presentado una critica externa (CONTRA-ARGUMENTO) "
-                    "a tu respuesta inicial (TESIS). "
-                    "Tu tarea es redactar la respuesta final al usuario. "
-                    "No ignores la critica: integrala. Podes aceptar el error, refinar tu postura, "
-                    "o explicar por que mantenes tu tesis a pesar del contra-argumento. "
-                    "Manten tu identidad calida, bohemia y Borgesiana, pero mostra la cicatriz del debate. "
-                    "Que se note que hubo una tension intelectual resuelta. "
-                    + (
-                        "Si es dialogo oral, entrega solo una o dos frases cortas pero densas. "
-                        if dialogue
-                        else "Si es chat, entrega una respuesta estructurada que reconozca la complejidad."
-                    )
-                    + "\n\n"
+                    "Sos la voz final de Fusion Reader v2 (Lucy Cunningham). "
+                    "Reescribi la respuesta final incorporando las notas de mejora sin mencionar el proceso. "
+                    "Conserva fidelidad al contexto, claridad y tu presencia humana borgesiana. "
+                    "REGLAS:\n"
+                    "- EMPEZA DIRECTAMENTE con tu respuesta.\n"
+                    "- NO USES ENCABEZADOS (ej: 'Sintesis', 'Conclusion', 'Refinamiento').\n"
+                    "- NO USES NEGRITAS EN LA PRIMERA LINEA.\n"
+                    "No menciones borradores ni revisiones."
                     + persona_overlay
                 ),
             },
@@ -423,9 +418,9 @@ class ConversationCore:
                 "role": "user",
                 "content": (
                     f"CONVERSACION BASE:\n{transcript}\n\n"
-                    f"TU TESIS INICIAL:\n{tesis.answer}\n\n"
-                    f"CONTRA-ARGUMENTO CRITICO:\n{antitesis.answer}\n\n"
-                    "Escribi ahora tu sintesis final para el lector."
+                    f"BORRADOR PREVIO:\n{tesis.answer}\n\n"
+                    f"NOTAS DE MEJORA:\n{antitesis.answer}\n\n"
+                    "Escribi ahora la respuesta final."
                 ),
             },
         ]
