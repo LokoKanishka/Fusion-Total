@@ -61,14 +61,27 @@ Modos disponibles:
 1. **Normal**: 1 pasada, `think=false`. Respuesta directa.
 2. **Pensamiento**: 1 pasada, `think=true`. Uso de fase de pensamiento nativa de Ollama.
 3. **Supremo**: 3 pasadas (`borrador -> revisión -> final`). Auto-crítica interna.
-4. **Contrapunto**: 3 pasadas dialécticas.
+4. **Pensamiento crítico** (anteriormente Contrapunto): 3 pasadas dialécticas.
    - **Tesis**: Lucy Cunningham genera la respuesta base.
    - **Antítesis**: Un auditor crítico busca fallos y omisiones.
    - **Síntesis**: Lucy integra la tensión en una respuesta final "con cicatriz".
 
 Regla de degradación:
 
-- En modo `Dialogar` (voz), los modos `Supremo` y `Contrapunto` degradan automáticamente a `Pensamiento` para mantener la latencia por debajo de los 3-5 segundos.
+- En modo `Dialogar` (voz), los modos `Supremo` y `Pensamiento crítico` degradan automáticamente a `Pensamiento` para mantener la latencia por debajo de los 3-5 segundos.
+
+## Perfiles de personalidad
+
+Fusion Reader v2 permite alternar entre dos perfiles de Lucy:
+
+1. **Académica** (default):
+   - personalidad sobria, exigente y filosófico-técnica;
+   - inspirada en una presencia borgiana, contemplativa y precisa;
+   - usa `FUSION_READER_CHAT_MODEL` (default `qwen3:14b-q8_0`).
+2. **Bohemia**:
+   - personalidad más libre, literaria y directa;
+   - menos escolar, rechaza el "humanismo barato" y busca la tensión latente;
+   - usa `FUSION_READER_BOHEMIA_CHAT_MODEL` si está definido, o el default.
 
 ## Notas
 

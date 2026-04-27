@@ -85,16 +85,19 @@ class FusionReaderV2:
         self.dialogue_allow_supreme = os.environ.get("FUSION_READER_DIALOGUE_ALLOW_SUPREME", "0").strip().lower() in {"1", "true", "yes", "on"}
         self.reasoning_mode = str(getattr(self.conversation, "default_reasoning_mode", "thinking") or "thinking")
         self.laboratory_mode = "document"
+        self.profile = "academica"
         self.session_state_path = Path(session_state_path) if session_state_path else None
         self.dialogue_trace_path = (self.session_state_path.parent / "dialogue_trace.jsonl") if self.session_state_path else None
         self._restore_session_state()
 
     def _effective_reasoning_mode(self, *, dialogue: bool = False) -> dict:
         requested = str(self.reasoning_mode or "thinking")
+        if requested == "contrapunto":
+            requested = "pensamiento_critico"
         applied = requested
         degraded = False
         reason = ""
-        if dialogue and requested in {"supreme", "contrapunto"} and not self.dialogue_allow_supreme:
+        if dialogue and requested in {"supreme", "pensamiento_critico"} and not self.dialogue_allow_supreme:
             applied = "thinking"
             degraded = True
             reason = f"dialogue_{requested}_degraded_to_thinking"
@@ -672,6 +675,7 @@ class FusionReaderV2:
         out["services"] = self._dialogue_services_status()
         out["reasoning"] = self.reasoning_status()
         out["laboratory_mode"] = self.laboratory_mode_status()
+        out["profile"] = self.profile_status()
         main_record = self._main_document_record()
         out["main_document"] = self._public_document_record(main_record) if main_record else {}
         out["reference_documents"] = self._reference_document_items()
@@ -1503,7 +1507,10 @@ class FusionReaderV2:
         snapshot = self.reader_snapshot()
         with self._chat_lock:
             history = list(self._chat_history)
-        result = self.conversation.ask(message, snapshot=snapshot, model=model, history=history, reasoning_mode=self.reasoning_mode)
+        selected_model = model
+        if not selected_model and self.profile == "bohemia":
+            selected_model = os.environ.get("FUSION_READER_BOHEMIA_CHAT_MODEL")
+        result = self.conversation.ask(message, snapshot=snapshot, model=selected_model, history=history, reasoning_mode=self.reasoning_mode, profile=self.profile)
         if result.ok:
             self._remember_chat_turn(message, result.answer)
         return {
@@ -1589,6 +1596,8 @@ class FusionReaderV2:
     def set_reasoning_mode(self, mode: str) -> dict:
         profile = self.conversation.reasoning_status(mode)
         self.reasoning_mode = str(profile.get("mode") or self.reasoning_mode or "thinking")
+        if self.reasoning_mode == "contrapunto":
+            self.reasoning_mode = "pensamiento_critico"
         self._persist_session_state()
         self._append_dialogue_trace(
             {
@@ -1621,6 +1630,31 @@ class FusionReaderV2:
             }
         )
         return self.laboratory_mode_status()
+
+    def profile_status(self) -> dict:
+        mode = "bohemia" if str(self.profile or "").strip().lower() == "bohemia" else "academica"
+        return {
+            "mode": mode,
+            "label": "Bohemia" if mode == "bohemia" else "Académica",
+            "description": (
+                "Lucy Bohemia: más libre, literaria y directa. Menos escolar, más exploratoria."
+                if mode == "bohemia"
+                else "Lucy Académica: seria, formal, precisa y orientada al estudio riguroso."
+            ),
+            "selected": True,
+        }
+
+    def set_profile(self, mode: str) -> dict:
+        self.profile = "bohemia" if str(mode or "").strip().lower() == "bohemia" else "academica"
+        self._persist_session_state()
+        self._append_dialogue_trace(
+            {
+                "ts": time.time(),
+                "event": "profile_changed",
+                "selected_mode": self.profile,
+            }
+        )
+        return self.profile_status()
 
     def dialogue_reset(self) -> dict:
         with self._dialogue_lock:
@@ -1966,7 +2000,10 @@ class FusionReaderV2:
         with self._dialogue_lock:
             history = list(self._dialogue_history)
         chat_started = time.perf_counter()
-        result = self.conversation.ask_dialogue(text, snapshot=snapshot, history=history, model=model, reasoning_mode=reasoning["applied"])
+        selected_model = model
+        if not selected_model and self.profile == "bohemia":
+            selected_model = os.environ.get("FUSION_READER_BOHEMIA_CHAT_MODEL")
+        result = self.conversation.ask_dialogue(text, snapshot=snapshot, history=history, model=selected_model, reasoning_mode=reasoning["applied"], profile=self.profile)
         chat_ms = result.duration_ms or int((time.perf_counter() - chat_started) * 1000)
         if not result.ok:
             out = self._finalize_dialogue_failure(

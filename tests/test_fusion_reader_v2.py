@@ -782,15 +782,15 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn('"requested_mode": "supreme"', logged)
         self.assertIn('"applied_mode": "thinking"', logged)
 
-    def test_reasoning_catalog_includes_contrapunto(self):
+    def test_reasoning_catalog_includes_pensamiento_critico(self):
         app = test_app()
         catalog = app.conversation.reasoning_catalog()
         modes = [item["mode"] for item in catalog]
-        self.assertIn("contrapunto", modes)
-        contrapunto = next(item for item in catalog if item["mode"] == "contrapunto")
-        self.assertIn("Contrapunto", contrapunto["label"])
-        self.assertEqual(contrapunto["passes"], 3)
-        self.assertTrue(contrapunto["think"])
+        self.assertIn("pensamiento_critico", modes)
+        critico = next(item for item in catalog if item["mode"] == "pensamiento_critico")
+        self.assertIn("Pensamiento crítico", critico["label"])
+        self.assertEqual(critico["passes"], 3)
+        self.assertTrue(critico["think"])
 
     def test_contrapunto_textual_runs_three_passes(self):
         chat_provider = NullChatProvider("Respuesta final dialéctica.")
@@ -800,7 +800,7 @@ class FusionReaderV2Tests(unittest.TestCase):
         app.load_text("doc", "Doc", "Contexto base.", prefetch=False)
         out = app.chat("Analizá este fragmento.")
         self.assertTrue(out["ok"])
-        self.assertEqual(out["reasoning_mode"], "contrapunto")
+        self.assertEqual(out["reasoning_mode"], "pensamiento_critico")
         self.assertEqual(out["reasoning_passes"], 3)
         self.assertEqual(len(chat_provider.calls), 3)
         # Verificar que al menos una llamada es del Auditor/Crítico
@@ -812,7 +812,7 @@ class FusionReaderV2Tests(unittest.TestCase):
                     found_auditor = True
                     break
         self.assertTrue(found_auditor, "No se encontró el rol de Auditor/Crítico en las llamadas al provider")
-        self.assertEqual(out["detail"], "contrapunto_dialectical_3pass")
+        self.assertEqual(out["detail"], "pensamiento_critico_dialectical_3pass")
 
     def test_contrapunto_does_not_break_supreme(self):
         chat_provider = NullChatProvider("Respuesta final supreme.")
@@ -833,19 +833,19 @@ class FusionReaderV2Tests(unittest.TestCase):
         app.load_text("doc", "Doc", "Contexto.", prefetch=False)
         out = app.dialogue_turn_text("¿Qué ves?")
         self.assertTrue(out["ok"])
-        self.assertEqual(out["reasoning_mode_requested"], "contrapunto")
+        self.assertEqual(out["reasoning_mode_requested"], "pensamiento_critico")
         self.assertEqual(out["reasoning_mode_applied"], "thinking")
         self.assertTrue(out["reasoning_degraded"])
         # Verificar vía dialogue_status que la razón es correcta
         status = app.dialogue_status()
-        self.assertEqual(status["dialogue_reasoning"]["degraded_reason"], "dialogue_contrapunto_degraded_to_thinking")
+        self.assertEqual(status["dialogue_reasoning"]["degraded_reason"], "dialogue_pensamiento_critico_degraded_to_thinking")
 
-    def test_server_ui_contains_contrapunto_button(self):
+    def test_server_ui_contains_pensamiento_critico_button(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
-        self.assertIn('id="reasoningContrapuntoBtn"', text)
-        self.assertIn("Contrapunto", text)
-        self.assertIn("setReasoningMode('contrapunto')", text)
+        self.assertIn('id="reasoningPensamientoCriticoBtn"', text)
+        self.assertIn("Pensamiento crítico", text)
+        self.assertIn("setReasoningMode('pensamiento_critico')", text)
         # Verificar que no se eliminaron los anteriores
         self.assertIn('id="reasoningNormalBtn"', text)
         self.assertIn('id="reasoningThinkingBtn"', text)
@@ -1992,6 +1992,43 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("el año", text)
         self.assertIn("al anciano", text)
         self.assertIn("del azul", text)
+
+    def test_lucy_profiles_academica_and_bohemia(self):
+        from unittest.mock import patch
+        chat_provider = NullChatProvider("Respuesta de prueba.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        
+        # Default is academica
+        self.assertEqual(app.profile_status()["mode"], "academica")
+        app.load_text("doc", "Doc", "Contexto.", prefetch=False)
+        app.chat("Hola")
+        # Verificar que la persona academica esta en el prompt
+        self.assertIn("Lucy Cunningham", chat_provider.calls[-1][0][0]["content"])
+        self.assertIn("sobria, exigente", chat_provider.calls[-1][0][0]["content"])
+        
+        # Switch to bohemia
+        app.set_profile("bohemia")
+        self.assertEqual(app.profile_status()["mode"], "bohemia")
+        app.chat("Hola de nuevo")
+        # Verificar que la persona bohemia esta en el prompt
+        self.assertIn("Lucy Bohemia", chat_provider.calls[-1][0][0]["content"])
+        self.assertIn("literaria, directa", chat_provider.calls[-1][0][0]["content"])
+        self.assertIn("No sos moralizante", chat_provider.calls[-1][0][0]["content"])
+        
+        # Verify model selection
+        with patch.dict(os.environ, {"FUSION_READER_BOHEMIA_CHAT_MODEL": "bohemia-model:latest"}):
+            app.chat("Test model")
+            self.assertEqual(chat_provider.calls[-1][1], "bohemia-model:latest")
+
+    def test_server_ui_contains_profile_buttons(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn('id="profileAcademicaBtn"', text)
+        self.assertIn('id="profileBohemiaBtn"', text)
+        self.assertIn("setProfileMode('academica')", text)
+        self.assertIn("setProfileMode('bohemia')", text)
+        self.assertIn("/api/profile", text)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,8 @@ Si STT, Ollama o el diálogo fallan, `Leer` debe seguir funcionando.
 - Voz default: `female_03.wav`
 - Idioma default: `es`
 - Razonamiento activo: `thinking` (default)
-- Modos de razonamiento: `normal`, `thinking`, `supreme`, `contrapunto`
+- Modos de razonamiento: `normal`, `thinking`, `supreme`, `pensamiento_critico`
+- Perfiles de Lucy: `academica` (default), `bohemia`
 
 ## Fronteras de voz
 
@@ -65,7 +66,7 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 135 OK
+tests.test_fusion_reader_v2: 138 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 ```

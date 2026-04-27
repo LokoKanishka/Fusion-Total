@@ -615,6 +615,29 @@ INDEX_HTML = r"""<!doctype html>
       color: var(--text);
       background: rgba(56, 198, 216, 0.14);
     }
+    .profile-tabs {
+      display: flex;
+      gap: 4px;
+      flex-wrap: nowrap;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+    .profile-tab {
+      min-height: 24px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #0a0d0c;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+    .profile-tab.active {
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(33, 208, 122, 0.14);
+    }
     .reasoning-caption {
       color: var(--muted);
       font-size: 10px;
@@ -759,11 +782,15 @@ INDEX_HTML = r"""<!doctype html>
         <button id="clearLabHistoryBtn" class="compact-btn" type="button">Borrar historial</button>
         <button id="dialogueBtn" class="primary compact-btn">Dialogar</button>
         <button id="freeModeBtn" class="mode-toggle-btn compact-btn" type="button">Modo libre</button>
+        <div class="profile-tabs" aria-label="Perfil de personalidad">
+          <button id="profileAcademicaBtn" class="profile-tab" type="button">Académica</button>
+          <button id="profileBohemiaBtn" class="profile-tab" type="button">Bohemia</button>
+        </div>
         <div class="reasoning-tabs" aria-label="Modo de razonamiento">
           <button id="reasoningNormalBtn" class="reasoning-tab" type="button">Normal</button>
           <button id="reasoningThinkingBtn" class="reasoning-tab" type="button">Pensar</button>
           <button id="reasoningSupremeBtn" class="reasoning-tab" type="button">Supremo</button>
-          <button id="reasoningContrapuntoBtn" class="reasoning-tab" type="button">Contrapunto</button>
+          <button id="reasoningPensamientoCriticoBtn" class="reasoning-tab" type="button">Pensamiento crítico</button>
         </div>
         <div id="dialogueInfo" class="dialogue-info">Diálogo apagado.</div>
         <div id="reasoningCaption" class="reasoning-caption">Pensamiento activo.</div>
@@ -833,7 +860,9 @@ INDEX_HTML = r"""<!doctype html>
       reasoningNormalBtn: document.getElementById('reasoningNormalBtn'),
       reasoningThinkingBtn: document.getElementById('reasoningThinkingBtn'),
       reasoningSupremeBtn: document.getElementById('reasoningSupremeBtn'),
-      reasoningContrapuntoBtn: document.getElementById('reasoningContrapuntoBtn'),
+      reasoningPensamientoCriticoBtn: document.getElementById('reasoningPensamientoCriticoBtn'),
+      profileAcademicaBtn: document.getElementById('profileAcademicaBtn'),
+      profileBohemiaBtn: document.getElementById('profileBohemiaBtn'),
       freeModeBtn: document.getElementById('freeModeBtn'),
       reasoningCaption: document.getElementById('reasoningCaption'),
       dialogueBtn: document.getElementById('dialogueBtn'),
@@ -1091,6 +1120,7 @@ INDEX_HTML = r"""<!doctype html>
       const shouldRefreshNotes = selectedNotesDocId !== notesState.docId || data.current !== notesState.current || Boolean(data.notes && data.notes.count !== notesState.items.length);
       status = data;
       renderReasoningStatus(data.reasoning || {});
+      renderProfileStatus(data.profile || {});
       renderLaboratoryMode(data.laboratory_mode || {});
       if (!dialogue.active && !dialogue.processing && !dialogue.speaking) {
         setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
@@ -1147,7 +1177,8 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function laboratoryModeSummary() {
-      return currentLaboratoryMode() === 'free' ? 'Modo libre.' : 'Anclado al texto.';
+      const profile = String(status && status.profile && status.profile.label || 'Académica');
+      return `${profile}. ${currentLaboratoryMode() === 'free' ? 'Modo libre.' : 'Anclado al texto.'}`;
     }
 
     function dialogueAppliedReasoningLabel(data) {
@@ -1155,8 +1186,8 @@ INDEX_HTML = r"""<!doctype html>
       if (applied === 'supreme') {
         return 'Pensamiento supremo';
       }
-      if (applied === 'contrapunto') {
-        return 'Contrapunto';
+      if (applied === 'contrapunto' || applied === 'pensamiento_critico') {
+        return 'Pensamiento crítico';
       }
       if (applied === 'normal') {
         return 'Normal';
@@ -1170,19 +1201,21 @@ INDEX_HTML = r"""<!doctype html>
       if (Boolean(data && data.reasoning_degraded) && requested === 'supreme' && applied === 'thinking') {
         return 'Supremo pedido; diálogo usa Pensamiento para cuidar latencia.';
       }
-      return `${dialogueAppliedReasoningLabel(data)} activo.`;
+      const profile = String(status && status.profile && status.profile.label || 'Académica');
+      return `${profile}. ${dialogueAppliedReasoningLabel(data)} activo.`;
     }
 
     function pendingThoughtLabel() {
       const mode = currentReasoningMode();
       const scope = currentLaboratoryMode() === 'free' ? 'con laboratorio libre' : 'con el documento abierto';
-      if (mode === 'supreme' || mode === 'contrapunto') {
-        return `Repensando en profundidad ${scope}...`;
+      const profile = String(status && status.profile && status.profile.label || 'Académica');
+      if (mode === 'supreme' || mode === 'contrapunto' || mode === 'pensamiento_critico') {
+        return `${profile}: Repensando en profundidad ${scope}...`;
       }
       if (mode === 'normal') {
-        return `Respondiendo ${scope}...`;
+        return `${profile}: Respondiendo ${scope}...`;
       }
-      return `Pensando ${scope}...`;
+      return `${profile}: Pensando ${scope}...`;
     }
 
     function renderReasoningStatus(reasoning) {
@@ -1192,13 +1225,13 @@ INDEX_HTML = r"""<!doctype html>
         normal: els.reasoningNormalBtn,
         thinking: els.reasoningThinkingBtn,
         supreme: els.reasoningSupremeBtn,
-        contrapunto: els.reasoningContrapuntoBtn
+        pensamiento_critico: els.reasoningPensamientoCriticoBtn
       };
       Object.entries(buttons).forEach(([key, button]) => {
-        button.classList.toggle('active', key === mode);
-        button.setAttribute('aria-pressed', key === mode ? 'true' : 'false');
+        button.classList.toggle('active', key === mode || (key === 'pensamiento_critico' && mode === 'contrapunto'));
+        button.setAttribute('aria-pressed', (key === mode || (key === 'pensamiento_critico' && mode === 'contrapunto')) ? 'true' : 'false');
       });
-      const label = String(item.label || (mode === 'supreme' ? 'Pensamiento supremo' : mode === 'contrapunto' ? 'Contrapunto' : mode === 'normal' ? 'Normal' : 'Pensamiento'));
+      const label = String(item.label || (mode === 'supreme' ? 'Pensamiento supremo' : (mode === 'contrapunto' || mode === 'pensamiento_critico') ? 'Pensamiento crítico' : mode === 'normal' ? 'Normal' : 'Pensamiento'));
       const description = String(item.description || '');
       const passes = Number(item.passes || (mode === 'supreme' ? 3 : 1));
       const think = Object.prototype.hasOwnProperty.call(item, 'think') ? Boolean(item.think) : mode !== 'normal';
@@ -1232,6 +1265,35 @@ INDEX_HTML = r"""<!doctype html>
         }
       } catch (err) {
         log(`No pude cambiar el modo del laboratorio: ${err.message}`);
+      }
+    }
+
+    function renderProfileStatus(profile) {
+      const item = profile && typeof profile === 'object' ? profile : {};
+      const mode = String(item.mode || 'academica');
+      els.profileAcademicaBtn.classList.toggle('active', mode === 'academica');
+      els.profileAcademicaBtn.setAttribute('aria-pressed', mode === 'academica' ? 'true' : 'false');
+      els.profileBohemiaBtn.classList.toggle('active', mode === 'bohemia');
+      els.profileBohemiaBtn.setAttribute('aria-pressed', mode === 'bohemia' ? 'true' : 'false');
+    }
+
+    async function setProfileMode(mode) {
+      const targetMode = String(mode || '').trim();
+      try {
+        const data = await api('/api/profile', { mode: targetMode });
+        if (!status) {
+          status = {};
+        }
+        status.profile = data;
+        renderProfileStatus(data);
+        log(`Perfil de Lucy cambiado a ${data.label || targetMode}.`);
+        if (dialogue.active && !dialogue.processing && !dialogue.speaking) {
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary({})} ${laboratoryModeSummary()}`);
+        } else if (!dialogue.active) {
+          setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
+        }
+      } catch (err) {
+        log(`No pude cambiar el perfil: ${err.message}`);
       }
     }
 
@@ -2411,7 +2473,9 @@ INDEX_HTML = r"""<!doctype html>
     els.reasoningNormalBtn.addEventListener('click', () => setReasoningMode('normal'));
     els.reasoningThinkingBtn.addEventListener('click', () => setReasoningMode('thinking'));
     els.reasoningSupremeBtn.addEventListener('click', () => setReasoningMode('supreme'));
-    els.reasoningContrapuntoBtn.addEventListener('click', () => setReasoningMode('contrapunto'));
+    els.reasoningPensamientoCriticoBtn.addEventListener('click', () => setReasoningMode('pensamiento_critico'));
+    els.profileAcademicaBtn.addEventListener('click', () => setProfileMode('academica'));
+    els.profileBohemiaBtn.addEventListener('click', () => setProfileMode('bohemia'));
     els.freeModeBtn.addEventListener('click', () => setLaboratoryMode(currentLaboratoryMode() === 'free' ? 'document' : 'free'));
     els.dialogueBtn.addEventListener('click', toggleDialogue);
     els.chatInput.addEventListener('keydown', event => {
@@ -2919,6 +2983,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/laboratory/mode":
                 self._json(200, APP.set_laboratory_mode(str(payload.get("mode") or "")))
+                return
+            if path == "/api/profile":
+                self._json(200, APP.set_profile(str(payload.get("mode") or "")))
                 return
             if path in ("/api/laboratory/reset", "/api/chat/reset"):
                 self._json(200, APP.clear_laboratory_history())

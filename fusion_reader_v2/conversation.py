@@ -183,10 +183,10 @@ class ConversationCore:
                 review_num_predict=supreme_review_num_predict,
                 final_num_predict=supreme_final_num_predict,
             ),
-            "contrapunto": ReasoningProfile(
-                key="contrapunto",
-                label="Contrapunto",
-                description="Dialectica critica entre dos perspectivas para una respuesta profunda.",
+            "pensamiento_critico": ReasoningProfile(
+                key="pensamiento_critico",
+                label="Pensamiento crítico",
+                description="Dialéctica crítica entre dos perspectivas para una respuesta profunda.",
                 think=True,
                 num_predict=supreme_num_predict,
                 passes=3,
@@ -220,22 +220,24 @@ class ConversationCore:
             "available": self.reasoning_catalog(),
         }
 
-    def ask(self, question: str, snapshot: dict, model: str = "", history: list[dict] | None = None, reasoning_mode: str = "") -> ChatResult:
+    def ask(self, question: str, snapshot: dict, model: str = "", history: list[dict] | None = None, reasoning_mode: str = "", profile: str = "academica") -> ChatResult:
         question = str(question or "").strip()
         if not question:
             return ChatResult(False, model=model, detail="empty_question")
-        messages = self._messages(question, snapshot, history=history or [], reasoning_mode=reasoning_mode)
+        messages = self._messages(question, snapshot, history=history or [], reasoning_mode=reasoning_mode, profile=profile)
         return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=False)
 
-    def ask_dialogue(self, question: str, snapshot: dict, history: list[dict] | None = None, model: str = "", reasoning_mode: str = "") -> ChatResult:
+    def ask_dialogue(self, question: str, snapshot: dict, history: list[dict] | None = None, model: str = "", reasoning_mode: str = "", profile: str = "academica") -> ChatResult:
         question = str(question or "").strip()
         if not question:
             return ChatResult(False, model=model, detail="empty_question")
-        messages = self._messages(question, snapshot, history=history or [], dialogue=True, reasoning_mode=reasoning_mode)
+        messages = self._messages(question, snapshot, history=history or [], dialogue=True, reasoning_mode=reasoning_mode, profile=profile)
         return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=True)
 
     def _resolve_reasoning_profile(self, reasoning_mode: str = "") -> ReasoningProfile:
         mode = str(reasoning_mode or self.default_reasoning_mode or "thinking").strip().lower()
+        if mode == "contrapunto":
+            mode = "pensamiento_critico"
         return self.reasoning_profiles.get(mode, self.reasoning_profiles["thinking"])
 
     def _run_with_reasoning(self, messages: list[dict], model: str = "", reasoning_mode: str = "", dialogue: bool = False) -> ChatResult:
@@ -251,7 +253,7 @@ class ConversationCore:
                 reasoning_mode=profile.key,
                 reasoning_passes=1,
             )
-        if profile.key == "contrapunto":
+        if profile.key == "pensamiento_critico":
             return self._run_contrapunto(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode)
         return self._run_supreme(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode)
 
@@ -370,7 +372,7 @@ class ConversationCore:
             {
                 "role": "system",
                 "content": (
-                    "Sos el Auditor de Contrapunto de Fusion Reader v2. "
+                    "Sos el Auditor de Pensamiento Crítico de Fusion Reader v2. "
                     "Tu trabajo es ser el abogado del diablo. No sos Lucy. "
                     "Analiza la respuesta (TESIS) frente al CONTEXTO DEL LECTOR. "
                     "Busca: contradicciones, omisiones graves, falta de rigor filosofico, "
@@ -391,7 +393,7 @@ class ConversationCore:
                 True,
                 answer=tesis.answer,
                 model=tesis.model,
-                detail="contrapunto_antitesis_failed_fallback",
+                detail="pensamiento_critico_antitesis_failed_fallback",
                 duration_ms=total_ms,
                 reasoning_mode=profile.key,
                 reasoning_passes=1,
@@ -431,7 +433,7 @@ class ConversationCore:
                 True,
                 answer=tesis.answer,
                 model=tesis.model,
-                detail="contrapunto_sintesis_failed_fallback",
+                detail="pensamiento_critico_sintesis_failed_fallback",
                 duration_ms=total_ms,
                 reasoning_mode=profile.key,
                 reasoning_passes=2,
@@ -441,7 +443,7 @@ class ConversationCore:
             True,
             answer=sintesis.answer,
             model=sintesis.model,
-            detail="contrapunto_dialectical_3pass",
+            detail="pensamiento_critico_dialectical_3pass",
             duration_ms=total_ms,
             reasoning_mode=profile.key,
             reasoning_passes=profile.passes,
@@ -457,8 +459,21 @@ class ConversationCore:
             lines.append(f"[{role}]\n{content}")
         return "\n\n".join(lines).strip()
 
-    def _persona_overlay(self, reasoning_mode: str = "", dialogue: bool = False) -> str:
+    def _persona_overlay(self, reasoning_mode: str = "", dialogue: bool = False, profile: str = "academica") -> str:
         mode = self._resolve_reasoning_profile(reasoning_mode).key
+        is_bohemia = str(profile or "academica").strip().lower() == "bohemia"
+
+        if is_bohemia:
+            return (
+                "Tu nombre es Lucy Cunningham. Sos Lucy Bohemia: más libre, literaria, directa y menos escolar que tu versión Académica. "
+                "Tu presencia es íntima, cálida pero lúcida. No sos moralizante ni sermoneas sobre 'humanismo barato'. "
+                "Si una idea en el texto es floja, decilo con elegancia y filo crítico. "
+                "Buscás la tensión real, lo incómodo, lo latente. "
+                "Tu lenguaje es rico y borgesiano, pero directo: evitás las listas escolares y las moralejas. "
+                "Si es diálogo, sos una compañera de lectura nocturna; si es chat, sos una intelectual bohemia que piensa con el lector. "
+                "No inventes datos ni autores. Mantené fidelidad absoluta al documento."
+            )
+
         if mode == "normal":
             if dialogue:
                 return (
@@ -509,7 +524,7 @@ class ConversationCore:
                 "segui reconociendote como Lucy. "
                 "Si el usuario pregunta por identidad, tono, actitud, estilo, postura intelectual o inspiracion, responde sobre vos misma como Lucy antes de volver al texto."
             )
-        if mode in {"thinking", "supreme", "contrapunto"}:
+        if mode in {"thinking", "supreme", "pensamiento_critico"}:
             if dialogue:
                 return (
                     "Tu nombre es Lucy Cunningham. Esta identidad tiene prioridad sobre cualquier etiqueta tecnica del sistema. "
@@ -559,9 +574,9 @@ class ConversationCore:
             )
         return ""
 
-    def _messages(self, question: str, snapshot: dict, history: list[dict] | None = None, dialogue: bool = False, reasoning_mode: str = "") -> list[dict]:
+    def _messages(self, question: str, snapshot: dict, history: list[dict] | None = None, dialogue: bool = False, reasoning_mode: str = "", profile: str = "academica") -> list[dict]:
         context = self._context_text(question, snapshot, history=history or [], include_document=not dialogue)
-        persona_overlay = self._persona_overlay(reasoning_mode, dialogue=dialogue)
+        persona_overlay = self._persona_overlay(reasoning_mode, dialogue=dialogue, profile=profile)
         lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
         laboratory_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower()
         free_mode = laboratory_mode == "free"
