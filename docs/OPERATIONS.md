@@ -135,6 +135,24 @@ Perfil:
 - thinking activo
 - presupuesto de respuesta más alto
 
+## Arranque con Bohemia uncensored
+
+```bash
+./scripts/start_fusion_reader_v2_bohemia.sh
+```
+
+Fusion opera sobre tres ejes independientes:
+- Documento / Modo libre
+- Académica / Bohemia
+- Normal / Pensar / Supremo / Pensamiento crítico
+
+Advertencia operativa:
+Bohemia usa un modelo abliterated/uncensored (`huihui_ai/qwen3-abliterated:14b-v2-q8_0`), útil para exploración privada, charla libre y lectura literaria incómoda; no usar como guía operativa para acciones peligrosas ni como modo docente por defecto.
+
+Aclaración:
+- Académica conserva `qwen3:14b-q8_0`.
+- Bohemia cambia de modelo solo si la variable `FUSION_READER_BOHEMIA_CHAT_MODEL` está definida.
+
 ## Recuperación rápida
 
 - si falla diálogo pero lectura sigue: priorizar no romper `Leer`

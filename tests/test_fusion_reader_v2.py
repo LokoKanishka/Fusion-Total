@@ -2030,6 +2030,16 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("setProfileMode('bohemia')", text)
         self.assertIn("/api/profile", text)
 
+    def test_start_fusion_reader_v2_bohemia_script_is_valid(self):
+        root = Path(__file__).resolve().parents[1]
+        script_path = root / "scripts" / "start_fusion_reader_v2_bohemia.sh"
+        self.assertTrue(script_path.exists())
+        text = script_path.read_text(encoding="utf-8")
+        self.assertIn("FUSION_READER_BOHEMIA_CHAT_MODEL", text)
+        self.assertIn("huihui_ai/qwen3-abliterated:14b-v2-q8_0", text)
+        self.assertIn("start_fusion_reader_v2.sh", text)
+        self.assertNotIn("FUSION_READER_CHAT_MODEL=", text)
+
 
 if __name__ == "__main__":
     unittest.main()

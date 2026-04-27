@@ -69,6 +69,13 @@ Reglas:
 tests.test_fusion_reader_v2: 138 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
+
+- Bohemia uncensored instalada y validada.
+- modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
+- smoke test: OK
+- tests: 138 OK
+- voice isolation: OK
+- arquitectura de tres ejes preservada.
 ```
 
 Último commit relevante:
