@@ -66,22 +66,23 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 138 OK
+tests.test_fusion_reader_v2: 140 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 
+- Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
 - Bohemia uncensored instalada y validada.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
-- tests: 138 OK
+- tests: 140 OK
 - voice isolation: OK
-- arquitectura de tres ejes preservada.
+- arquitectura de tres ejes (Anclaje, Perfil, Razonamiento) preservada.
 ```
 
 Último commit relevante:
 
 ```text
-3a46eab Add isolated SearXNG research bridge for Fusion
+2cdb11b Document Bohemia uncensored startup
 ```
 
 ## Arranque recomendado

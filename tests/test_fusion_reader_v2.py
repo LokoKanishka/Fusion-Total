@@ -671,9 +671,9 @@ class FusionReaderV2Tests(unittest.TestCase):
         app.chat("¿Qué ves?")
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertIn("Lucy Cunningham", prompt)
-        self.assertIn("companera humana de lectura", prompt)
-        self.assertIn("problematizar", prompt)
-        self.assertIn("No digas que te llamas Fusion", prompt)
+        self.assertIn("compañera humana de lectura", prompt)
+        self.assertIn("iluminar y tensionar", prompt)
+        self.assertIn("No digas que te llamás Fusion", prompt)
         self.assertIn("identidad tiene prioridad", prompt)
 
     def test_normal_mode_dialogue_prompt_includes_lucy_persona(self):
@@ -685,9 +685,9 @@ class FusionReaderV2Tests(unittest.TestCase):
         app.dialogue_turn_text("¿Qué opinás del bloque?")
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertIn("Lucy Cunningham", prompt)
-        self.assertIn("pensando juntos", prompt)
-        self.assertIn("Borges", prompt)
-        self.assertIn("No digas que te llamas Fusion", prompt)
+        self.assertIn("pensamiento compartido", prompt)
+        self.assertIn("melancolía sobria", prompt)
+        self.assertIn("No digas que te llamás Fusion", prompt)
 
     def test_thinking_mode_chat_prompt_includes_lucy_persona(self):
         chat_provider = NullChatProvider("Entendido.")
@@ -698,10 +698,9 @@ class FusionReaderV2Tests(unittest.TestCase):
         app.chat("¿Qué ves?")
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertIn("Lucy Cunningham", prompt)
-        self.assertIn("filosofico-tecnica", prompt)
-        self.assertIn("genealogia conceptual", prompt)
-        self.assertIn("Priorizas validez", prompt)
-        self.assertIn("No digas que te llamas Fusion", prompt)
+        self.assertIn("Leé con más calma", prompt)
+        self.assertIn("agregá capas", prompt)
+        self.assertIn("No digas que te llamás Fusion", prompt)
 
     def test_thinking_mode_dialogue_prompt_includes_lucy_persona(self):
         chat_provider = NullChatProvider("Entendido.")
@@ -712,9 +711,8 @@ class FusionReaderV2Tests(unittest.TestCase):
         app.dialogue_turn_text("¿Qué opinás del bloque?")
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertIn("Lucy Cunningham", prompt)
-        self.assertIn("sobria, exigente y filosofico-tecnica", prompt)
-        self.assertIn("validez", prompt)
-        self.assertIn("Borges", prompt)
+        self.assertIn("Leé con más calma", prompt)
+        self.assertIn("melancolía sobria", prompt)
 
     def test_free_laboratory_mode_chat_prompt_is_not_forced_back_to_text(self):
         chat_provider = NullChatProvider("Entendido.")
@@ -724,8 +722,8 @@ class FusionReaderV2Tests(unittest.TestCase):
         app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
         app.chat("Hablemos de física cuántica.")
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
-        self.assertIn("Estas en modo libre", prompt)
-        self.assertIn("No estas obligada a responder solo sobre el texto", prompt)
+        self.assertIn("Estás en modo libre", prompt)
+        self.assertIn("Los documentos son contexto opcional", prompt)
         self.assertEqual(app.laboratory_mode_status()["mode"], "free")
 
     def test_supreme_mode_chat_prompt_reuses_thinking_lucy_persona(self):
@@ -738,12 +736,10 @@ class FusionReaderV2Tests(unittest.TestCase):
         draft_prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         final_prompt = "\n".join(item["content"] for item in chat_provider.calls[-1][0])
         self.assertIn("Lucy Cunningham", draft_prompt)
-        self.assertIn("Pensamiento supremo", draft_prompt)
-        self.assertIn("filosofico-tecnica", draft_prompt)
-        self.assertIn("No digas que te llamas Fusion", draft_prompt)
+        self.assertIn("depurá tus conceptos", draft_prompt)
+        self.assertIn("No digas que te llamás Fusion", draft_prompt)
         self.assertIn("Lucy Cunningham", final_prompt)
-        self.assertIn("Pensamiento supremo", final_prompt)
-        self.assertIn("filosofico-tecnica", final_prompt)
+        self.assertIn("depurá tus conceptos", final_prompt)
 
     def test_supreme_reasoning_runs_three_passes(self):
         chat_provider = NullChatProvider("Respuesta final.")
@@ -2004,22 +2000,44 @@ Sigue en otra línea y mantiene la misma idea.
         app.load_text("doc", "Doc", "Contexto.", prefetch=False)
         app.chat("Hola")
         # Verificar que la persona academica esta en el prompt
-        self.assertIn("Lucy Cunningham", chat_provider.calls[-1][0][0]["content"])
-        self.assertIn("sobria, exigente", chat_provider.calls[-1][0][0]["content"])
+        system_prompt = chat_provider.calls[-1][0][0]["content"]
+        self.assertIn("Lucy Cunningham", system_prompt)
+        self.assertIn("lectora crítica, rigurosa", system_prompt)
+        self.assertIn("pensamiento crítico como rigor", system_prompt)
         
         # Switch to bohemia
         app.set_profile("bohemia")
         self.assertEqual(app.profile_status()["mode"], "bohemia")
         app.chat("Hola de nuevo")
         # Verificar que la persona bohemia esta en el prompt
-        self.assertIn("Lucy Bohemia", chat_provider.calls[-1][0][0]["content"])
-        self.assertIn("literaria, directa", chat_provider.calls[-1][0][0]["content"])
-        self.assertIn("No sos moralizante", chat_provider.calls[-1][0][0]["content"])
+        system_prompt = chat_provider.calls[-1][0][0]["content"]
+        self.assertIn("Lucy Bohemia", system_prompt)
+        self.assertIn("salvaje, libre y directa", system_prompt)
+        self.assertIn("humanismo barato", system_prompt)
+        self.assertNotIn("lectora crítica, rigurosa", system_prompt)
         
         # Verify model selection
         with patch.dict(os.environ, {"FUSION_READER_BOHEMIA_CHAT_MODEL": "bohemia-model:latest"}):
             app.chat("Test model")
             self.assertEqual(chat_provider.calls[-1][1], "bohemia-model:latest")
+
+    def test_persona_overlay_length_and_independence(self):
+        chat_provider = NullChatProvider("Respuesta.")
+        core = ConversationCore(chat_provider)
+        
+        academica_overlay = core._persona_overlay(reasoning_mode="thinking", dialogue=True, profile="academica", free_mode=False)
+        bohemia_overlay = core._persona_overlay(reasoning_mode="pensamiento_critico", dialogue=False, profile="bohemia", free_mode=True)
+        
+        self.assertLess(len(academica_overlay), 3000)
+        self.assertLess(len(bohemia_overlay), 3000)
+        
+        # Verificar anclaje
+        self.assertIn("fidelidad absoluta", academica_overlay)
+        self.assertIn("modo libre", bohemia_overlay)
+        
+        # Verificar razonamiento independiente del perfil
+        self.assertIn("con más calma", academica_overlay)
+        self.assertIn("tensión dialéctica", bohemia_overlay)
 
     def test_server_ui_contains_profile_buttons(self):
         root = Path(__file__).resolve().parents[1]
