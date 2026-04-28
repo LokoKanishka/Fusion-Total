@@ -44,6 +44,17 @@ El modo en que Lucy se relaciona con el documento y los temas de la conversació
 - **Documento:** Prioriza la fidelidad absoluta a los documentos cargados y al texto visible.
 - **Modo libre:** Puede conversar sobre otros temas libremente. Los documentos quedan como contexto opcional, sin obligar a que todo provenga del texto.
 
+## Eje de Velo (Conversacional)
+
+El Velo es una micro-instrucción inyectada al final de la personalidad que tiñe el tono superficial de la respuesta sin cambiar la identidad base, el modelo ni el razonamiento. 
+Permite ajustes rápidos como:
+- **Lucy (default):** Neutro, sin prompt adicional.
+- **Nocturna:** Habla como en una conversación de madrugada: más cerca, más lenta, con sombra.
+- **Crítica:** Busca la tensión real, el punto débil y lo que la idea intenta evitar.
+- **Taller:** Piensa con el lector, ayudándolo a fabricar una idea mejor.
+- **Desarme:** Desarma la frase pieza por pieza (verdadero, falso, seductor).
+(Y otras variantes como Sombra, Confesional, Debate, Poética, etc.)
+
 ## Documento fuente de diseño
 
 El material de exploración profunda histórico sigue en `FUSION_READER_V2_PERSONALITY_WORKBOOK.md`.

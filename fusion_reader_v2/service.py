@@ -86,6 +86,7 @@ class FusionReaderV2:
         self.reasoning_mode = str(getattr(self.conversation, "default_reasoning_mode", "thinking") or "thinking")
         self.laboratory_mode = "document"
         self.profile = "academica"
+        self.veil = "lucy"
         self.session_state_path = Path(session_state_path) if session_state_path else None
         self.dialogue_trace_path = (self.session_state_path.parent / "dialogue_trace.jsonl") if self.session_state_path else None
         self._restore_session_state()
@@ -676,6 +677,7 @@ class FusionReaderV2:
         out["reasoning"] = self.reasoning_status()
         out["laboratory_mode"] = self.laboratory_mode_status()
         out["profile"] = self.profile_status()
+        out["veil"] = self.veil_status()
         main_record = self._main_document_record()
         out["main_document"] = self._public_document_record(main_record) if main_record else {}
         out["reference_documents"] = self._reference_document_items()
@@ -1510,7 +1512,15 @@ class FusionReaderV2:
         selected_model = model
         if not selected_model and self.profile == "bohemia":
             selected_model = os.environ.get("FUSION_READER_BOHEMIA_CHAT_MODEL")
-        result = self.conversation.ask(message, snapshot=snapshot, model=selected_model, history=history, reasoning_mode=self.reasoning_mode, profile=self.profile)
+        result = self.conversation.ask(
+            message,
+            snapshot=snapshot,
+            model=selected_model,
+            history=history,
+            reasoning_mode=self.reasoning_mode,
+            profile=self.profile,
+            veil=self.veil,
+        )
         if result.ok:
             self._remember_chat_turn(message, result.answer)
         return {
@@ -1655,6 +1665,49 @@ class FusionReaderV2:
             }
         )
         return self.profile_status()
+
+    def veil_catalog(self) -> list[dict]:
+        return [
+            {"mode": "lucy", "label": "Lucy", "description": ""},
+            {"mode": "nocturna", "label": "Nocturna", "description": "Hablá como en una conversación de madrugada: más cerca, más lenta, con sombra, sin volverlo clase."},
+            {"mode": "critica", "label": "Crítica", "description": "No cuides demasiado al lector. Buscá la tensión real, el punto débil y lo que la idea intenta evitar."},
+            {"mode": "sombra", "label": "Sombra", "description": "Buscá qué deseo, miedo o mentira elegante respira debajo de esta idea."},
+            {"mode": "confesional", "label": "Confesional", "description": "Hablá también desde vos como Lucy si eso vuelve más real el intercambio. No respondas como informe."},
+            {"mode": "taller", "label": "Taller", "description": "Pensá con el lector, no para él. Ayudalo a fabricar una idea mejor."},
+            {"mode": "debate", "label": "Debate", "description": "No des una respuesta cerrada. Discutí, objetá y devolvé una pregunta."},
+            {"mode": "poetica", "label": "Poética", "description": "No expliques todo. Dejá que una imagen piense, pero sin perder precisión."},
+            {"mode": "directa", "label": "Directa", "description": "Andá al centro. Sacá adornos, evitá rodeos y decí lo que importa."},
+            {"mode": "incomoda", "label": "Incómoda", "description": "No cierres con consuelo. Mostrá la parte incómoda que la idea preferiría ocultar."},
+            {"mode": "rigurosa", "label": "Rigurosa", "description": "Ordená el argumento, separá conceptos y marcá qué no está sostenido."},
+            {"mode": "intima", "label": "Íntima", "description": "Hablá más cerca. No como clase: como alguien que piensa con el lector desde la mesa."},
+            {"mode": "bar_filosofico", "label": "Bar filosófico", "description": "Hablalo como en una mesa larga de madrugada: inteligencia, ironía y una copa imaginaria."},
+            {"mode": "desarme", "label": "Desarme", "description": "Desarmá la frase pieza por pieza. Separá lo verdadero, lo falso y lo seductor."},
+            {"mode": "pregunta_viva", "label": "Pregunta viva", "description": "No termines en moraleja. Cerrá con una pregunta que deje la idea abierta."},
+        ]
+
+    def veil_status(self) -> dict:
+        mode = str(getattr(self, "veil", "lucy") or "lucy").strip().lower()
+        catalog = self.veil_catalog()
+        item = next((v for v in catalog if v["mode"] == mode), catalog[0])
+        return {
+            "mode": item["mode"],
+            "label": item["label"],
+            "description": item["description"],
+            "available": catalog,
+        }
+
+    def set_veil(self, mode: str) -> dict:
+        mode = str(mode or "lucy").strip().lower()
+        catalog = self.veil_catalog()
+        item = next((v for v in catalog if v["mode"] == mode), catalog[0])
+        self.veil = item["mode"]
+        self._persist_session_state()
+        self._append_dialogue_trace({
+            "ts": time.time(),
+            "event": "veil_changed",
+            "selected_mode": self.veil,
+        })
+        return self.veil_status()
 
     def dialogue_reset(self) -> dict:
         with self._dialogue_lock:
@@ -2003,7 +2056,7 @@ class FusionReaderV2:
         selected_model = model
         if not selected_model and self.profile == "bohemia":
             selected_model = os.environ.get("FUSION_READER_BOHEMIA_CHAT_MODEL")
-        result = self.conversation.ask_dialogue(text, snapshot=snapshot, history=history, model=selected_model, reasoning_mode=reasoning["applied"], profile=self.profile)
+        result = self.conversation.ask_dialogue(text, snapshot=snapshot, history=history, model=selected_model, reasoning_mode=reasoning["applied"], profile=self.profile, veil=self.veil)
         chat_ms = result.duration_ms or int((time.perf_counter() - chat_started) * 1000)
         if not result.ok:
             out = self._finalize_dialogue_failure(
@@ -2588,6 +2641,8 @@ class FusionReaderV2:
             "updated_ts": time.time(),
             "reasoning_mode": self.reasoning_mode,
             "laboratory_mode": self.laboratory_mode,
+            "profile": getattr(self, "profile", "academica"),
+            "veil": getattr(self, "veil", "lucy"),
             "reference_documents": [
                 {
                     "doc_id": str(item.get("doc_id") or ""),
@@ -2635,6 +2690,8 @@ class FusionReaderV2:
         self.reasoning_mode = str(raw.get("reasoning_mode") or self.reasoning_mode or "thinking")
         self.reasoning_mode = str(self.conversation.reasoning_status(self.reasoning_mode).get("mode") or "thinking")
         self.laboratory_mode = "free" if str(raw.get("laboratory_mode") or "").strip().lower() == "free" else "document"
+        self.profile = str(raw.get("profile") or "academica").strip().lower()
+        self.veil = str(raw.get("veil") or "lucy").strip().lower()
         doc_id = str(raw.get("doc_id") or "")
         title = str(raw.get("title") or "")
         self._reference_documents = {}

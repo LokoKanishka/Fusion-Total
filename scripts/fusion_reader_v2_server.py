@@ -638,6 +638,26 @@ INDEX_HTML = r"""<!doctype html>
       color: var(--text);
       background: rgba(33, 208, 122, 0.14);
     }
+    .compact-select {
+      background: #080a0a;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 11px;
+      padding: 3px 6px;
+      height: 24px;
+      outline: none;
+    }
+    .compact-select:hover, .compact-select:focus {
+      border-color: var(--accent);
+    }
+    .header-selectors {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-left: auto;
+      margin-right: 14px;
+    }
     .reasoning-caption {
       color: var(--muted);
       font-size: 10px;
@@ -748,7 +768,14 @@ INDEX_HTML = r"""<!doctype html>
           <strong id="docTitle">Ningún documento activo</strong>
           <span id="docMeta">Bloque 0 de 0</span>
         </div>
-        <div class="status"><span id="ttsDot" class="dot"></span><span id="ttsStatus">TTS sin comprobar</span></div>
+        <div class="header-selectors">
+          <select id="profileSelect" class="compact-select" aria-label="Perfil">
+            <option value="academica">Académica</option>
+            <option value="bohemia">Bohemia</option>
+          </select>
+          <select id="veilSelect" class="compact-select" aria-label="Velo"></select>
+        </div>
+        <div id="ttsChip" class="status"><span id="ttsDot" class="dot"></span><span id="ttsStatus">TTS sin comprobar</span></div>
       </header>
 
       <section class="reader">
@@ -782,10 +809,6 @@ INDEX_HTML = r"""<!doctype html>
         <button id="clearLabHistoryBtn" class="compact-btn" type="button">Borrar historial</button>
         <button id="dialogueBtn" class="primary compact-btn">Dialogar</button>
         <button id="freeModeBtn" class="mode-toggle-btn compact-btn" type="button">Modo libre</button>
-        <div class="profile-tabs" aria-label="Perfil de personalidad">
-          <button id="profileAcademicaBtn" class="profile-tab" type="button">Académica</button>
-          <button id="profileBohemiaBtn" class="profile-tab" type="button">Bohemia</button>
-        </div>
         <div class="reasoning-tabs" aria-label="Modo de razonamiento">
           <button id="reasoningNormalBtn" class="reasoning-tab" type="button">Normal</button>
           <button id="reasoningThinkingBtn" class="reasoning-tab" type="button">Pensar</button>
@@ -861,8 +884,8 @@ INDEX_HTML = r"""<!doctype html>
       reasoningThinkingBtn: document.getElementById('reasoningThinkingBtn'),
       reasoningSupremeBtn: document.getElementById('reasoningSupremeBtn'),
       reasoningPensamientoCriticoBtn: document.getElementById('reasoningPensamientoCriticoBtn'),
-      profileAcademicaBtn: document.getElementById('profileAcademicaBtn'),
-      profileBohemiaBtn: document.getElementById('profileBohemiaBtn'),
+      profileSelect: document.getElementById('profileSelect'),
+      veilSelect: document.getElementById('veilSelect'),
       freeModeBtn: document.getElementById('freeModeBtn'),
       reasoningCaption: document.getElementById('reasoningCaption'),
       dialogueBtn: document.getElementById('dialogueBtn'),
@@ -1121,6 +1144,7 @@ INDEX_HTML = r"""<!doctype html>
       status = data;
       renderReasoningStatus(data.reasoning || {});
       renderProfileStatus(data.profile || {});
+      renderVeilStatus(data.veil || {});
       renderLaboratoryMode(data.laboratory_mode || {});
       if (!dialogue.active && !dialogue.processing && !dialogue.speaking) {
         setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
@@ -1141,6 +1165,7 @@ INDEX_HTML = r"""<!doctype html>
       els.ttsDot.classList.toggle('ok', ttsOk);
       els.ttsDot.classList.toggle('warn', ttsState.state === 'fallback');
       els.ttsStatus.textContent = ttsState.label;
+      if (els.ttsChip) els.ttsChip.title = ttsState.tooltip || ttsState.label;
       renderPrepareStatus(data.prepare);
       if (shouldRefreshNotes) {
         refreshNotes().catch(() => {});
@@ -1152,16 +1177,16 @@ INDEX_HTML = r"""<!doctype html>
       const tts = services.tts && typeof services.tts === 'object' ? services.tts : data && data.tts || {};
       const ok = Boolean(tts && (tts.ready || tts.ok));
       if (!ok) {
-        return { state: 'down', label: 'TTS no disponible' };
+        return { state: 'down', label: 'TTS off', tooltip: 'TTS no disponible' };
       }
       const url = String(tts.url || '');
       if (url.includes(':7853')) {
-        return { state: 'gpu', label: 'TTS GPU 7853 listo' };
+        return { state: 'gpu', label: 'TTS 7853', tooltip: 'TTS GPU 7853 listo' };
       }
       if (url.includes(':7851')) {
-        return { state: 'fallback', label: 'TTS CPU 7851 fallback - voz mas lenta' };
+        return { state: 'fallback', label: 'TTS 7851', tooltip: 'TTS CPU 7851 fallback' };
       }
-      return { state: 'ready', label: 'TTS listo' };
+      return { state: 'ready', label: 'TTS listo', tooltip: 'TTS listo' };
     }
 
     function currentReasoningMode() {
@@ -1202,20 +1227,22 @@ INDEX_HTML = r"""<!doctype html>
         return 'Supremo pedido; diálogo usa Pensamiento para cuidar latencia.';
       }
       const profile = String(status && status.profile && status.profile.label || 'Académica');
-      return `${profile}. ${dialogueAppliedReasoningLabel(data)} activo.`;
+      const veilLabel = String(status && status.veil && status.veil.label || 'Lucy');
+      return `${profile} (${veilLabel}). ${dialogueAppliedReasoningLabel(data)} activo.`;
     }
 
     function pendingThoughtLabel() {
       const mode = currentReasoningMode();
       const scope = currentLaboratoryMode() === 'free' ? 'con laboratorio libre' : 'con el documento abierto';
       const profile = String(status && status.profile && status.profile.label || 'Académica');
+      const veilLabel = String(status && status.veil && status.veil.label || 'Lucy');
       if (mode === 'supreme' || mode === 'contrapunto' || mode === 'pensamiento_critico') {
-        return `${profile}: Repensando en profundidad ${scope}...`;
+        return `${profile} (${veilLabel}): Repensando en profundidad ${scope}...`;
       }
       if (mode === 'normal') {
-        return `${profile}: Respondiendo ${scope}...`;
+        return `${profile} (${veilLabel}): Respondiendo ${scope}...`;
       }
-      return `${profile}: Pensando ${scope}...`;
+      return `${profile} (${veilLabel}): Pensando ${scope}...`;
     }
 
     function renderReasoningStatus(reasoning) {
@@ -1271,10 +1298,25 @@ INDEX_HTML = r"""<!doctype html>
     function renderProfileStatus(profile) {
       const item = profile && typeof profile === 'object' ? profile : {};
       const mode = String(item.mode || 'academica');
-      els.profileAcademicaBtn.classList.toggle('active', mode === 'academica');
-      els.profileAcademicaBtn.setAttribute('aria-pressed', mode === 'academica' ? 'true' : 'false');
-      els.profileBohemiaBtn.classList.toggle('active', mode === 'bohemia');
-      els.profileBohemiaBtn.setAttribute('aria-pressed', mode === 'bohemia' ? 'true' : 'false');
+      els.profileSelect.value = mode;
+    }
+
+    function renderVeilStatus(veilInfo) {
+      const item = veilInfo && typeof veilInfo === 'object' ? veilInfo : {};
+      const mode = String(item.mode || 'lucy');
+      const available = Array.isArray(item.available) ? item.available : [];
+      if (available.length > 0 && els.veilSelect.children.length === 0) {
+        els.veilSelect.replaceChildren();
+        for (const v of available) {
+          const opt = document.createElement('option');
+          opt.value = v.mode;
+          opt.textContent = `Velo: ${v.label}`;
+          opt.title = v.description;
+          els.veilSelect.appendChild(opt);
+        }
+      }
+      els.veilSelect.value = mode;
+      els.veilSelect.title = item.description || '';
     }
 
     async function setProfileMode(mode) {
@@ -1294,6 +1336,28 @@ INDEX_HTML = r"""<!doctype html>
         }
       } catch (err) {
         log(`No pude cambiar el perfil: ${err.message}`);
+        if (status && status.profile) els.profileSelect.value = status.profile.mode;
+      }
+    }
+
+    async function setVeilMode(mode) {
+      const targetMode = String(mode || '').trim();
+      try {
+        const data = await api('/api/veil', { mode: targetMode });
+        if (!status) {
+          status = {};
+        }
+        status.veil = data;
+        renderVeilStatus(data);
+        log(`Velo cambiado a ${data.label || targetMode}.`);
+        if (dialogue.active && !dialogue.processing && !dialogue.speaking) {
+          setDialogueInfo(`Escuchando... ${dialogueModeSummary({})} ${laboratoryModeSummary()}`);
+        } else if (!dialogue.active) {
+          setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
+        }
+      } catch (err) {
+        log(`No pude cambiar el velo: ${err.message}`);
+        if (status && status.veil) els.veilSelect.value = status.veil.mode;
       }
     }
 
@@ -2474,8 +2538,8 @@ INDEX_HTML = r"""<!doctype html>
     els.reasoningThinkingBtn.addEventListener('click', () => setReasoningMode('thinking'));
     els.reasoningSupremeBtn.addEventListener('click', () => setReasoningMode('supreme'));
     els.reasoningPensamientoCriticoBtn.addEventListener('click', () => setReasoningMode('pensamiento_critico'));
-    els.profileAcademicaBtn.addEventListener('click', () => setProfileMode('academica'));
-    els.profileBohemiaBtn.addEventListener('click', () => setProfileMode('bohemia'));
+    els.profileSelect.addEventListener('change', event => setProfileMode(event.target.value));
+    els.veilSelect.addEventListener('change', event => setVeilMode(event.target.value));
     els.freeModeBtn.addEventListener('click', () => setLaboratoryMode(currentLaboratoryMode() === 'free' ? 'document' : 'free'));
     els.dialogueBtn.addEventListener('click', toggleDialogue);
     els.chatInput.addEventListener('keydown', event => {
@@ -2986,6 +3050,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/profile":
                 self._json(200, APP.set_profile(str(payload.get("mode") or "")))
+                return
+            if path == "/api/veil":
+                self._json(200, APP.set_veil(str(payload.get("mode") or "")))
                 return
             if path in ("/api/laboratory/reset", "/api/chat/reset"):
                 self._json(200, APP.clear_laboratory_history())

@@ -451,7 +451,7 @@ class FusionReaderV2Tests(unittest.TestCase):
         text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
         self.assertIn("describeTtsStatus", text)
         self.assertIn("TTS GPU 7853 listo", text)
-        self.assertIn("TTS CPU 7851 fallback - voz mas lenta", text)
+        self.assertIn("TTS CPU 7851 fallback", text)
         self.assertIn("TTS no disponible", text)
         self.assertIn("TTS listo", text)
         self.assertIn("services.tts", text)
@@ -2039,14 +2039,15 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("con más calma", academica_overlay)
         self.assertIn("tensión dialéctica", bohemia_overlay)
 
-    def test_server_ui_contains_profile_buttons(self):
+    def test_server_ui_contains_profile_and_veil_selectors(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
-        self.assertIn('id="profileAcademicaBtn"', text)
-        self.assertIn('id="profileBohemiaBtn"', text)
-        self.assertIn("setProfileMode('academica')", text)
-        self.assertIn("setProfileMode('bohemia')", text)
+        self.assertIn('id="profileSelect"', text)
+        self.assertIn('id="veilSelect"', text)
+        self.assertIn("setProfileMode(", text)
+        self.assertIn("setVeilMode(", text)
         self.assertIn("/api/profile", text)
+        self.assertIn("/api/veil", text)
 
     def test_start_fusion_reader_v2_bohemia_script_is_valid(self):
         root = Path(__file__).resolve().parents[1]
@@ -2058,6 +2059,15 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("start_fusion_reader_v2.sh", text)
         self.assertNotIn("FUSION_READER_CHAT_MODEL=", text)
 
+    def test_veil_overlay_is_applied_to_prompt(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_veil("nocturna")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("madrugada", prompt)
 
 if __name__ == "__main__":
     unittest.main()

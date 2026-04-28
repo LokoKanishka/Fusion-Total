@@ -83,6 +83,14 @@ Fusion Reader v2 permite alternar entre dos perfiles de Lucy:
    - menos escolar, rechaza el "humanismo barato" y busca la tensión latente;
    - usa `FUSION_READER_BOHEMIA_CHAT_MODEL` si está definido, o el default.
 
+## Velos Conversacionales
+
+Fusion Reader v2 introduce un cuarto eje liviano de modulación tonal: el **Velo**.
+- Es ortogonal a Anclaje, Perfil y Razonamiento.
+- Inyecta una micro-instrucción dinámica (ej: "Nocturna", "Desarme", "Crítica") al final de la capa de personalidad.
+- No requiere recargar modelos ni reescribir prompts completos.
+- *Default:* "Lucy" (vacío/neutro).
+
 ## Notas
 
 Componentes:

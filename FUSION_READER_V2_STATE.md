@@ -36,6 +36,7 @@ Si STT, Ollama o el diálogo fallan, `Leer` debe seguir funcionando.
 - Razonamiento activo: `thinking` (default)
 - Modos de razonamiento: `normal`, `thinking`, `supreme`, `pensamiento_critico`
 - Perfiles de Lucy: `academica` (default), `bohemia`
+- Velo activo: `lucy` (default)
 
 ## Fronteras de voz
 
@@ -66,17 +67,18 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 140 OK
+tests.test_fusion_reader_v2: 141 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 
+- Velo conversacional v1 implementado. 15 velos dinámicos.
 - Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
 - Bohemia uncensored instalada y validada.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
-- tests: 140 OK
+- tests: 141 OK
 - voice isolation: OK
-- arquitectura de tres ejes (Anclaje, Perfil, Razonamiento) preservada.
+- arquitectura de cuatro ejes (Anclaje, Perfil, Razonamiento, Velo) preservada.
 ```
 
 Último commit relevante:
