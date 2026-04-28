@@ -2185,7 +2185,6 @@ Sigue en otra línea y mantiene la misma idea.
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertNotIn("Mancha", prompt)
         self.assertIn("Estás en modo libre", prompt)
-        self.assertIn("Hay un documento cargado", prompt)
 
     def test_free_mode_with_document_request_includes_text(self):
         chat_provider = NullChatProvider("Entendido.")

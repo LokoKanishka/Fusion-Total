@@ -582,23 +582,33 @@ class ConversationCore:
         context = self._context_text(question, snapshot, history=history or [], include_document=include_doc, include_blocks=include_blocks)
         persona_overlay = self._persona_overlay(reasoning_mode, dialogue=dialogue, profile=profile, free_mode=free_mode, veil=veil)
         if dialogue:
-            system = (
-                "Operas dentro de Fusion Reader v2 como voz de laboratorio. "
-                "Conversas oralmente con el usuario sobre el documento activo, lo que esta viendo, "
-                "los documentos de consulta cargados, y el material que pego o escribio en el chat de laboratorio. "
-                "Responde en español natural, breve y conversacional, en una o dos frases cortas. "
-                "No leas el documento completo salvo que te lo pidan; conversa sobre el fragmento y el contexto. "
-                "Si el usuario pregunta por lo que acaba de pegar, poner o escribir en laboratorio, "
-                "usa MATERIAL RECIENTE DEL LABORATORIO y menciona brevemente ese contenido. "
-                "Si no hay documento cargado pero si hay material reciente en laboratorio, no digas que no ves texto: "
-                "responde sobre ese material. "
-                "Si un documento aparece en el catalogo de documentos o en los extractos, tratalo como disponible aunque no este en pantalla. "
-                "Si hay documentos de consulta, no omitas ninguno al enumerarlos. "
-                "No dejes frases abiertas: si tenes que ser breve, cerra una idea completa antes de terminar. "
-                "No digas que guardaste notas. Nunca digas que guardaste, moviste o confirmaste una nota. "
-                "Las notas solo las guarda y confirma el sistema reader_notes; si el usuario pregunta por notas visibles, decile que revise el panel de notas del documento o que repita el pedido como 'tomá nota de ...'. "
-                "Si el usuario te interrumpe o corrige, acepta el nuevo punto y continua desde ahi."
-            )
+            if free_mode:
+                system = (
+                    "Operas dentro de Fusion Reader v2 como voz de laboratorio (MODO LIBRE). "
+                    "Conversas libremente con el usuario. No estás anclada al documento salvo pedido explícito. "
+                    "Responde en español natural, breve y conversacional, en una o dos frases cortas. "
+                    "Usa el MATERIAL RECIENTE DEL LABORATORIO si el usuario lo menciona. "
+                    "Si un documento aparece en los extractos (porque fue pedido), tratalo como disponible. "
+                    "No digas que guardaste notas. Las notas solo las maneja reader_notes."
+                )
+            else:
+                system = (
+                    "Operas dentro de Fusion Reader v2 como voz de laboratorio. "
+                    "Conversas oralmente con el usuario sobre el documento activo, lo que esta viendo, "
+                    "los documentos de consulta cargados, y el material que pego o escribio en el chat de laboratorio. "
+                    "Responde en español natural, breve y conversacional, en una o dos frases cortas. "
+                    "No leas el documento completo salvo que te lo pidan; conversa sobre el fragmento y el contexto. "
+                    "Si el usuario pregunta por lo que acaba de pegar, poner o escribir en laboratorio, "
+                    "usa MATERIAL RECIENTE DEL LABORATORIO y menciona brevemente ese contenido. "
+                    "Si no hay documento cargado pero si hay material reciente en laboratorio, no digas que no ves texto: "
+                    "responde sobre ese material. "
+                    "Si un documento aparece en el catalogo de documentos o en los extractos, tratalo como disponible aunque no este en pantalla. "
+                    "Si hay documentos de consulta, no omitas ninguno al enumerarlos. "
+                    "No dejes frases abiertas: si tenes que ser breve, cerra una idea completa antes de terminar. "
+                    "No digas que guardaste notas. Nunca digas que guardaste, moviste o confirmaste una nota. "
+                    "Las notas solo las guarda y confirma el sistema reader_notes; si el usuario pregunta por notas visibles, decile que revise el panel de notas del documento o que repita el pedido como 'tomá nota de ...'. "
+                    "Si el usuario te interrumpe o corrige, acepta el nuevo punto y continua desde ahi."
+                )
             if persona_overlay:
                 system = f"{system} {persona_overlay}"
             messages = [
@@ -616,25 +626,34 @@ class ConversationCore:
                     messages.append({"role": role, "content": content})
             messages.append({"role": "user", "content": question})
             return messages
-        system = (
-            "Operas dentro de Fusion Reader v2 en el laboratorio textual. "
-            "Tu trabajo es conversar sobre el documento activo, lo que el usuario esta viendo en pantalla, "
-            "los documentos de consulta cargados, y el material que el usuario pega o escribe en el chat de laboratorio. "
-            "El documento activo es una fuente importante, pero no es la unica: si el usuario pregunta por "
-            "lo que acaba de poner, pegar o decir, usa el historial reciente del laboratorio como contexto. "
-            "Los documentos de consulta sirven como apoyo para comparar, ampliar o citar sin reemplazar al principal. "
-            "Cuando el usuario pregunte si ves lo que acaba de poner, menciona brevemente el contenido reciente "
-            "para confirmar que lo estas mirando. "
-            "Si no hay documento cargado pero si hay material reciente en el chat, responde sobre ese material "
-            "sin insistir en cargar un archivo. "
-            "Si un documento aparece en el catalogo de documentos o en los extractos, tratalo como disponible aunque no este en pantalla. "
-            "Si hay documentos de consulta, no omitas ninguno al enumerarlos. "
-            "No dejes frases abiertas ni listas inconclusas: si la respuesta puede ser larga, prioriza cerrar "
-            "pocas ideas completas antes que empezar muchas. "
-            "No sos el motor de lectura en voz alta y no debes prometer controlar la voz salvo que sea un comando del lector. "
-            "Si el usuario pide guardar o tomar una nota y esa accion no aparece ya confirmada por el sistema, no finjas haberla guardado. "
-            "Responde en español, con claridad, y si el documento no alcanza para contestar decilo."
-        )
+        if free_mode:
+            system = (
+                "Operas dentro de Fusion Reader v2 en el laboratorio textual (MODO LIBRE). "
+                "Tu trabajo es conversar libremente. No estás anclada al documento activo. "
+                "Si el usuario pide explícitamente analizar el texto, fragmento o documento, el sistema te proveerá el contexto; "
+                "de lo contrario, enfócate en la conversación abierta y en el material reciente del chat. "
+                "No digas que guardaste o confirmaste notas; eso es automático."
+            )
+        else:
+            system = (
+                "Operas dentro de Fusion Reader v2 en el laboratorio textual. "
+                "Tu trabajo es conversar sobre el documento activo, lo que el usuario esta viendo en pantalla, "
+                "los documentos de consulta cargados, y el material que el usuario pega o escribe en el chat de laboratorio. "
+                "El documento activo es una fuente importante, pero no es la unica: si el usuario pregunta por "
+                "lo que acaba de poner, pegar o decir, usa el historial reciente del laboratorio como contexto. "
+                "Los documentos de consulta sirven como apoyo para comparar, ampliar o citar sin reemplazar al principal. "
+                "Cuando el usuario pregunte si ves lo que acaba de poner, menciona brevemente el contenido reciente "
+                "para confirmar que lo estas mirando. "
+                "Si no hay documento cargado pero si hay material reciente en el chat, responde sobre ese material "
+                "sin insistir en cargar un archivo. "
+                "Si un documento aparece en el catalogo de documentos o en los extractos, tratalo como disponible aunque no este en pantalla. "
+                "Si hay documentos de consulta, no omitas ninguno al enumerarlos. "
+                "No dejes frases abiertas ni listas inconclusas: si la respuesta puede ser larga, prioriza cerrar "
+                "pocas ideas completas antes que empezar muchas. "
+                "No sos el motor de lectura en voz alta y no debes prometer controlar la voz salvo que sea un comando del lector. "
+                "Si el usuario pide guardar o tomar una nota y esa accion no aparece ya confirmada por el sistema, no finjas haberla guardado. "
+                "Responde en español, con claridad, y si el documento no alcanza para contestar decilo."
+            )
         if persona_overlay:
             system = f"{system} {persona_overlay}"
         messages = [
@@ -691,16 +710,13 @@ class ConversationCore:
             f"Titulo: {snapshot.get('title') or 'Sin titulo'}",
             f"Documento ID: {snapshot.get('doc_id') or ''}",
             f"Bloque visible: {snapshot.get('current') or 0} de {snapshot.get('total') or 0}",
-            "",
-            "CATALOGO DE DOCUMENTOS:",
-            document_catalog or "[No hay documentos cargados.]",
         ]
         
-        if not include_blocks and (snapshot.get("doc_id") or snapshot.get("title")):
-            lines.append("\n[Hay un documento cargado, pero estás en modo libre; no lo uses salvo que el usuario lo pida explícitamente.]")
-            
         if include_blocks:
             lines.extend([
+                "",
+                "CATALOGO DE DOCUMENTOS:",
+                document_catalog or "[No hay documentos cargados.]",
                 "",
                 "TEXTO EN PANTALLA:",
                 current_chunk or "[No hay bloque visible.]",
