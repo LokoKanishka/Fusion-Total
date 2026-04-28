@@ -226,7 +226,8 @@ class ConversationCore:
             return ChatResult(False, model=model, detail="empty_question")
         messages = self._messages(question, snapshot, history=history or [], reasoning_mode=reasoning_mode, profile=profile, veil=veil)
         lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
-        free_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower() == "free"
+        lab_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower()
+        free_mode = lab_mode == "free"
         return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=False, profile_str=profile, veil=veil, free_mode=free_mode)
 
     def ask_dialogue(self, question: str, snapshot: dict, history: list[dict] | None = None, model: str = "", reasoning_mode: str = "", profile: str = "academica", veil: str = "lucy") -> ChatResult:
@@ -235,7 +236,8 @@ class ConversationCore:
             return ChatResult(False, model=model, detail="empty_question")
         messages = self._messages(question, snapshot, history=history or [], dialogue=True, reasoning_mode=reasoning_mode, profile=profile, veil=veil)
         lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
-        free_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower() == "free"
+        lab_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower()
+        free_mode = lab_mode == "free"
         return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=True, profile_str=profile, veil=veil, free_mode=free_mode)
 
     def _resolve_reasoning_profile(self, reasoning_mode: str = "") -> ReasoningProfile:
