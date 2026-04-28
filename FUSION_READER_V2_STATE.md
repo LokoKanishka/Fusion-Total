@@ -71,14 +71,14 @@ tests.test_fusion_reader_v2: 141 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 
-- Velo conversacional v1 implementado. 15 velos dinámicos.
+- Velo conversacional v1.1 implementado. Paleta narrativa afilada.
 - Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
-- Bohemia uncensored instalada y validada.
+- Bohemia uncensored: agregada rienda narrativa contra loops y teatralidad excesiva.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
-- tests: 141 OK
+- tests: 145 OK
 - voice isolation: OK
-- arquitectura de cuatro ejes (Anclaje, Perfil, Razonamiento, Velo) preservada.
+- arquitectura de cuatro ejes (Anclaje, Perfil, Razonamiento, Velo) preservada y validada.
 ```
 
 Último commit relevante:

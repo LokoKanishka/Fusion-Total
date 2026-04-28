@@ -2111,11 +2111,69 @@ Sigue en otra línea y mantiene la misma idea.
         chat_provider = NullChatProvider("Entendido.")
         app = test_app()
         app.conversation = ConversationCore(chat_provider)
+        
+        # Test nocturna
         app.set_veil("nocturna")
         app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
         app.chat("Hola")
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertIn("madrugada", prompt)
+        
+        # Test evocadora
+        app.set_veil("evocadora")
+        app.chat("Hola")
+        prompt_evocadora = "\n".join(item["content"] for item in chat_provider.calls[-1][0])
+        self.assertIn("imagen precisa", prompt_evocadora)
+        self.assertIn("nervio conceptual", prompt_evocadora)
+        self.assertNotIn("poetica", prompt_evocadora.lower())
+
+    def test_directa_veil_is_sharp(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_veil("directa")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("seco y frontal", prompt)
+        self.assertIn("sin adornos", prompt)
+
+    def test_desarme_veil_is_mechanical(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_veil("desarme")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("mecanismo", prompt)
+        self.assertIn("seduce", prompt)
+
+    def test_lucy_veil_is_neutral(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_veil("lucy")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        # Lucy (neutral) doesn't add extra veil prompt beyond base identity
+        self.assertNotIn("nocturna", prompt)
+        self.assertNotIn("evocadora", prompt)
+        self.assertNotIn("directa", prompt)
+
+    def test_bohemia_persona_contains_narrative_rein(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        # Set profile to bohemia
+        app.set_profile("bohemia")
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("intensidad en loop", prompt)
+        self.assertIn("sombra en pose", prompt)
+        self.assertIn("no cargados", prompt)
 
 if __name__ == "__main__":
     unittest.main()
