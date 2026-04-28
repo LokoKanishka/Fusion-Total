@@ -2080,7 +2080,7 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertLess(len(bohemia_overlay), 3000)
         
         # Verificar anclaje
-        self.assertIn("fidelidad absoluta", academica_overlay)
+        self.assertIn("Responde anclada al documento", academica_overlay)
         self.assertIn("modo libre", bohemia_overlay)
         
         # Verificar razonamiento independiente del perfil
@@ -2174,6 +2174,75 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("intensidad en loop", prompt)
         self.assertIn("sombra en pose", prompt)
         self.assertIn("no cargados", prompt)
+
+    def test_free_mode_without_document_request_excludes_text(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "El Quijote", "En un lugar de la Mancha...", prefetch=False)
+        app.set_laboratory_mode("free")
+        app.chat("Lucy, ¿qué es la realidad?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertNotIn("Mancha", prompt)
+        self.assertIn("Estás en modo libre", prompt)
+        self.assertIn("Hay un documento cargado", prompt)
+
+    def test_free_mode_with_document_request_includes_text(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "El Quijote", "En un lugar de la Mancha...", prefetch=False)
+        app.set_laboratory_mode("free")
+        app.chat("Según el documento, ¿dónde ocurre la acción?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Mancha", prompt)
+
+    def test_document_mode_always_includes_text(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "El Quijote", "En un lugar de la Mancha...", prefetch=False)
+        app.set_laboratory_mode("document")
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Mancha", prompt)
+
+    def test_supreme_mode_in_free_mode_honors_independence(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "El Quijote", "En un lugar de la Mancha...", prefetch=False)
+        app.set_laboratory_mode("free")
+        app.set_reasoning_mode("supreme")
+        app.chat("Háblame del tiempo.")
+        # In supreme mode, we have draft, review, and final passes.
+        # We check the first pass (draft)
+        draft_prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertNotIn("Mancha", draft_prompt)
+        # We check the final pass (synthesis) - it uses _messages_as_text which should also exclude it
+        final_prompt = "\n".join(item["content"] for item in chat_provider.calls[2][0])
+        self.assertNotIn("Mancha", final_prompt)
+
+    def test_clear_document_resets_state(self):
+        app = test_app()
+        app.load_text("doc123", "El Quijote", "En un lugar de la Mancha...", prefetch=False)
+        self.assertEqual(app.session.status()["title"], "El Quijote")
+        
+        status = app.clear_document()
+        self.assertEqual(status["title"], "")
+        self.assertEqual(status["total"], 0)
+        self.assertEqual(status["doc_id"], "")
+        self.assertEqual(app.session.document, None)
+
+    def test_server_contains_clear_document_button_and_endpoint(self):
+        import scripts.fusion_reader_v2_server as server
+        self.assertIn('id="clearDocBtn"', server.INDEX_HTML)
+        self.assertIn('function clearDocument()', server.INDEX_HTML)
+        # Check endpoint existence in do_POST logic via reflection or simple string check in script content
+        script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "fusion_reader_v2_server.py")
+        with open(script_path, "r") as f:
+            content = f.read()
+            self.assertIn('/api/document/clear', content)
 
 if __name__ == "__main__":
     unittest.main()

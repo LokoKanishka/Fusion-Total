@@ -1685,6 +1685,23 @@ class FusionReaderV2:
             {"mode": "pregunta_viva", "label": "Pregunta viva", "description": "No termines en moraleja. Cerrá con una pregunta que deje la idea abierta."},
         ]
 
+    def clear_document(self) -> dict:
+        self.session.document = None
+        self.session.cursor = 0
+        self.session.state = "idle"
+        self.session.updated_ts = time.time()
+        self._main_source_path = ""
+        self._main_source_type = ""
+        with self._prepare_lock:
+            self._prepare_cancel.set()
+            self._prepare_status = self._new_prepare_status()
+        self._persist_session_state()
+        self._append_dialogue_trace({
+            "ts": time.time(),
+            "event": "document_cleared",
+        })
+        return self.status()
+
     def veil_status(self) -> dict:
         mode = str(getattr(self, "veil", "lucy") or "lucy").strip().lower()
         catalog = self.veil_catalog()

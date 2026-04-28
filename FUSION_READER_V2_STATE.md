@@ -72,11 +72,13 @@ verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 
 - Velo conversacional v1.1 implementado. Paleta narrativa afilada.
+- Modo Libre (Free Mode): corregido para no inyectar documento por defecto (independencia real).
+- Botón "Limpiar documento" agregado a la UI y API.
 - Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
 - Bohemia uncensored: agregada rienda narrativa contra loops y teatralidad excesiva.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
-- tests: 145 OK
+- tests: 153 OK
 - voice isolation: OK
 - arquitectura de cuatro ejes (Anclaje, Perfil, Razonamiento, Velo) preservada y validada.
 ```

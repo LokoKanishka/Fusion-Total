@@ -484,6 +484,14 @@ INDEX_HTML = r"""<!doctype html>
     button.wide {
       width: 100%;
     }
+    button.danger-btn {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+    .danger-btn:hover {
+      background: var(--danger);
+      color: #000;
+    }
     button.compact-btn {
       min-height: 24px;
       padding: 3px 8px;
@@ -751,6 +759,7 @@ INDEX_HTML = r"""<!doctype html>
       <div class="progress-wrap" aria-hidden="true"><div id="importProgress" class="progress-bar"></div></div>
       <button id="prepareBtn" class="compact-btn" type="button">Preparar documento</button>
       <button id="cancelPrepareBtn" class="compact-btn" type="button">Cancelar preparación</button>
+      <button id="clearDocBtn" class="compact-btn danger-btn" type="button" onclick="clearDocument()" style="margin-top:4px">Limpiar documento</button>
       <p id="prepareInfo" class="upload-info">Audio sin preparar.</p>
       <div class="progress-wrap" aria-hidden="true"><div id="prepareProgress" class="progress-bar"></div></div>
       <details class="notes-panel" open>
@@ -855,6 +864,7 @@ INDEX_HTML = r"""<!doctype html>
       referenceModeToggle: document.getElementById('referenceModeToggle'),
       prepareBtn: document.getElementById('prepareBtn'),
       cancelPrepareBtn: document.getElementById('cancelPrepareBtn'),
+      clearDocBtn: document.getElementById('clearDocBtn'),
       prepareInfo: document.getElementById('prepareInfo'),
       prepareProgress: document.getElementById('prepareProgress'),
       notesSummary: document.getElementById('notesSummary'),
@@ -1158,7 +1168,7 @@ INDEX_HTML = r"""<!doctype html>
       renderLabFocus(data.laboratory_focus || {});
       els.jumpInput.max = data.total || 1;
       els.jumpInput.value = data.current || 1;
-      els.chunk.textContent = data.text || 'Subí un TXT o MD para empezar.';
+      els.chunk.textContent = data.text || 'Subí un documento para empezar.';
       els.chunk.classList.toggle('empty', !data.text);
       const ttsState = describeTtsStatus(data);
       const ttsOk = ttsState.state !== 'down';
@@ -1273,6 +1283,18 @@ INDEX_HTML = r"""<!doctype html>
       els.freeModeBtn.textContent = mode === 'free' ? 'Modo libre activo' : 'Modo libre';
       els.freeModeBtn.title = String(item.description || '');
       els.chatInput.placeholder = mode === 'free' ? 'Escribí lo que quieras conversar...' : 'Escribí sobre el texto actual...';
+    }
+
+    async function clearDocument() {
+      if (!confirm('¿Limpiar el documento activo?')) return;
+      try {
+        const res = await fetch('/api/document/clear', { method: 'POST' });
+        const data = await res.json();
+        renderStatus(data);
+        addChatMessage('system', 'Documento activo eliminado.');
+      } catch (err) {
+        alert('Error al limpiar documento: ' + err.message);
+      }
     }
 
     async function setLaboratoryMode(mode) {
@@ -3007,6 +3029,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/reference/remove":
                 self._json(200, APP.remove_reference_document(str(payload.get("doc_id") or "")))
+                return
+            if path == "/api/document/clear":
+                self._json(200, APP.clear_document())
                 return
             if path == "/api/read":
                 self._result(200, APP.read_current(play=bool(payload.get("play", False))))

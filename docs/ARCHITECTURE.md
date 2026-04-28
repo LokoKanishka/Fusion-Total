@@ -70,6 +70,19 @@ Regla de degradación:
 
 - En modo `Dialogar` (voz), los modos `Supremo` y `Pensamiento crítico` degradan automáticamente a `Pensamiento` para mantener la latencia por debajo de los 3-5 segundos.
 
+## Eje de Anclaje
+
+Fusion Reader v2 permite alternar entre dos modos de anclaje (Laboratory Mode):
+
+1. **Modo Documento** (default):
+   - Lucy responde anclada al documento activo y al bloque visible.
+   - El contexto incluye el fragmento que el usuario está viendo.
+2. **Modo Libre**:
+   - Lucy conversa libremente, sin estar anclada al documento activo.
+   - **Independencia Documental:** El documento activo NO se inyecta en el contexto por defecto. Esto evita que Lucy interprete todo a través del fragmento visible.
+   - **Acceso Explícito:** El documento se incluye en el prompt SOLO si el usuario lo pide explícitamente (ej: "qué dice el texto", "según el fragmento", "mirá el documento").
+   - El perfil (Académica/Bohemia) y el Velo siguen activos, tiñendo el tono de la conversación libre.
+
 ## Perfiles de personalidad
 
 Fusion Reader v2 permite alternar entre dos perfiles de Lucy:

@@ -521,9 +521,20 @@ class ConversationCore:
         if free_mode:
             return (
                 "Estás en modo libre. Podés conversar sobre otros temas. "
-                "Los documentos son contexto opcional; no obligues a responder todo desde ahí."
+                "Los documentos son contexto opcional; no los uses salvo que el usuario los pida explícitamente."
             )
-        return "Priorizá la fidelidad absoluta a los documentos cargados y al texto visible."
+        return "Responde anclada al documento y al bloque visible."
+
+    def wants_document_context(self, question: str) -> bool:
+        q = str(question or "").lower()
+        keywords = [
+            "documento", "texto", "fragmento", "pantalla", "bloque", "párrafo", "parrafo",
+            "lo que estás leyendo", "lo que estas leyendo", "lo que está cargado", "lo que esta cargado",
+            "según el texto", "segun el texto", "según el documento", "segun el documento",
+            "volvé al documento", "volve al documento", "mirá el documento", "mira el documento",
+            "analizá el fragmento", "analiza el fragmento", "qué dice la pantalla", "que dice la pantalla"
+        ]
+        return any(k in q for k in keywords)
 
     def _persona_overlay(self, reasoning_mode: str = "", dialogue: bool = False, profile: str = "academica", free_mode: bool = False, veil: str = "lucy") -> str:
         is_bohemia = str(profile or "academica").strip().lower() == "bohemia"
@@ -556,10 +567,19 @@ class ConversationCore:
         return " ".join(parts)
 
     def _messages(self, question: str, snapshot: dict, history: list[dict] | None = None, dialogue: bool = False, reasoning_mode: str = "", profile: str = "academica", veil: str = "lucy") -> list[dict]:
-        context = self._context_text(question, snapshot, history=history or [], include_document=not dialogue)
         lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
         laboratory_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower()
         free_mode = laboratory_mode == "free"
+        
+        include_doc = not dialogue
+        include_blocks = True
+        
+        if free_mode:
+            if not self.wants_document_context(question):
+                include_doc = False
+                include_blocks = False
+                
+        context = self._context_text(question, snapshot, history=history or [], include_document=include_doc, include_blocks=include_blocks)
         persona_overlay = self._persona_overlay(reasoning_mode, dialogue=dialogue, profile=profile, free_mode=free_mode, veil=veil)
         if dialogue:
             system = (
@@ -650,7 +670,7 @@ class ConversationCore:
             clipped.append(f"[Usuario {index}]\n{content}")
         return "\n\n".join(clipped)
 
-    def _context_text(self, question: str, snapshot: dict, history: list[dict] | None = None, include_document: bool = True) -> str:
+    def _context_text(self, question: str, snapshot: dict, history: list[dict] | None = None, include_document: bool = True, include_blocks: bool = True) -> str:
         document_text = str(snapshot.get("document_text") or "")
         if len(document_text) > self.max_document_chars:
             document_text = document_text[: self.max_document_chars].rstrip() + "\n\n[Documento recortado por limite de contexto.]"
@@ -674,24 +694,35 @@ class ConversationCore:
             "",
             "CATALOGO DE DOCUMENTOS:",
             document_catalog or "[No hay documentos cargados.]",
-            "",
-            "TEXTO EN PANTALLA:",
-            current_chunk or "[No hay bloque visible.]",
-            "",
-            "BLOQUE ANTERIOR:",
-            previous_chunk or "[No hay bloque anterior.]",
-            "",
-            "BLOQUE SIGUIENTE:",
-            next_chunk or "[No hay bloque siguiente.]",
+        ]
+        
+        if not include_blocks and (snapshot.get("doc_id") or snapshot.get("title")):
+            lines.append("\n[Hay un documento cargado, pero estás en modo libre; no lo uses salvo que el usuario lo pida explícitamente.]")
+            
+        if include_blocks:
+            lines.extend([
+                "",
+                "TEXTO EN PANTALLA:",
+                current_chunk or "[No hay bloque visible.]",
+                "",
+                "BLOQUE ANTERIOR:",
+                previous_chunk or "[No hay bloque anterior.]",
+                "",
+                "BLOQUE SIGUIENTE:",
+                next_chunk or "[No hay bloque siguiente.]",
+            ])
+            
+        lines.extend([
             "",
             "NOTAS DEL LECTOR:",
             notes_text or "[No hay notas guardadas.]",
-        ]
+        ])
+        
         if reference_catalog:
             lines.extend(["", "DOCUMENTOS DE CONSULTA:", reference_catalog])
         if laboratory_focus:
             lines.extend(["", "FOCO ACTUAL DEL LABORATORIO:", laboratory_focus])
-        if relevant_document_text:
+        if include_blocks and relevant_document_text:
             lines.extend(["", "EXTRACTOS Y BLOQUES RELEVANTES:", relevant_document_text])
         if include_document:
             lines.extend(["", "DOCUMENTO COMPLETO DISPONIBLE:", document_text or "[No hay documento cargado.]"])
