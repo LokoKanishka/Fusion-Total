@@ -726,6 +726,30 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("Los documentos son contexto opcional", prompt)
         self.assertEqual(app.laboratory_mode_status()["mode"], "free")
 
+    def test_supreme_mode_keeps_free_laboratory_mode_in_final_pass(self):
+        chat_provider = NullChatProvider("Respuesta final.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("supreme")
+        app.set_laboratory_mode("free")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("Hablemos libremente.")
+        final_prompt = "\n".join(item["content"] for item in chat_provider.calls[-1][0])
+        self.assertIn("Estás en modo libre", final_prompt)
+        self.assertIn("Los documentos son contexto opcional", final_prompt)
+
+    def test_contrapunto_mode_keeps_free_laboratory_mode_in_synthesis_pass(self):
+        chat_provider = NullChatProvider("Síntesis final.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("pensamiento_critico")
+        app.set_laboratory_mode("free")
+        app.load_text("doc", "Doc", "Pantalla actual.", prefetch=False)
+        app.chat("Hablemos libremente.")
+        synthesis_prompt = "\n".join(item["content"] for item in chat_provider.calls[-1][0])
+        self.assertIn("Estás en modo libre", synthesis_prompt)
+        self.assertIn("Los documentos son contexto opcional", synthesis_prompt)
+
     def test_supreme_mode_chat_prompt_reuses_thinking_lucy_persona(self):
         chat_provider = NullChatProvider("Respuesta final.")
         app = test_app()

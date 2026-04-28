@@ -225,14 +225,18 @@ class ConversationCore:
         if not question:
             return ChatResult(False, model=model, detail="empty_question")
         messages = self._messages(question, snapshot, history=history or [], reasoning_mode=reasoning_mode, profile=profile, veil=veil)
-        return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=False, profile_str=profile, veil=veil)
+        lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
+        free_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower() == "free"
+        return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=False, profile_str=profile, veil=veil, free_mode=free_mode)
 
     def ask_dialogue(self, question: str, snapshot: dict, history: list[dict] | None = None, model: str = "", reasoning_mode: str = "", profile: str = "academica", veil: str = "lucy") -> ChatResult:
         question = str(question or "").strip()
         if not question:
             return ChatResult(False, model=model, detail="empty_question")
         messages = self._messages(question, snapshot, history=history or [], dialogue=True, reasoning_mode=reasoning_mode, profile=profile, veil=veil)
-        return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=True, profile_str=profile, veil=veil)
+        lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
+        free_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower() == "free"
+        return self._run_with_reasoning(messages, model=model, reasoning_mode=reasoning_mode, dialogue=True, profile_str=profile, veil=veil, free_mode=free_mode)
 
     def _resolve_reasoning_profile(self, reasoning_mode: str = "") -> ReasoningProfile:
         mode = str(reasoning_mode or self.default_reasoning_mode or "thinking").strip().lower()
@@ -240,7 +244,7 @@ class ConversationCore:
             mode = "pensamiento_critico"
         return self.reasoning_profiles.get(mode, self.reasoning_profiles["thinking"])
 
-    def _run_with_reasoning(self, messages: list[dict], model: str = "", reasoning_mode: str = "", dialogue: bool = False, profile_str: str = "academica", veil: str = "lucy") -> ChatResult:
+    def _run_with_reasoning(self, messages: list[dict], model: str = "", reasoning_mode: str = "", dialogue: bool = False, profile_str: str = "academica", veil: str = "lucy", free_mode: bool = False) -> ChatResult:
         profile = self._resolve_reasoning_profile(reasoning_mode)
         if profile.passes <= 1:
             result = self.provider.chat(messages, model=model, think=profile.think, num_predict=profile.num_predict)
@@ -254,10 +258,10 @@ class ConversationCore:
                 reasoning_passes=1,
             )
         if profile.key == "pensamiento_critico":
-            return self._run_contrapunto(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode, profile_str=profile_str, veil=veil)
-        return self._run_supreme(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode, profile_str=profile_str, veil=veil)
+            return self._run_contrapunto(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode, profile_str=profile_str, veil=veil, free_mode=free_mode)
+        return self._run_supreme(messages, model=model, profile=profile, dialogue=dialogue, reasoning_mode=reasoning_mode, profile_str=profile_str, veil=veil, free_mode=free_mode)
 
-    def _run_supreme(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool, reasoning_mode: str = "", profile_str: str = "academica", veil: str = "lucy") -> ChatResult:
+    def _run_supreme(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool, reasoning_mode: str = "", profile_str: str = "academica", veil: str = "lucy", free_mode: bool = False) -> ChatResult:
         total_ms = 0
         draft = self.provider.chat(messages, model=model, think=True, num_predict=profile.num_predict)
         total_ms += draft.duration_ms
@@ -271,7 +275,7 @@ class ConversationCore:
                 reasoning_passes=1,
             )
         transcript = self._messages_as_text(messages)
-        persona_overlay = self._persona_overlay(reasoning_mode or profile.key, dialogue=dialogue, profile=profile_str, free_mode=False, veil=veil)
+        persona_overlay = self._persona_overlay(reasoning_mode or profile.key, dialogue=dialogue, profile=profile_str, free_mode=free_mode, veil=veil)
         review_messages = [
             {
                 "role": "system",
@@ -348,7 +352,7 @@ class ConversationCore:
             reasoning_passes=profile.passes,
         )
 
-    def _run_contrapunto(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool, reasoning_mode: str = "", profile_str: str = "academica", veil: str = "lucy") -> ChatResult:
+    def _run_contrapunto(self, messages: list[dict], model: str, profile: ReasoningProfile, dialogue: bool, reasoning_mode: str = "", profile_str: str = "academica", veil: str = "lucy", free_mode: bool = False) -> ChatResult:
         total_ms = 0
         # PASO 1: TESIS (Lucy Cunningham)
         tesis = self.provider.chat(messages, model=model, think=True, num_predict=profile.num_predict)
@@ -364,7 +368,7 @@ class ConversationCore:
             )
 
         transcript = self._messages_as_text(messages)
-        persona_overlay = self._persona_overlay(reasoning_mode or profile.key, dialogue=dialogue, profile=profile_str, free_mode=False, veil=veil)
+        persona_overlay = self._persona_overlay(reasoning_mode or profile.key, dialogue=dialogue, profile=profile_str, free_mode=free_mode, veil=veil)
 
         # PASO 2: ANTITESIS (El Critico)
         # El critico es una instancia que no es Lucy y busca fallos en la tesis.
