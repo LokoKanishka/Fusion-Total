@@ -510,7 +510,7 @@ class ConversationCore:
         if mode_key == "normal":
             return "Respondé directo y al punto."
         if mode_key == "thinking":
-            return "Leé con más calma, agregá capas y hacé preguntas necesarias."
+            return "Leé con más calma y agregá capas. Abrí preguntas solo si son realmente necesarias."
         if mode_key == "supreme":
             return "Revisá profundamente, depurá tus conceptos y priorizá la validez."
         if mode_key == "pensamiento_critico":
@@ -536,6 +536,14 @@ class ConversationCore:
         ]
         return any(k in q for k in keywords)
 
+    def _closing_discipline_hint(self, veil: str, dialogue: bool) -> str:
+        if veil == "pregunta_viva":
+            return ""
+        base = "No cierres por defecto con una pregunta. Cerrá normalmente con una afirmación completa. Usá preguntas solo si son necesarias o si el Velo lo pide."
+        if dialogue:
+            base += " En oralidad, no sostengas artificialmente la conversación con preguntas finales."
+        return base
+
     def _persona_overlay(self, reasoning_mode: str = "", dialogue: bool = False, profile: str = "academica", free_mode: bool = False, veil: str = "lucy") -> str:
         is_bohemia = str(profile or "academica").strip().lower() == "bohemia"
         parts = [self._common_lucy_identity()]
@@ -554,17 +562,19 @@ class ConversationCore:
         elif veil_mode == "sombra": parts.append("Buscá el deseo, miedo o autoengaño íntimo que sostiene esta idea por debajo.")
         elif veil_mode == "confesional": parts.append("Permitite hablar desde vos como Lucy cuando eso aclare la conversación, pero no te vuelvas protagonista.")
         elif veil_mode == "taller": parts.append("Pensá con el lector, no para él. Ayudalo a fabricar una idea mejor.")
-        elif veil_mode == "debate": parts.append("No des una respuesta cerrada. Discutí, objetá y devolvé una pregunta.")
+        elif veil_mode == "debate": parts.append("No des una respuesta complaciente. Discutí y objetá; si hace falta, cerrá con una pregunta real, no automática.")
         elif veil_mode == "evocadora": parts.append("No hagas poesía decorativa. Usá una imagen precisa para pensar mejor, y volvé enseguida al nervio conceptual.")
         elif veil_mode == "directa": parts.append("Respondé seco y frontal. Una idea central, sin adornos, sin rodeos y sin suavizar lo importante.")
         elif veil_mode == "incomoda": parts.append("No busques consuelo. Mostrá lo que esta idea no quiere aceptar de sí misma.")
         elif veil_mode == "rigurosa": parts.append("Ordená el argumento, separá conceptos y marcá qué no está sostenido.")
         elif veil_mode == "intima": parts.append("Acercá la conversación. Respondé como alguien que piensa al lado del lector, sin convertirlo en clase ni confesión teatral.")
-        elif veil_mode == "bar_filosofico": parts.append("Hablalo como una discusión inteligente de madrugada: ironía lúcida, cercanía y filo, sin postal bohemia.")
+        elif veil_mode == "bar_filosofico": parts.append("Hablalo como una discusión inteligente de madrugada: ironía lúcida, cercanía y filo. Cerrá con una frase que deje resonancia, no necesariamente con pregunta.")
         elif veil_mode == "desarme": parts.append("Desarmá la frase como mecanismo: qué afirma, qué oculta, qué seduce y qué no se sostiene.")
         elif veil_mode == "pregunta_viva": parts.append("No termines en moraleja. Cerrá con una pregunta que deje la idea abierta.")
         
-        return " ".join(parts)
+        parts.append(self._closing_discipline_hint(veil_mode, dialogue))
+        
+        return " ".join(parts).strip()
 
     def _messages(self, question: str, snapshot: dict, history: list[dict] | None = None, dialogue: bool = False, reasoning_mode: str = "", profile: str = "academica", veil: str = "lucy") -> list[dict]:
         lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
@@ -587,6 +597,7 @@ class ConversationCore:
                     "Operas dentro de Fusion Reader v2 como voz de laboratorio (MODO LIBRE). "
                     "Conversas libremente con el usuario. No estás anclada al documento salvo pedido explícito. "
                     "Responde en español natural, breve y conversacional, en una o dos frases cortas. "
+                    "No intentes prolongar la charla con preguntas finales automáticas. "
                     "Usa el MATERIAL RECIENTE DEL LABORATORIO si el usuario lo menciona. "
                     "Si un documento aparece en los extractos (porque fue pedido), tratalo como disponible. "
                     "No digas que guardaste notas. Las notas solo las maneja reader_notes."
@@ -597,6 +608,7 @@ class ConversationCore:
                     "Conversas oralmente con el usuario sobre el documento activo, lo que esta viendo, "
                     "los documentos de consulta cargados, y el material que pego o escribio en el chat de laboratorio. "
                     "Responde en español natural, breve y conversacional, en una o dos frases cortas. "
+                    "No intentes prolongar la charla con preguntas finales automáticas. "
                     "No leas el documento completo salvo que te lo pidan; conversa sobre el fragmento y el contexto. "
                     "Si el usuario pregunta por lo que acaba de pegar, poner o escribir en laboratorio, "
                     "usa MATERIAL RECIENTE DEL LABORATORIO y menciona brevemente ese contenido. "

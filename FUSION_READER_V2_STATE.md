@@ -1,6 +1,6 @@
 # Fusion Reader v2 — Estado de Continuidad
 
-Fecha: 2026-04-26
+Fecha: 2026-04-28
 
 Esta es la hoja corta para retomar el proyecto sin perderse. La historia larga
 vive en `docs/HISTORY.md` y en los documentos históricos de diseño.
@@ -67,18 +67,19 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 141 OK
+tests.test_fusion_reader_v2: 160 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 
 - Velo conversacional v1.1 implementado. Paleta narrativa afilada.
+- Disciplina de cierre conversacional implementada (menos preguntas artificiales).
 - Modo Libre (Free Mode): corregido para no inyectar documento por defecto (independencia real).
 - Botón "Limpiar documento" agregado a la UI y API.
 - Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
 - Bohemia uncensored: agregada rienda narrativa contra loops y teatralidad excesiva.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
-- tests: 153 OK
+- tests: 160 OK
 - voice isolation: OK
 - arquitectura de cuatro ejes (Anclaje, Perfil, Razonamiento, Velo) preservada y validada.
 ```
@@ -86,7 +87,7 @@ legacy reader safety: 35 tests OK
 Último commit relevante:
 
 ```text
-2cdb11b Document Bohemia uncensored startup
+579eed4 Make free mode fully detach from document context
 ```
 
 ## Arranque recomendado

@@ -2243,5 +2243,53 @@ Sigue en otra línea y mantiene la misma idea.
             content = f.read()
             self.assertIn('/api/document/clear', content)
 
+    def test_closing_discipline_is_applied_by_default(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_veil("lucy")
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("No cierres por defecto con una pregunta", prompt)
+        self.assertIn("Cerrá normalmente con una afirmación completa", prompt)
+
+    def test_closing_discipline_is_strict_in_dialogue(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        # Check overlay directly
+        prompt = app.conversation._persona_overlay(veil="lucy", dialogue=True)
+        self.assertIn("no sostengas artificialmente la conversación con preguntas finales", prompt)
+
+    def test_pregunta_viva_veil_omits_closing_discipline(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_veil("pregunta_viva")
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertNotIn("No cierres por defecto con una pregunta", prompt)
+        self.assertIn("Cerrá con una pregunta que deje la idea abierta", prompt)
+
+    def test_debate_veil_is_not_forcing_question_as_routine(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_veil("debate")
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("si hace falta, cerrá con una pregunta real, no automática", prompt)
+        self.assertNotIn("devolvé una pregunta", prompt)
+
+    def test_thinking_mode_does_not_force_questions(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.set_reasoning_mode("thinking")
+        app.chat("Hola")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("Abrí preguntas solo si son realmente necesarias", prompt)
+        self.assertNotIn("hacé preguntas necesarias", prompt)
+
 if __name__ == "__main__":
     unittest.main()
