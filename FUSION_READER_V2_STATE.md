@@ -78,7 +78,7 @@ legacy reader safety: 35 tests OK
 - Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
 - Bohemia uncensored: agregada rienda narrativa contra loops y teatralidad excesiva.
 - Selector de voz TTS dinámico: implementado en UI y API con persistencia.
-- Etiquetas de voz amigables: implementadas para el catálogo AllTalk, agrupadas por categorías (Femeninas, Masculinas, Especiales).
+- Etiquetas de voz mitológicas: implementadas para el catálogo AllTalk (M01-M09, V01-V11), agrupadas en "Voces M" y "Voces V" con colores distintivos y orden estable.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
 - tests: 163 OK (más labels visuales validados por grep)

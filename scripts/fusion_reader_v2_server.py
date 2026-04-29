@@ -1155,38 +1155,53 @@ INDEX_HTML = r"""<!doctype html>
 
     function voiceLabel(filename) {
       const labels = {
-        'female_01.wav': 'Mujer 01 — Clara',
-        'female_02.wav': 'Mujer 02 — Helena',
-        'female_03.wav': 'Mujer 03 — Emilia',
-        'female_04.wav': 'Mujer 04 — Vera',
-        'female_05.wav': 'Mujer 05 — Irene',
-        'female_06.wav': 'Mujer 06 — Nina',
-        'female_07.wav': 'Mujer 07 — Alma',
-        'Lucy_Cunningham.wav': 'Lucy — Cunningham',
-        'Lisa_Gerrard.wav': 'Mujer especial — Lisa Gerrard',
-        'male_01.wav': 'Varón 01 — Bruno',
-        'male_02.wav': 'Varón 02 — Darío',
-        'male_03.wav': 'Varón 03 — Mateo',
-        'male_04.wav': 'Varón 04 — Julián',
-        'male_05.wav': 'Varón 05 — León',
-        'Morgan_Freeman CC3.wav': 'Especial — Morgan Freeman',
-        'James_Earl_Jones CC3.wav': 'Especial — James Earl Jones',
-        'David_Attenborough CC3.wav': 'Especial — David Attenborough',
-        'Clint_Eastwood CC3.wav': 'Especial — Clint Eastwood',
-        'Clint_Eastwood CC3 (enhanced).wav': 'Especial — Clint Eastwood+',
-        'arnold.wav': 'Especial — Arnold'
+        'female_01.wav': 'M01 — Afrodita',
+        'female_02.wav': 'M02 — Atenea',
+        'female_03.wav': 'M03 — Hera',
+        'female_04.wav': 'M04 — Freyja',
+        'female_05.wav': 'M05 — Isis',
+        'female_06.wav': 'M06 — Lakshmi',
+        'female_07.wav': 'M07 — Selene',
+        'Lucy_Cunningham.wav': 'M08 — Perséfone',
+        'Lisa_Gerrard.wav': 'M09 — Hécate',
+        'male_01.wav': 'V01 — Zeus',
+        'male_02.wav': 'V02 — Odín',
+        'male_03.wav': 'V03 — Shiva',
+        'male_04.wav': 'V04 — Anubis',
+        'male_05.wav': 'V05 — Apolo',
+        'Morgan_Freeman CC3.wav': 'V06 — Hermes',
+        'James_Earl_Jones CC3.wav': 'V07 — Ares',
+        'David_Attenborough CC3.wav': 'V08 — Heimdall',
+        'Clint_Eastwood CC3.wav': 'V09 — Hades',
+        'Clint_Eastwood CC3 (enhanced).wav': 'V10 — Thor',
+        'arnold.wav': 'V11 — Hércules'
       };
       return labels[filename] || filename;
     }
 
     function voiceGroup(filename) {
-      if (filename.startsWith('female_') || filename === 'Lucy_Cunningham.wav' || filename === 'Lisa_Gerrard.wav') {
-        return 'Voces femeninas';
-      }
-      if (filename.startsWith('male_')) {
-        return 'Voces masculinas';
-      }
-      return 'Voces especiales';
+      const m = ['female_01.wav', 'female_02.wav', 'female_03.wav', 'female_04.wav', 'female_05.wav', 'female_06.wav', 'female_07.wav', 'Lucy_Cunningham.wav', 'Lisa_Gerrard.wav'];
+      const v = ['male_01.wav', 'male_02.wav', 'male_03.wav', 'male_04.wav', 'male_05.wav', 'Morgan_Freeman CC3.wav', 'James_Earl_Jones CC3.wav', 'David_Attenborough CC3.wav', 'Clint_Eastwood CC3.wav', 'Clint_Eastwood CC3 (enhanced).wav', 'arnold.wav'];
+      if (m.includes(filename) || filename.startsWith('female_')) return 'Voces M';
+      if (v.includes(filename) || filename.startsWith('male_')) return 'Voces V';
+      return 'Otras voces';
+    }
+
+    function voiceSortKey(filename) {
+      const order = [
+        'female_01.wav', 'female_02.wav', 'female_03.wav', 'female_04.wav', 'female_05.wav', 'female_06.wav', 'female_07.wav', 'Lucy_Cunningham.wav', 'Lisa_Gerrard.wav',
+        'male_01.wav', 'male_02.wav', 'male_03.wav', 'male_04.wav', 'male_05.wav', 'Morgan_Freeman CC3.wav', 'James_Earl_Jones CC3.wav', 'David_Attenborough CC3.wav', 'Clint_Eastwood CC3.wav', 'Clint_Eastwood CC3 (enhanced).wav', 'arnold.wav'
+      ];
+      const idx = order.indexOf(filename);
+      return idx === -1 ? 999 : idx;
+    }
+
+    function voiceColor(filename) {
+      const colors = {
+        'female_01.wav': '#ffb3ba', 'female_02.wav': '#ffdfba', 'female_03.wav': '#ffffba', 'female_04.wav': '#baffc9', 'female_05.wav': '#bae1ff', 'female_06.wav': '#eecbff', 'female_07.wav': '#ffc1e3', 'Lucy_Cunningham.wav': '#21d07a', 'Lisa_Gerrard.wav': '#38c6d8',
+        'male_01.wav': '#ff7474', 'male_02.wav': '#ffc857', 'male_03.wav': '#4cc9f0', 'male_04.wav': '#7209b7', 'male_05.wav': '#4895ef', 'Morgan_Freeman CC3.wav': '#f1f5ef', 'James_Earl_Jones CC3.wav': '#ff4d4d', 'David_Attenborough CC3.wav': '#a0d468', 'Clint_Eastwood CC3.wav': '#8e44ad', 'Clint_Eastwood CC3 (enhanced).wav': '#9b59b6', 'arnold.wav': '#e67e22'
+      };
+      return colors[filename] || 'var(--text)';
     }
 
     async function refreshVoices() {
@@ -1202,19 +1217,21 @@ INDEX_HTML = r"""<!doctype html>
       if (!data || !Array.isArray(data.voices)) return;
       els.voiceSelect.replaceChildren();
 
+      const sorted = [...data.voices].sort((a, b) => voiceSortKey(a) - voiceSortKey(b));
+
       const groups = {
-        'Voces femeninas': [],
-        'Voces masculinas': [],
-        'Voces especiales': []
+        'Voces M': [],
+        'Voces V': [],
+        'Otras voces': []
       };
 
-      data.voices.forEach(v => {
+      sorted.forEach(v => {
         const group = voiceGroup(v);
         if (!groups[group]) groups[group] = [];
         groups[group].push(v);
       });
 
-      ['Voces femeninas', 'Voces masculinas', 'Voces especiales'].forEach(groupName => {
+      ['Voces M', 'Voces V', 'Otras voces'].forEach(groupName => {
         const voices = groups[groupName];
         if (voices.length === 0) return;
 
@@ -1224,8 +1241,9 @@ INDEX_HTML = r"""<!doctype html>
         voices.forEach(v => {
           const opt = document.createElement('option');
           opt.value = v;
-          opt.textContent = voiceLabel(v);
+          opt.textContent = `● ${voiceLabel(v)}`;
           opt.title = v;
+          opt.style.color = voiceColor(v);
           if (v === data.current) opt.selected = true;
           g.appendChild(opt);
         });

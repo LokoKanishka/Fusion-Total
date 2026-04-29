@@ -2352,12 +2352,23 @@ Sigue en otra línea y mantiene la misma idea.
     def test_server_ui_contains_friendly_voice_labels(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
-        self.assertIn("Voces femeninas", text)
-        self.assertIn("Mujer 03 — Emilia", text)
-        self.assertIn("Varón 01 — Bruno", text)
-        self.assertIn("Especial — Morgan Freeman", text)
+        self.assertIn("Voces M", text)
+        self.assertIn("Voces V", text)
+        self.assertIn("M03 — Hera", text)
+        self.assertIn("M08 — Perséfone", text)
+        self.assertIn("M09 — Hécate", text)
+        self.assertIn("V01 — Zeus", text)
+        self.assertIn("V06 — Hermes", text)
+        self.assertIn("V11 — Hércules", text)
+        self.assertIn("voiceColor", text)
+        self.assertIn("voiceSortKey", text)
         self.assertIn("opt.value = v", text)
-        self.assertIn("opt.textContent = voiceLabel(v)", text)
+        self.assertIn("opt.textContent", text)
+        # Should NOT contain old labels
+        self.assertNotIn("Mujer 03 — Emilia", text)
+        self.assertNotIn("Varón 01 — Bruno", text)
+        self.assertNotIn("Especial — Morgan Freeman", text)
+        self.assertNotIn("Voces especiales", text)
 
 
 if __name__ == "__main__":

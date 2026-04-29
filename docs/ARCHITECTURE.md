@@ -109,7 +109,7 @@ Fusion Reader v2 introduce un cuarto eje liviano de modulación tonal: el **Velo
 Fusion Reader v2 introduce un quinto eje de personalización: la **Voz**.
 - Permite cambiar la voz neural (AllTalk/XTTS) en tiempo de ejecución.
 - **Catálogo Dinámico:** Se nutre de las voces disponibles en el servidor AllTalk activo.
-- **Etiquetas Amigables:** Los nombres de archivo crudos se mapean a nombres humanos (ej: `female_03.wav` -> "Mujer 03 — Emilia") y se agrupan visualmente por categorías (Femeninas, Masculinas, Especiales) mediante `<optgroup>`.
+- **Etiquetas Mitológicas:** Los nombres de archivo se mapean a códigos mitológicos (ej: `female_03.wav` -> "● M03 — Hera", `Morgan_Freeman CC3.wav` -> "● V06 — Hermes") y se agrupan en "Voces M" y "Voces V" mediante `<optgroup>`. Se aplica un código de colores distintivo por voz para facilitar la identificación visual.
 - **Persistencia:** La voz seleccionada se guarda en el estado de la sesión y persiste entre reinicios.
 - **Sincronización:** Al cambiar de voz, se cancelan los prefetches y preparaciones activas para evitar la mezcla de voces en la cola de reproducción.
 
