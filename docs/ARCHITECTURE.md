@@ -104,6 +104,14 @@ Fusion Reader v2 introduce un cuarto eje liviano de modulación tonal: el **Velo
 - No requiere recargar modelos ni reescribir prompts completos.
 - *Default:* "Lucy" (vacío/neutro).
 
+## Selección de Voz TTS
+
+Fusion Reader v2 introduce un quinto eje de personalización: la **Voz**.
+- Permite cambiar la voz neural (AllTalk/XTTS) en tiempo de ejecución.
+- **Catálogo Dinámico:** Se nutre de las voces disponibles en el servidor AllTalk activo.
+- **Persistencia:** La voz seleccionada se guarda en el estado de la sesión y persiste entre reinicios.
+- **Sincronización:** Al cambiar de voz, se cancelan los prefetches y preparaciones activas para evitar la mezcla de voces en la cola de reproducción.
+
 ## Notas
 
 Componentes:

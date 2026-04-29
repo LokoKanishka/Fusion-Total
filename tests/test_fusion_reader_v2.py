@@ -2291,5 +2291,63 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("Abrí preguntas solo si son realmente necesarias", prompt)
         self.assertNotIn("hacé preguntas necesarias", prompt)
 
+    def test_voice_catalog_returns_available_voices(self):
+        class VoiceTTS(NullTTSProvider):
+            def voices(self):
+                return ["voice1.wav", "voice2.wav"]
+        app = test_app(tts=VoiceTTS())
+        app.voice.voice = "voice1.wav"
+        catalog = app.get_voice_catalog()
+        self.assertTrue(catalog["ok"])
+        self.assertEqual(catalog["current"], "voice1.wav")
+        self.assertEqual(catalog["voices"], ["voice1.wav", "voice2.wav"])
+
+    def test_set_voice_updates_state_and_persists(self):
+        root = Path(tempfile.mkdtemp())
+        class VoiceTTS(NullTTSProvider):
+            def voices(self):
+                return ["female_03.wav", "new_voice.wav"]
+        app = test_app(tts=VoiceTTS(), root=root)
+        app.voice.voice = "female_03.wav"
+        out = app.set_voice("new_voice.wav")
+        self.assertTrue(out["ok"])
+        self.assertEqual(app.voice.voice, "new_voice.wav")
+        
+        # Verify persistence
+        reopened = test_app(tts=VoiceTTS(), root=root)
+        self.assertEqual(reopened.voice.voice, "new_voice.wav")
+
+    def test_set_voice_cancels_prefetch_and_running_prepare(self):
+        provider = NullTTSProvider()
+        app = test_app(tts=provider)
+        app.load_text("doc", "Doc", "Uno.\n\nDos.", prefetch=True)
+        # Mock prefetch future
+        with app._prefetch_lock:
+            future = Future()
+            app._prefetch_futures[1] = future
+        
+        app.prepare_document() # Start preparation
+        # Wait a bit for it to start
+        for _ in range(20):
+            if app.prepare_status()["status"] == "running":
+                break
+            time.sleep(0.01)
+        
+        self.assertEqual(app.prepare_status()["status"], "running")
+        
+        app.set_voice("female_01.wav")
+        
+        # Verify prefetch cleared
+        self.assertEqual(len(app._prefetch_futures), 0)
+        self.assertTrue(future.cancelled())
+        # Verify prepare canceled (it goes to idle when finished/canceled)
+        # wait a bit for thread to exit
+        for _ in range(20):
+            if app.prepare_status()["status"] != "running":
+                break
+            time.sleep(0.01)
+        self.assertNotEqual(app.prepare_status()["status"], "running")
+
+
 if __name__ == "__main__":
     unittest.main()

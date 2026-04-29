@@ -77,11 +77,12 @@ legacy reader safety: 35 tests OK
 - Botón "Limpiar documento" agregado a la UI y API.
 - Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
 - Bohemia uncensored: agregada rienda narrativa contra loops y teatralidad excesiva.
+- Selector de voz TTS dinámico: implementado en UI y API con persistencia.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
-- tests: 160 OK
+- tests: 163 OK
 - voice isolation: OK
-- arquitectura de cuatro ejes (Anclaje, Perfil, Razonamiento, Velo) preservada y validada.
+- arquitectura de cinco ejes (Anclaje, Perfil, Razonamiento, Velo, Voz) preservada y validada.
 ```
 
 Último commit relevante:

@@ -666,6 +666,9 @@ INDEX_HTML = r"""<!doctype html>
       margin-left: auto;
       margin-right: 14px;
     }
+    .header-selectors select {
+      max-width: 120px;
+    }
     .reasoning-caption {
       color: var(--muted);
       font-size: 10px;
@@ -783,6 +786,7 @@ INDEX_HTML = r"""<!doctype html>
             <option value="bohemia">Bohemia</option>
           </select>
           <select id="veilSelect" class="compact-select" aria-label="Velo"></select>
+          <select id="voiceSelect" class="compact-select" aria-label="Voz"></select>
         </div>
         <div id="ttsChip" class="status"><span id="ttsDot" class="dot"></span><span id="ttsStatus">TTS sin comprobar</span></div>
       </header>
@@ -904,7 +908,8 @@ INDEX_HTML = r"""<!doctype html>
       labFocus: document.getElementById('labFocus'),
       mainDocTitle: document.getElementById('mainDocTitle'),
       mainDocMeta: document.getElementById('mainDocMeta'),
-      referenceList: document.getElementById('referenceList')
+      referenceList: document.getElementById('referenceList'),
+      voiceSelect: document.getElementById('voiceSelect')
     };
     const LAB_NOTES_DOC_ID = '__laboratory__';
     let status = null;
@@ -1148,6 +1153,49 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    async function refreshVoices() {
+      try {
+        const data = await api('/api/voices');
+        renderVoices(data);
+      } catch (err) {
+        log(`No pude cargar el catálogo de voces: ${err.message}`);
+      }
+    }
+
+    function renderVoices(data) {
+      if (!data || !Array.isArray(data.voices)) return;
+      els.voiceSelect.replaceChildren();
+      data.voices.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        if (v === data.current) opt.selected = true;
+        els.voiceSelect.appendChild(opt);
+      });
+    }
+
+    async function changeVoice() {
+      const voice = els.voiceSelect.value;
+      if (!voice) return;
+      setBusy(true);
+      try {
+        const data = await api('/api/voice', { voice });
+        renderStatus(data);
+        log(`Voz cambiada a ${voice}.`);
+      } catch (err) {
+        log(`No pude cambiar la voz: ${err.message}`);
+        await refreshVoices();
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderVoiceStatus(voice) {
+      if (voice && els.voiceSelect.value !== voice) {
+        els.voiceSelect.value = voice;
+      }
+    }
+
     function renderStatus(data) {
       const selectedNotesDocId = data.doc_id || LAB_NOTES_DOC_ID;
       const shouldRefreshNotes = selectedNotesDocId !== notesState.docId || data.current !== notesState.current || Boolean(data.notes && data.notes.count !== notesState.items.length);
@@ -1177,6 +1225,7 @@ INDEX_HTML = r"""<!doctype html>
       els.ttsStatus.textContent = ttsState.label;
       if (els.ttsChip) els.ttsChip.title = ttsState.tooltip || ttsState.label;
       renderPrepareStatus(data.prepare);
+      renderVoiceStatus(data.voice);
       if (shouldRefreshNotes) {
         refreshNotes().catch(() => {});
       }
@@ -2562,6 +2611,7 @@ INDEX_HTML = r"""<!doctype html>
     els.reasoningPensamientoCriticoBtn.addEventListener('click', () => setReasoningMode('pensamiento_critico'));
     els.profileSelect.addEventListener('change', event => setProfileMode(event.target.value));
     els.veilSelect.addEventListener('change', event => setVeilMode(event.target.value));
+    els.voiceSelect.addEventListener('change', changeVoice);
     els.freeModeBtn.addEventListener('click', () => setLaboratoryMode(currentLaboratoryMode() === 'free' ? 'document' : 'free'));
     els.dialogueBtn.addEventListener('click', toggleDialogue);
     els.chatInput.addEventListener('keydown', event => {
@@ -2610,7 +2660,7 @@ INDEX_HTML = r"""<!doctype html>
       loadFile(files && files[0]);
     });
 
-    refresh().catch(err => log(`Arranque incompleto: ${err.message}`));
+    refresh().then(() => refreshVoices()).catch(err => log(`Arranque incompleto: ${err.message}`));
   </script>
 </body>
 </html>
@@ -2842,8 +2892,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/library":
             self._json(200, {"ok": True, "items": library_items()})
             return
-        if path == "/api/voice/voices":
-            self._json(200, APP.voices())
+        if path == "/api/voice/voices" or path == "/api/voices":
+            self._json(200, APP.get_voice_catalog())
             return
         if path == "/api/voice/metrics":
             self._json(200, APP.recent_voice_metrics())
@@ -3078,6 +3128,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/veil":
                 self._json(200, APP.set_veil(str(payload.get("mode") or "")))
+                return
+            if path == "/api/voice":
+                self._json(200, APP.set_voice(str(payload.get("voice") or "")))
                 return
             if path in ("/api/laboratory/reset", "/api/chat/reset"):
                 self._json(200, APP.clear_laboratory_history())

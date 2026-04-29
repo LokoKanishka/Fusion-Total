@@ -1590,6 +1590,39 @@ class FusionReaderV2:
         info["selected"] = info.get("mode") == self.reasoning_mode
         return info
 
+    def get_voice_catalog(self) -> dict:
+        available = self.tts.voices()
+        return {
+            "ok": True,
+            "current": self.voice.voice,
+            "voices": available if available else [self.voice.voice],
+        }
+
+    def set_voice(self, voice: str) -> dict:
+        if not voice or not str(voice).strip():
+            return {"ok": False, "error": "voice_empty"}
+
+        catalog = self.tts.voices()
+        if catalog and voice not in catalog:
+            return {"ok": False, "error": "voice_not_in_catalog"}
+
+        self.voice.voice = voice
+        self._persist_session_state()
+
+        # Cancel active prefetches to avoid mixed voices
+        with self._prefetch_lock:
+            for future in self._prefetch_futures.values():
+                if not future.done():
+                    future.cancel()
+            self._prefetch_futures.clear()
+            self._prefetch_started.clear()
+
+        # If preparation is running, we should probably stop it or it will mix voices
+        if self.prepare_status().get("status") == "running":
+            self.cancel_prepare()
+
+        return self.status()
+
     def laboratory_mode_status(self) -> dict:
         mode = "free" if str(self.laboratory_mode or "").strip().lower() == "free" else "document"
         return {
@@ -2660,6 +2693,7 @@ class FusionReaderV2:
             "laboratory_mode": self.laboratory_mode,
             "profile": getattr(self, "profile", "academica"),
             "veil": getattr(self, "veil", "lucy"),
+            "voice": self.voice.voice,
             "reference_documents": [
                 {
                     "doc_id": str(item.get("doc_id") or ""),
@@ -2709,6 +2743,9 @@ class FusionReaderV2:
         self.laboratory_mode = "free" if str(raw.get("laboratory_mode") or "").strip().lower() == "free" else "document"
         self.profile = str(raw.get("profile") or "academica").strip().lower()
         self.veil = str(raw.get("veil") or "lucy").strip().lower()
+        saved_voice = str(raw.get("voice") or "").strip()
+        if saved_voice:
+            self.voice.voice = saved_voice
         doc_id = str(raw.get("doc_id") or "")
         title = str(raw.get("title") or "")
         self._reference_documents = {}
