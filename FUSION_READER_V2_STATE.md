@@ -106,7 +106,15 @@ ab98a44 Use mythological voice labels
 ./scripts/start_reader_neural_tts_gpu_5090.sh
 ./scripts/start_fusion_reader_v2_stt.sh
 ./scripts/start_fusion_reader_v2.sh
+./scripts/fusion_memory_mcp_server.py (para memoria)
 ```
+
+## Memory MCP read-only v1
+
+- Expone memoria markdown local en `runtime/fusion_reader_v2/memory/`.
+- Transporte: `stdio`.
+- Herramientas: `memory.list`, `memory.read`, `memory.search`, `memory.state`, `memory.boundaries`, `memory.next_steps`.
+- Seguridad: solo lectura, validación estricta de path, restringido a archivos `.md`.
 
 ## Pendientes reales
 

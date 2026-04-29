@@ -2370,6 +2370,53 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertNotIn("Especial — Morgan Freeman", text)
         self.assertNotIn("Voces especiales", text)
 
+    def test_mcp_memory_server_core_logic(self):
+        from scripts import fusion_memory_mcp_server as mcp_mod
+        
+        # 1. list
+        files = mcp_mod.allowed_memory_files()
+        self.assertIn("project_state.md", files)
+        self.assertIn("decisions.md", files)
+        self.assertIn("boundaries.md", files)
+        
+        # 2. read project_state
+        content = mcp_mod.read_memory_file("project_state.md")
+        self.assertIn("Project State", content)
+        self.assertIn("2b7024b", content)
+        self.assertIn("164 OK", content)
+        
+        # 3. Security: read outside
+        fail_content = mcp_mod.read_memory_file("../FUSION_READER_V2_STATE.md")
+        self.assertTrue(fail_content.startswith("Error:"))
+        
+        # 4. Security: read .env
+        fail_env = mcp_mod.read_memory_file(".env")
+        self.assertTrue(fail_env.startswith("Error:"))
+        
+        # 5. Security: read non-md
+        # (Actually the whitelist already prevents this, but test it)
+        fail_bin = mcp_mod.read_memory_file("audio_cache/some.wav")
+        self.assertTrue(fail_bin.startswith("Error:"))
+        
+        # 6. search
+        results = mcp_mod.search_memory("cinco ejes")
+        self.assertGreater(len(results), 0)
+        found_files = [r["file"] for r in results]
+        self.assertIn("project_state.md", found_files)
+        # Check one of the fragments
+        self.assertIn("cinco ejes", results[0]["content"].lower())
+        
+        # 7. specific helpers
+        state_content = mcp_mod.read_memory_file("project_state.md")
+        self.assertIn("Project State", state_content)
+        
+        boundaries_content = mcp_mod.read_memory_file("boundaries.md")
+        self.assertIn("System Boundaries", boundaries_content)
+        self.assertIn("Doctora Lucy", boundaries_content)
+        
+        steps_content = mcp_mod.read_memory_file("next_steps.md")
+        self.assertIn("Next Steps", steps_content)
+
 
 if __name__ == "__main__":
     unittest.main()

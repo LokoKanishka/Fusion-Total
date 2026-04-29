@@ -175,7 +175,23 @@ STT:
 7854 TTS Doctora/Antigravity
 8021 STT faster-whisper
 11434 Ollama
+stdio fusion_memory_mcp_server.py
 ```
+
+## Memoria MCP (Read-Only)
+
+Fusion Reader v2 implementa un servidor MCP de solo lectura (`scripts/fusion_memory_mcp_server.py`) que expone el estado curado del proyecto ubicado en `runtime/fusion_reader_v2/memory/`.
+
+**Herramientas disponibles:**
+- `memory.list`: Lista archivos permitidos.
+- `memory.read`: Lee contenido de archivos `.md`.
+- `memory.search`: Búsqueda de texto en la memoria.
+- `memory.state`, `memory.boundaries`, `memory.next_steps`: Accesos directos a archivos clave.
+
+**Seguridad:**
+- No permite escritura ni borrado.
+- Validación estricta de rutas mediante `pathlib.resolve()`.
+- Restringido a una whitelist de archivos Markdown.
 
 ## Documento canónico de convivencia
 
