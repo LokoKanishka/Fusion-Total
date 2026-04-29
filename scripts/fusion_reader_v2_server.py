@@ -1153,6 +1153,42 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    function voiceLabel(filename) {
+      const labels = {
+        'female_01.wav': 'Mujer 01 — Clara',
+        'female_02.wav': 'Mujer 02 — Helena',
+        'female_03.wav': 'Mujer 03 — Emilia',
+        'female_04.wav': 'Mujer 04 — Vera',
+        'female_05.wav': 'Mujer 05 — Irene',
+        'female_06.wav': 'Mujer 06 — Nina',
+        'female_07.wav': 'Mujer 07 — Alma',
+        'Lucy_Cunningham.wav': 'Lucy — Cunningham',
+        'Lisa_Gerrard.wav': 'Mujer especial — Lisa Gerrard',
+        'male_01.wav': 'Varón 01 — Bruno',
+        'male_02.wav': 'Varón 02 — Darío',
+        'male_03.wav': 'Varón 03 — Mateo',
+        'male_04.wav': 'Varón 04 — Julián',
+        'male_05.wav': 'Varón 05 — León',
+        'Morgan_Freeman CC3.wav': 'Especial — Morgan Freeman',
+        'James_Earl_Jones CC3.wav': 'Especial — James Earl Jones',
+        'David_Attenborough CC3.wav': 'Especial — David Attenborough',
+        'Clint_Eastwood CC3.wav': 'Especial — Clint Eastwood',
+        'Clint_Eastwood CC3 (enhanced).wav': 'Especial — Clint Eastwood+',
+        'arnold.wav': 'Especial — Arnold'
+      };
+      return labels[filename] || filename;
+    }
+
+    function voiceGroup(filename) {
+      if (filename.startsWith('female_') || filename === 'Lucy_Cunningham.wav' || filename === 'Lisa_Gerrard.wav') {
+        return 'Voces femeninas';
+      }
+      if (filename.startsWith('male_')) {
+        return 'Voces masculinas';
+      }
+      return 'Voces especiales';
+    }
+
     async function refreshVoices() {
       try {
         const data = await api('/api/voices');
@@ -1165,12 +1201,35 @@ INDEX_HTML = r"""<!doctype html>
     function renderVoices(data) {
       if (!data || !Array.isArray(data.voices)) return;
       els.voiceSelect.replaceChildren();
+
+      const groups = {
+        'Voces femeninas': [],
+        'Voces masculinas': [],
+        'Voces especiales': []
+      };
+
       data.voices.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v;
-        opt.textContent = v;
-        if (v === data.current) opt.selected = true;
-        els.voiceSelect.appendChild(opt);
+        const group = voiceGroup(v);
+        if (!groups[group]) groups[group] = [];
+        groups[group].push(v);
+      });
+
+      ['Voces femeninas', 'Voces masculinas', 'Voces especiales'].forEach(groupName => {
+        const voices = groups[groupName];
+        if (voices.length === 0) return;
+
+        const g = document.createElement('optgroup');
+        g.label = groupName;
+
+        voices.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = voiceLabel(v);
+          opt.title = v;
+          if (v === data.current) opt.selected = true;
+          g.appendChild(opt);
+        });
+        els.voiceSelect.appendChild(g);
       });
     }
 

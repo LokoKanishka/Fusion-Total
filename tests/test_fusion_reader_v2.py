@@ -2349,5 +2349,16 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertNotEqual(app.prepare_status()["status"], "running")
 
 
+    def test_server_ui_contains_friendly_voice_labels(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("Voces femeninas", text)
+        self.assertIn("Mujer 03 — Emilia", text)
+        self.assertIn("Varón 01 — Bruno", text)
+        self.assertIn("Especial — Morgan Freeman", text)
+        self.assertIn("opt.value = v", text)
+        self.assertIn("opt.textContent = voiceLabel(v)", text)
+
+
 if __name__ == "__main__":
     unittest.main()
