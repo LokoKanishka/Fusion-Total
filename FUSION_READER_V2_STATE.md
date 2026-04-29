@@ -67,7 +67,7 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 160 OK
+tests.test_fusion_reader_v2: 164 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 
@@ -81,7 +81,7 @@ legacy reader safety: 35 tests OK
 - Etiquetas de voz mitológicas: implementadas para el catálogo AllTalk (M01-M09, V01-V11), agrupadas en "Voces M" y "Voces V" con colores distintivos y orden estable.
 - modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
 - smoke test: OK
-- tests: 163 OK (más labels visuales validados por grep)
+- tests: 164 OK (más labels visuales validados por grep)
 - voice isolation: OK
 - arquitectura de cinco ejes (Anclaje, Perfil, Razonamiento, Velo, Voz) preservada y validada.
 ```
@@ -89,8 +89,16 @@ legacy reader safety: 35 tests OK
 Último commit relevante:
 
 ```text
-579eed4 Make free mode fully detach from document context
+ab98a44 Use mythological voice labels
 ```
+
+## Consolidación ab98a44
+
+- Auditoría completa realizada.
+- Basura limpiada (logs, temporales, caches).
+- Tests reales: 164 OK.
+- Voice isolation: OK.
+- Estado: Limpio y consolidado.
 
 ## Arranque recomendado
 
