@@ -2627,6 +2627,18 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("Capitulo 1", document_xml)
         self.assertIn("La realidad parece una costumbre compartida.", document_xml)
 
+    def test_pdf_to_word_ui_is_compact_and_correct(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn('id="pdfToWordTool"', server)
+        self.assertIn('PDF → Word', server)
+        # Should not have long descriptive text anymore
+        self.assertNotIn("Soltá un PDF o hacé click para convertir", server)
+
+    def test_server_pdf_to_word_limit_is_500mb(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn('max_bytes: int = 500 * 1024 * 1024', server)
+        self.assertIn('Límite: {max_bytes // (1024 * 1024)} MB.', server)
+
     def test_mcp_memory_server_core_logic(self):
         from scripts import fusion_memory_mcp_server as mcp_mod
         

@@ -788,14 +788,15 @@ INDEX_HTML = r"""<!doctype html>
         <button id="chooseFileBtn" class="primary compact-btn" type="button">Buscar Archivo</button>
         <input id="fileInput" class="file-input" type="file" accept=".txt,.md,.markdown,.pdf,.doc,.docm,.docx,.dot,.dotx,.odt,.ott,.sxw,.pages,.rtf,.html,.htm,.csv,.log,text/plain,text/markdown,application/pdf,application/vnd.oasis.opendocument.text,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword">
       </div>
-      <label class="toggle upload-toggle"><input id="autoReadToggle" type="checkbox" checked> Leer al cargar</label>
-      <div id="pdfToWordTool" class="mini-tool" tabindex="0" role="button" aria-label="Convertir PDF a Word">
-        <strong>PDF → Word</strong>
-        <small>Soltá un PDF o hacé click para convertir sin cargarlo en Fusion.</small>
+      <div class="row">
+        <label class="toggle upload-toggle"><input id="autoReadToggle" type="checkbox" checked> Leer al cargar</label>
+        <button id="pdfToWordTool" class="compact-btn" type="button" title="Convertir PDF a DOCX y guardar en Descargas">PDF → Word</button>
         <input id="pdfToWordInput" class="file-input" type="file" accept=".pdf,application/pdf">
       </div>
-      <p id="pdfToWordInfo" class="upload-info">Todavía no convertiste ningún PDF.</p>
-      <a id="pdfToWordDownload" href="#" class="upload-info" style="display:none" download>Descargar</a>
+      <div class="row" style="margin-top: -2px; margin-bottom: 4px;">
+        <p id="pdfToWordInfo" class="upload-info" style="margin: 0;"></p>
+        <a id="pdfToWordDownload" href="#" class="upload-info" style="display:none; font-weight: bold;" download>Descargar</a>
+      </div>
       <label class="toggle upload-toggle"><input id="referenceModeToggle" type="checkbox"> Agregar como consulta</label>
       <p id="uploadInfo" class="upload-info">Todavía no cargaste ningún texto.</p>
       <div class="progress-wrap" aria-hidden="true"><div id="importProgress" class="progress-bar"></div></div>
@@ -3216,7 +3217,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("incomplete_upload")
         return path
 
-    def _read_multipart_file(self, field_name: str = "file", max_bytes: int = 40 * 1024 * 1024) -> tuple[str, str, bytes]:
+    def _read_multipart_file(self, field_name: str = "file", max_bytes: int = 500 * 1024 * 1024) -> tuple[str, str, bytes]:
         content_type = self.headers.get("Content-Type", "") or ""
         match = re.search(r'boundary="?([^";]+)"?', content_type)
         if "multipart/form-data" not in content_type or not match:
@@ -3225,7 +3226,7 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             raise ValueError("missing_file_data")
         if length > max_bytes:
-            raise ValueError("file_too_large")
+            raise ValueError(f"PDF demasiado grande para esta versión. Límite: {max_bytes // (1024 * 1024)} MB.")
         boundary = match.group(1).encode("utf-8")
         body = self.rfile.read(length)
         marker = b"--" + boundary
@@ -3574,6 +3575,9 @@ class Handler(BaseHTTPRequestHandler):
                 raw_chunk_index = payload.get("chunk_index")
                 self._result(200, APP.chat(str(payload.get("message") or ""), model=str(payload.get("model") or ""), chunk_index=int(raw_chunk_index) if raw_chunk_index is not None else None))
                 return
+        except ValueError as e:
+            self._json(400, {"ok": False, "error": str(e)})
+            return
         except Exception as e:
             self._json(500, {"ok": False, "error": str(e)})
             return
