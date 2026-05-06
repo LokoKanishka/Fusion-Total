@@ -536,6 +536,19 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertNotIn(":7854", text)
         self.assertNotIn(":7852", text)
 
+    def test_server_ui_surfaces_active_stt_provider_and_fallback_state(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn('id="sttChip"', text)
+        self.assertIn('id="sttStatus"', text)
+        self.assertIn("describeSttStatus", text)
+        self.assertIn("whisper_cli", text)
+        self.assertIn("fallback operativo", text)
+        self.assertIn("primario 8021 offline", text)
+        self.assertIn("faster-whisper 8021", text)
+        self.assertIn("faster_whisper_server", text)
+        self.assertIn("services.stt", text)
+
     def test_server_read_current_does_not_render_audio_result_as_status(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")

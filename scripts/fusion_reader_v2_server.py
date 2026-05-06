@@ -789,6 +789,7 @@ INDEX_HTML = r"""<!doctype html>
           <select id="voiceSelect" class="compact-select" aria-label="Voz"></select>
         </div>
         <div id="ttsChip" class="status"><span id="ttsDot" class="dot"></span><span id="ttsStatus">TTS sin comprobar</span></div>
+        <div id="sttChip" class="status"><span id="sttDot" class="dot"></span><span id="sttStatus">STT sin comprobar</span></div>
       </header>
 
       <section class="reader">
@@ -879,8 +880,12 @@ INDEX_HTML = r"""<!doctype html>
       docTitle: document.getElementById('docTitle'),
       docMeta: document.getElementById('docMeta'),
       chunk: document.getElementById('chunk'),
+      ttsChip: document.getElementById('ttsChip'),
       ttsDot: document.getElementById('ttsDot'),
       ttsStatus: document.getElementById('ttsStatus'),
+      sttChip: document.getElementById('sttChip'),
+      sttDot: document.getElementById('sttDot'),
+      sttStatus: document.getElementById('sttStatus'),
       log: document.getElementById('log'),
       player: document.getElementById('player'),
       prevBtn: document.getElementById('prevBtn'),
@@ -1302,6 +1307,12 @@ INDEX_HTML = r"""<!doctype html>
       els.ttsDot.classList.toggle('warn', ttsState.state === 'fallback');
       els.ttsStatus.textContent = ttsState.label;
       if (els.ttsChip) els.ttsChip.title = ttsState.tooltip || ttsState.label;
+      const sttState = describeSttStatus(data);
+      const sttOk = sttState.state !== 'down';
+      els.sttDot.classList.toggle('ok', sttOk);
+      els.sttDot.classList.toggle('warn', sttState.state === 'fallback');
+      els.sttStatus.textContent = sttState.label;
+      if (els.sttChip) els.sttChip.title = sttState.tooltip || sttState.label;
       renderPrepareStatus(data.prepare);
       renderVoiceStatus(data.voice);
       if (shouldRefreshNotes) {
@@ -1324,6 +1335,56 @@ INDEX_HTML = r"""<!doctype html>
         return { state: 'fallback', label: 'TTS 7851', tooltip: 'TTS CPU 7851 fallback' };
       }
       return { state: 'ready', label: 'TTS listo', tooltip: 'TTS listo' };
+    }
+
+    function describeSttStatus(data) {
+      const services = data && data.services && typeof data.services === 'object' ? data.services : {};
+      const stt = services.stt && typeof services.stt === 'object' ? services.stt : {};
+      const ready = Boolean(stt && (stt.ready || stt.ok));
+      if (!ready) {
+        return { state: 'down', label: 'STT: no disponible', tooltip: 'STT no disponible' };
+      }
+      const selected = String(stt.selected || stt.provider || '').trim();
+      const provider = String(stt.provider || selected || '').trim();
+      const model = String(stt.model || '').trim();
+      const command = String(stt.command || '').trim();
+      const primary = stt.primary && typeof stt.primary === 'object' ? stt.primary : {};
+      const primaryProvider = String(primary.provider || 'faster_whisper_server').trim();
+      const primaryUrl = String(primary.url || 'http://127.0.0.1:8021').trim();
+      const primaryOk = Boolean(primary.ok);
+      const primaryDetail = String(primary.detail || '').trim();
+      const primaryLabel = primaryProvider === 'faster_whisper_server' ? 'faster-whisper 8021' : `${primaryProvider || 'primario'} 8021`;
+      if (selected === 'whisper_cli' || provider === 'whisper_cli') {
+        const tooltip = [
+          command ? `command: ${command}` : '',
+          model ? `model: ${model}` : '',
+          `primary: ${primaryLabel}`,
+          primaryUrl ? `url: ${primaryUrl}` : '',
+          primaryDetail ? `detail: ${primaryDetail}` : '',
+        ].filter(Boolean).join(' | ');
+        return {
+          state: 'fallback',
+          label: 'STT: whisper_cli · fallback operativo · primario 8021 offline',
+          tooltip: tooltip || 'STT whisper_cli fallback; primario 8021 offline',
+        };
+      }
+      if (selected === 'faster_whisper_server' || provider === 'faster_whisper_server' || primaryOk) {
+        const tooltip = [
+          `provider: ${primaryLabel}`,
+          primaryUrl ? `url: ${primaryUrl}` : '',
+          model ? `model: ${model}` : '',
+        ].filter(Boolean).join(' | ');
+        return {
+          state: 'ready',
+          label: 'STT: faster-whisper 8021 · primario online',
+          tooltip: tooltip || 'STT faster-whisper 8021 primario online',
+        };
+      }
+      return {
+        state: 'ready',
+        label: `STT: ${selected || provider || 'listo'}`,
+        tooltip: [command ? `command: ${command}` : '', model ? `model: ${model}` : ''].filter(Boolean).join(' | ') || 'STT listo',
+      };
     }
 
     function currentReasoningMode() {
