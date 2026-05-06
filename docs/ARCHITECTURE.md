@@ -44,10 +44,11 @@ Componentes principales:
 Propiedades:
 
 - usa snapshot del lector, no reemplaza al lector;
-- STT principal en `8021`;
-- fallback Whisper CLI;
+- STT principal conceptual en `8021` (`faster_whisper_server`);
+- fallback operativo `whisper_cli`;
 - TTS neural por defecto para respuesta oral;
 - `Dialogar` puede degradar `Supremo -> Pensamiento` para cuidar latencia oral.
+- la UI principal expone ahora el provider STT activo y si está en fallback.
 
 ## Modos de razonamiento
 
@@ -81,7 +82,23 @@ Fusion Reader v2 permite alternar entre dos modos de anclaje (Laboratory Mode):
    - Lucy conversa libremente, sin estar anclada al documento activo.
    - **Independencia Documental:** El documento activo NO se inyecta en el contexto por defecto. Esto evita que Lucy interprete todo a través del fragmento visible.
    - **Acceso Explícito:** El documento se incluye en el prompt SOLO si el usuario lo pide explícitamente (ej: "qué dice el texto", "según el fragmento", "mirá el documento").
+   - **Claridad Operativa:** La API separa `document` (recurso cargado) de `anchor` (anclaje activo) para evitar confundir disponibilidad con uso.
    - El perfil (Académica/Bohemia) y el Velo siguen activos, tiñendo el tono de la conversación libre.
+
+## Disciplina de Lectura Documental
+
+En modo documento, `ConversationCore` distingue entre intención literal e intención interpretativa:
+
+- **Pedido literal:** "qué dice", "leeme", "qué hay en pantalla", "repetí", etc.
+  - la respuesta debe empezar reproduciendo o parafraseando fielmente el bloque visible;
+  - la interpretación, si existe, queda como capa secundaria.
+- **Pedido interpretativo:** "qué significa", "interpretá", "analizá", "explicá", etc.
+  - puede pasar directamente a lectura analítica.
+- **Pedido mixto:**
+  - primero literal;
+  - después interpretación breve.
+
+Esto no altera perfiles, velos ni modos de razonamiento; agrega una disciplina de orden y fidelidad documental.
 
 ## Perfiles de personalidad
 
@@ -163,8 +180,11 @@ TTS:
 
 STT:
 
-- principal: `8021`
+- primario configurado: `8021`
+- provider primario: `faster_whisper_server`
 - fallback CLI: `whisper`
+- provider de fallback: `whisper_cli`
+- estado actual típico de runtime: si `8021` no responde, `AutoSTTProvider` cae a `whisper_cli` sin romper `Leer` ni `Dialogar`
 
 ## Puertos y frontera
 
@@ -177,6 +197,17 @@ STT:
 11434 Ollama
 stdio fusion_memory_mcp_server.py
 ```
+
+## Lifecycle operativo
+
+- `scripts/start_fusion_reader_v2.sh`
+  - selecciona TTS `7853` con validación de owner;
+  - deja log persistente en `runtime/fusion_reader_v2/logs/fusion_reader_v2_server.log`;
+  - guarda PID en `runtime/fusion_reader_v2/fusion_reader_v2.pid`;
+  - valida health post-start de `8010`.
+- `scripts/start_fusion_reader_v2_stt.sh`
+  - levanta el server `8021` cuando se invoca explícitamente;
+  - hoy no forma parte obligatoria del launcher principal.
 
 ## Memoria MCP (Read-Only)
 

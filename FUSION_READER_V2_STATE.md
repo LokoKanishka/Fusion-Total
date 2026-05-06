@@ -1,6 +1,6 @@
 # Fusion Reader v2 — Estado de Continuidad
 
-Fecha: 2026-04-28
+Fecha: 2026-05-06
 
 Esta es la hoja corta para retomar el proyecto sin perderse. La historia larga
 vive en `docs/HISTORY.md` y en los documentos históricos de diseño.
@@ -29,7 +29,8 @@ Si STT, Ollama o el diálogo fallan, `Leer` debe seguir funcionando.
 - TTS principal Fusion: `http://127.0.0.1:7853`
 - TTS fallback CPU: `http://127.0.0.1:7851`
 - TTS Doctora/Antigravity: `http://127.0.0.1:7854`
-- STT principal: `http://127.0.0.1:8021`
+- STT principal configurado: `http://127.0.0.1:8021`
+- STT efectivo actual: `whisper_cli` (fallback visible en UI cuando `8021` no responde)
 - LLM local: Ollama `qwen3:14b-q8_0`
 - Voz default: `female_03.wav`
 - Idioma default: `es`
@@ -67,38 +68,48 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 164 OK
+tests.test_fusion_reader_v2: 177 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
-
-- Velo conversacional v1.1 implementado. Paleta narrativa afilada.
-- Disciplina de cierre conversacional implementada (menos preguntas artificiales).
-- Modo Libre (Free Mode): corregido para no inyectar documento por defecto (independencia real).
-- Botón "Limpiar documento" agregado a la UI y API.
-- Personalidades refinadas: Lucy Académica (rigurosa) y Lucy Bohemia (libre).
-- Bohemia uncensored: agregada rienda narrativa contra loops y teatralidad excesiva.
-- Selector de voz TTS dinámico: implementado en UI y API con persistencia.
-- Etiquetas de voz mitológicas: implementadas para el catálogo AllTalk (M01-M09, V01-V11), agrupadas en "Voces M" y "Voces V" con colores distintivos y orden estable.
-- modelo: huihui_ai/qwen3-abliterated:14b-v2-q8_0
-- smoke test: OK
-- tests: 164 OK (más labels visuales validados por grep)
-- voice isolation: OK
-- arquitectura de cinco ejes (Anclaje, Perfil, Razonamiento, Velo, Voz) preservada y validada.
 ```
+
+## Consolidación funcional reciente
+
+Parches recientes confirmados:
+
+```text
+37a073f Prefer Fusion GPU TTS endpoint when ready
+104bf5f Improve Fusion Reader startup logging
+dd90001 Clarify free mode document status
+d97dd52 Show active STT provider in UI
+cdef8ab Respect literal document reading requests
+```
+
+Estado consolidado:
+
+- TTS `7853` corregido y priorizado con owner validation.
+- Startup logging `8010` corregido con log persistente y PID file.
+- Modo libre/documento clarificado en API/UI.
+- STT activo visible en UI; hoy el runtime puede operar con `whisper_cli` si `8021` está offline.
+- Lectura literal vs interpretación corregida en modo documento.
+- Arquitectura de cinco ejes preservada y validada.
+- Smoke de lectura literal validado.
 
 Último commit relevante:
 
 ```text
-ab98a44 Use mythological voice labels
+cdef8ab Respect literal document reading requests
 ```
 
-## Consolidación ab98a44
+## Historial corto de consolidación
 
-- Auditoría completa realizada.
-- Basura limpiada (logs, temporales, caches).
-- Tests reales: 164 OK.
-- Voice isolation: OK.
-- Estado: Limpio y consolidado.
+- `ab98a44`: voces mitológicas.
+- `2b7024b`: consolidación de estado.
+- `37a073f`: corrección de selección TTS `7853` vs fallback `7851`.
+- `104bf5f`: lifecycle/logging persistente de `8010`.
+- `dd90001`: separación `document` vs `anchor` en modo libre/documento.
+- `d97dd52`: proveedor STT activo visible en UI.
+- `cdef8ab`: disciplina de lectura literal vs interpretación.
 
 ## Arranque recomendado
 
@@ -109,6 +120,12 @@ ab98a44 Use mythological voice labels
 ./scripts/fusion_memory_mcp_server.py (para memoria)
 ```
 
+Notas:
+
+- `start_fusion_reader_v2.sh` no levanta `8021` automáticamente.
+- `open_fusion_reader.sh` sí contempla el arranque del STT dedicado.
+- Si `8021` no está arriba, Fusion sigue operativo por `whisper_cli`.
+
 ## Memory MCP read-only v1
 
 - Expone memoria markdown local en `runtime/fusion_reader_v2/memory/`.
@@ -118,6 +135,8 @@ ab98a44 Use mythological voice labels
 
 ## Pendientes reales
 
+- decidir si `8021` debe ser parte del launcher principal o si `whisper_cli` queda como camino operativo aceptado;
+- exponer aún mejor en UI el provider STT efectivo durante diálogo oral y fallback real;
 - probar `Dialogar` con micrófono real en más escenarios;
 - ajustar fino VAD/barge-in según ruido ambiente y eco;
 - afinar warmup/keep-hot de AllTalk GPU;
