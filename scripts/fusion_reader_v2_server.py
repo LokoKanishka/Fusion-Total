@@ -9,6 +9,8 @@ import tempfile
 import threading
 import time
 import uuid
+import mimetypes
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -16,6 +18,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fusion_reader_v2 import AudioCache, FusionReaderV2, VoiceMetricsStore, import_document_bytes, import_document_path
+from fusion_reader_v2.pdf_to_docx import ConversionResult, convert_pdf_to_docx, find_downloads_dir, safe_output_name
 
 
 PORT = int(os.environ.get("FUSION_READER_V2_PORT", "8010"))
@@ -23,9 +26,12 @@ ROOT = Path(__file__).resolve().parent.parent
 LIBRARY_ROOT = ROOT / "library"
 CONVERTED_ROOT = ROOT / "runtime" / "fusion_reader_v2" / "imported_texts"
 UPLOAD_ROOT = ROOT / "runtime" / "fusion_reader_v2" / "upload_jobs"
+PDF_TO_WORD_ROOT = ROOT / "runtime" / "fusion_reader_v2" / "pdf_to_word"
 ALLOWED_LIBRARY_SUFFIXES = {".txt", ".md"}
 IMPORT_JOBS: dict[str, dict] = {}
 IMPORT_JOBS_LOCK = threading.Lock()
+PDF_TO_DOCX_DOWNLOADS: dict[str, dict] = {}
+PDF_TO_DOCX_LOCK = threading.Lock()
 APP = FusionReaderV2(
     cache=AudioCache(ROOT / "runtime" / "fusion_reader_v2" / "audio_cache"),
     metrics=VoiceMetricsStore(ROOT / "runtime" / "fusion_reader_v2" / "voice_metrics.jsonl"),
@@ -172,6 +178,32 @@ INDEX_HTML = r"""<!doctype html>
       color: var(--muted);
       font-size: 12px;
       line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+    .mini-tool {
+      margin-top: 8px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: #0b0e0d;
+      padding: 8px 10px;
+      display: grid;
+      gap: 6px;
+      cursor: pointer;
+      outline: none;
+    }
+    .mini-tool:hover,
+    .mini-tool.dragover,
+    .mini-tool:focus-visible {
+      border-color: var(--accent-2);
+      background: #101415;
+    }
+    .mini-tool strong {
+      font-size: 12px;
+    }
+    .mini-tool small,
+    .mini-tool a {
+      color: var(--muted);
+      font-size: 11px;
       overflow-wrap: anywhere;
     }
     .progress-wrap {
@@ -757,6 +789,13 @@ INDEX_HTML = r"""<!doctype html>
         <input id="fileInput" class="file-input" type="file" accept=".txt,.md,.markdown,.pdf,.doc,.docm,.docx,.dot,.dotx,.odt,.ott,.sxw,.pages,.rtf,.html,.htm,.csv,.log,text/plain,text/markdown,application/pdf,application/vnd.oasis.opendocument.text,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword">
       </div>
       <label class="toggle upload-toggle"><input id="autoReadToggle" type="checkbox" checked> Leer al cargar</label>
+      <div id="pdfToWordTool" class="mini-tool" tabindex="0" role="button" aria-label="Convertir PDF a Word">
+        <strong>PDF → Word</strong>
+        <small>Soltá un PDF o hacé click para convertir sin cargarlo en Fusion.</small>
+        <input id="pdfToWordInput" class="file-input" type="file" accept=".pdf,application/pdf">
+      </div>
+      <p id="pdfToWordInfo" class="upload-info">Todavía no convertiste ningún PDF.</p>
+      <a id="pdfToWordDownload" href="#" class="upload-info" style="display:none" download>Descargar</a>
       <label class="toggle upload-toggle"><input id="referenceModeToggle" type="checkbox"> Agregar como consulta</label>
       <p id="uploadInfo" class="upload-info">Todavía no cargaste ningún texto.</p>
       <div class="progress-wrap" aria-hidden="true"><div id="importProgress" class="progress-bar"></div></div>
@@ -866,6 +905,10 @@ INDEX_HTML = r"""<!doctype html>
       uploadInfo: document.getElementById('uploadInfo'),
       importProgress: document.getElementById('importProgress'),
       autoReadToggle: document.getElementById('autoReadToggle'),
+      pdfToWordTool: document.getElementById('pdfToWordTool'),
+      pdfToWordInput: document.getElementById('pdfToWordInput'),
+      pdfToWordInfo: document.getElementById('pdfToWordInfo'),
+      pdfToWordDownload: document.getElementById('pdfToWordDownload'),
       referenceModeToggle: document.getElementById('referenceModeToggle'),
       prepareBtn: document.getElementById('prepareBtn'),
       cancelPrepareBtn: document.getElementById('cancelPrepareBtn'),
@@ -2051,6 +2094,48 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    function canConvertPdf(file) {
+      if (!file) {
+        return false;
+      }
+      return file.name.toLowerCase().endsWith('.pdf') || String(file.type || '').toLowerCase().includes('pdf');
+    }
+
+    async function convertPdfToWord(file) {
+      if (!file) {
+        return;
+      }
+      if (!canConvertPdf(file)) {
+        els.pdfToWordInfo.textContent = `${file.name}: solo PDF.`;
+        els.pdfToWordDownload.style.display = 'none';
+        log('La herramienta PDF → Word solo acepta archivos PDF.');
+        return;
+      }
+      els.pdfToWordInfo.textContent = 'Convirtiendo...';
+      els.pdfToWordDownload.style.display = 'none';
+      log('Convirtiendo PDF a DOCX estructurado...');
+      const form = new FormData();
+      form.append('file', file, file.name);
+      try {
+        const res = await fetch('/api/tools/pdf-to-docx', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error || 'pdf_to_docx_failed');
+        }
+        const warningText = Array.isArray(data.warnings) && data.warnings.length ? ` Avisos: ${data.warnings.join(' | ')}` : '';
+        els.pdfToWordInfo.textContent = `Listo: guardado en Descargas. ${data.filename}.${warningText}`.trim();
+        els.pdfToWordDownload.href = data.download_url;
+        els.pdfToWordDownload.textContent = 'Descargar';
+        els.pdfToWordDownload.style.display = 'inline';
+        log(`DOCX guardado en Descargas: ${data.filename}`);
+      } catch (err) {
+        const msg = String(err && err.message || 'conversion_failed');
+        els.pdfToWordInfo.textContent = `Error: ${msg}`;
+        els.pdfToWordDownload.style.display = 'none';
+        log(`No pude convertir el PDF: ${msg}`);
+      }
+    }
+
     async function navigate(path, body = {}) {
       setBusy(true);
       try {
@@ -2802,6 +2887,17 @@ INDEX_HTML = r"""<!doctype html>
       event.stopPropagation();
       els.fileInput.click();
     });
+    els.pdfToWordTool.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      els.pdfToWordInput.click();
+    });
+    els.pdfToWordTool.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        els.pdfToWordInput.click();
+      }
+    });
     els.dropzone.addEventListener('click', () => els.fileInput.click());
     els.dropzone.addEventListener('keydown', event => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -2812,6 +2908,10 @@ INDEX_HTML = r"""<!doctype html>
     els.fileInput.addEventListener('change', () => {
       loadFile(els.fileInput.files && els.fileInput.files[0]);
       els.fileInput.value = '';
+    });
+    els.pdfToWordInput.addEventListener('change', () => {
+      convertPdfToWord(els.pdfToWordInput.files && els.pdfToWordInput.files[0]);
+      els.pdfToWordInput.value = '';
     });
     ['dragenter', 'dragover'].forEach(name => {
       els.dropzone.addEventListener(name, event => {
@@ -2828,6 +2928,24 @@ INDEX_HTML = r"""<!doctype html>
     els.dropzone.addEventListener('drop', event => {
       const files = event.dataTransfer && event.dataTransfer.files;
       loadFile(files && files[0]);
+    });
+    ['dragenter', 'dragover'].forEach(name => {
+      els.pdfToWordTool.addEventListener(name, event => {
+        event.preventDefault();
+        event.stopPropagation();
+        els.pdfToWordTool.classList.add('dragover');
+      });
+    });
+    ['dragleave', 'drop'].forEach(name => {
+      els.pdfToWordTool.addEventListener(name, event => {
+        event.preventDefault();
+        event.stopPropagation();
+        els.pdfToWordTool.classList.remove('dragover');
+      });
+    });
+    els.pdfToWordTool.addEventListener('drop', event => {
+      const files = event.dataTransfer && event.dataTransfer.files;
+      convertPdfToWord(files && files[0]);
     });
 
     refresh().then(() => refreshVoices()).catch(err => log(`Arranque incompleto: ${err.message}`));
@@ -2997,6 +3115,53 @@ def get_import_job(job_id: str) -> dict | None:
         return dict(job) if job else None
 
 
+def prune_pdf_to_docx_locked(max_age_seconds: int = 6 * 60 * 60) -> None:
+    now = time.time()
+    stale = [
+        job_id
+        for job_id, job in PDF_TO_DOCX_DOWNLOADS.items()
+        if now - float(job.get("created_ts") or now) > max_age_seconds
+    ]
+    for job_id in stale:
+        PDF_TO_DOCX_DOWNLOADS.pop(job_id, None)
+
+
+def register_pdf_to_docx_download(saved_path: Path, filename: str, result: ConversionResult) -> dict:
+    job_id = uuid.uuid4().hex[:16]
+    with PDF_TO_DOCX_LOCK:
+        PDF_TO_DOCX_DOWNLOADS[job_id] = {
+            "id": job_id,
+            "path": str(saved_path),
+            "filename": filename,
+            "created_ts": time.time(),
+            "pages": result.pages,
+            "warnings": list(result.warnings),
+        }
+        prune_pdf_to_docx_locked()
+    return dict(PDF_TO_DOCX_DOWNLOADS[job_id])
+
+
+def get_pdf_to_docx_download(job_id: str) -> dict | None:
+    with PDF_TO_DOCX_LOCK:
+        item = PDF_TO_DOCX_DOWNLOADS.get(job_id)
+        return dict(item) if item else None
+
+
+def unique_download_target(filename: str) -> Path:
+    downloads_dir = find_downloads_dir()
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    candidate = downloads_dir / filename
+    if not candidate.exists():
+        return candidate
+    stem = candidate.stem
+    suffix = candidate.suffix or ".docx"
+    for index in range(2, 1000):
+        alt = downloads_dir / f"{stem}_{index}{suffix}"
+        if not alt.exists():
+            return alt
+    raise RuntimeError("no_safe_output_slot")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "FusionReaderV2/0.1"
 
@@ -3050,6 +3215,39 @@ class Handler(BaseHTTPRequestHandler):
             path.unlink(missing_ok=True)
             raise ValueError("incomplete_upload")
         return path
+
+    def _read_multipart_file(self, field_name: str = "file", max_bytes: int = 40 * 1024 * 1024) -> tuple[str, str, bytes]:
+        content_type = self.headers.get("Content-Type", "") or ""
+        match = re.search(r'boundary="?([^";]+)"?', content_type)
+        if "multipart/form-data" not in content_type or not match:
+            raise ValueError("multipart_required")
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if length <= 0:
+            raise ValueError("missing_file_data")
+        if length > max_bytes:
+            raise ValueError("file_too_large")
+        boundary = match.group(1).encode("utf-8")
+        body = self.rfile.read(length)
+        marker = b"--" + boundary
+        for part in body.split(marker):
+            if not part or part in {b"--", b"--\r\n"}:
+                continue
+            part = part.strip(b"\r\n")
+            if part.endswith(b"--"):
+                part = part[:-2].rstrip(b"\r\n")
+            header_blob, sep, data = part.partition(b"\r\n\r\n")
+            if not sep:
+                continue
+            headers_text = header_blob.decode("utf-8", errors="replace")
+            disposition = next((line for line in headers_text.split("\r\n") if line.lower().startswith("content-disposition:")), "")
+            if f'name="{field_name}"' not in disposition:
+                continue
+            filename_match = re.search(r'filename="([^"]+)"', disposition)
+            filename = Path(filename_match.group(1)).name if filename_match else "documento.pdf"
+            mime_match = re.search(r"^Content-Type:\s*([^\r\n]+)", headers_text, flags=re.IGNORECASE | re.MULTILINE)
+            mime = str(mime_match.group(1)).strip() if mime_match else "application/pdf"
+            return filename, mime, data.rstrip(b"\r\n")
+        raise ValueError("missing_file_field")
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -3109,6 +3307,24 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, job)
             return
+        if path.startswith("/api/tools/pdf-to-docx/download/"):
+            job_id = Path(path).name
+            item = get_pdf_to_docx_download(job_id)
+            if not item:
+                self._json(404, {"ok": False, "error": "pdf_to_docx_download_not_found"})
+                return
+            docx_path = Path(str(item.get("path") or "")).resolve()
+            if not docx_path.exists():
+                self._json(404, {"ok": False, "error": "pdf_to_docx_file_missing"})
+                return
+            raw = docx_path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Content-Disposition", f"attachment; filename=\"{Path(str(item.get('filename') or 'documento.docx')).name}\"")
+            self.end_headers()
+            self.wfile.write(raw)
+            return
         if path.startswith("/audio/"):
             audio_path = cached_audio_path(path)
             if not audio_path:
@@ -3145,6 +3361,46 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/api/tools/pdf-to-docx":
+                filename, mime, raw = self._read_multipart_file(field_name="file")
+                clean_name = Path(filename).name
+                if Path(clean_name).suffix.lower() != ".pdf":
+                    self._json(400, {"ok": False, "error": "Solo se aceptan archivos PDF."})
+                    return
+                if mime and "pdf" not in mime.lower() and clean_name.lower().endswith(".pdf") is False:
+                    self._json(400, {"ok": False, "error": "Tipo de archivo no válido."})
+                    return
+                PDF_TO_WORD_ROOT.mkdir(parents=True, exist_ok=True)
+                job_id = uuid.uuid4().hex[:16]
+                input_path = PDF_TO_WORD_ROOT / f"{job_id}.pdf"
+                input_path.write_bytes(raw)
+                temp_docx = PDF_TO_WORD_ROOT / safe_output_name(clean_name)
+                try:
+                    result = convert_pdf_to_docx(input_path, temp_docx)
+                    if not result.ok:
+                        self._json(400, {"ok": False, "error": result.error or "No pude convertir el PDF."})
+                        return
+                    final_target = unique_download_target(Path(result.output_path).name)
+                    final_target.write_bytes(temp_docx.read_bytes())
+                    download_item = register_pdf_to_docx_download(final_target, final_target.name, result)
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "filename": final_target.name,
+                            "saved_path": str(final_target),
+                            "download_url": f"/api/tools/pdf-to-docx/download/{download_item['id']}",
+                            "warnings": list(result.warnings),
+                            "pages": result.pages,
+                            "engine": result.engine,
+                            "text_blocks": result.text_blocks,
+                            "notes_detected": result.notes_detected,
+                        },
+                    )
+                    return
+                finally:
+                    input_path.unlink(missing_ok=True)
+                    temp_docx.unlink(missing_ok=True)
             if path == "/api/import-file/start":
                 params = parse_qs(parsed.query)
                 filename = str((params.get("filename") or ["documento"])[0])

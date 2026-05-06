@@ -68,7 +68,7 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 177 OK
+tests.test_fusion_reader_v2: 181 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 ```
@@ -83,6 +83,7 @@ Parches recientes confirmados:
 dd90001 Clarify free mode document status
 d97dd52 Show active STT provider in UI
 cdef8ab Respect literal document reading requests
+Add PDF to Word conversion tool
 ```
 
 Estado consolidado:
@@ -92,8 +93,10 @@ Estado consolidado:
 - Modo libre/documento clarificado en API/UI.
 - STT activo visible en UI; hoy el runtime puede operar con `whisper_cli` si `8021` está offline.
 - Lectura literal vs interpretación corregida en modo documento.
+- Herramienta auxiliar `PDF -> Word` disponible en la barra izquierda.
 - Arquitectura de cinco ejes preservada y validada.
 - Smoke de lectura literal validado.
+- Smoke de conversión PDF -> DOCX validado con salida real en `~/Descargas`.
 
 Último commit relevante:
 
@@ -110,6 +113,20 @@ cdef8ab Respect literal document reading requests
 - `dd90001`: separación `document` vs `anchor` en modo libre/documento.
 - `d97dd52`: proveedor STT activo visible en UI.
 - `cdef8ab`: disciplina de lectura literal vs interpretación.
+- herramienta auxiliar PDF -> Word.
+
+## Herramienta auxiliar PDF -> Word
+
+- vive como utilidad compacta de UI, separada del flujo de lectura;
+- no carga el DOCX resultante en Fusion;
+- no cambia el documento activo ni el modo libre/documento;
+- acepta PDF por click o mini drag/drop sobre el control lateral;
+- genera un DOCX editable y estructurado;
+- guarda la salida en `~/Descargas` o `~/Downloads`;
+- ofrece además una descarga HTTP efímera desde `/api/tools/pdf-to-docx/download/<id>`;
+- omite imágenes por defecto;
+- no usa LibreOffice en esta v1;
+- no incluye OCR: si el PDF parece escaneado sin texto extraíble, devuelve error claro.
 
 ## Arranque recomendado
 

@@ -37,6 +37,7 @@ from fusion_reader_v2 import (
 )
 from fusion_reader_v2.dialogue import is_hallucinated_transcript
 from fusion_reader_v2.documents import clean_heading, repair_ocr_spacing, structured_plain_ocr_text
+from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, find_downloads_dir, safe_output_name
 
 
 def test_app(tts=None, stt=None, root: Path | None = None, external_research=None) -> FusionReaderV2:
@@ -117,6 +118,45 @@ class FakeExternalResearchBridge:
     def research(self, request: str, snapshot: dict | None = None) -> ExternalResearchResult:
         self.calls.append((str(request or ""), dict(snapshot or {})))
         return self.result
+
+
+def make_simple_pdf_bytes(lines: list[str]) -> bytes:
+    def esc(text: str) -> str:
+        return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    content_lines = ["BT", "/F1 18 Tf"]
+    y = 760
+    for line in lines:
+        content_lines.append(f"1 0 0 1 72 {y} Tm ({esc(line)}) Tj")
+        y -= 28
+    content_lines.append("ET")
+    content = "\n".join(content_lines).encode("latin-1", errors="replace")
+    objects: list[bytes] = []
+    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    objects.append(b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+    objects.append(b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>")
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    objects.append(f"<< /Length {len(content)} >>\nstream\n".encode("latin-1") + content + b"\nendstream")
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out.extend(f"{index} 0 obj\n".encode("latin-1"))
+        out.extend(obj)
+        out.extend(b"\nendobj\n")
+    xref_pos = len(out)
+    out.extend(f"xref\n0 {len(objects) + 1}\n".encode("latin-1"))
+    out.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        out.extend(f"{offset:010d} 00000 n \n".encode("latin-1"))
+    out.extend(
+        (
+            f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+            f"startxref\n{xref_pos}\n%%EOF\n"
+        ).encode("latin-1")
+    )
+    return bytes(out)
 
 
 class FakeUrlOpenResponse:
@@ -548,6 +588,16 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("faster-whisper 8021", text)
         self.assertIn("faster_whisper_server", text)
         self.assertIn("services.stt", text)
+
+    def test_server_ui_contains_pdf_to_word_tool_without_using_normal_load_flow(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("PDF → Word", text)
+        self.assertIn("/api/tools/pdf-to-docx", text)
+        self.assertIn('id="pdfToWordInput"', text)
+        self.assertIn('accept=".pdf,application/pdf"', text)
+        self.assertIn("convertPdfToWord(", text)
+        self.assertIn("Descargar", text)
 
     def test_server_read_current_does_not_render_audio_result_as_status(self):
         root = Path(__file__).resolve().parents[1]
@@ -2547,6 +2597,35 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertNotIn("Varón 01 — Bruno", text)
         self.assertNotIn("Especial — Morgan Freeman", text)
         self.assertNotIn("Voces especiales", text)
+
+    def test_safe_output_name_strips_weird_input_and_keeps_docx_suffix(self):
+        out = safe_output_name("../hola rara?.pdf")
+        self.assertEqual(Path(out).name, out)
+        self.assertTrue(out.endswith(".docx"))
+        self.assertNotIn("..", out)
+        self.assertIn("hola_rara", out)
+
+    def test_find_downloads_dir_prefers_descargas_then_downloads_then_safe_fallback(self):
+        with mock.patch("fusion_reader_v2.pdf_to_docx.Path.home", return_value=Path("/tmp/fake-home")):
+            with mock.patch("fusion_reader_v2.pdf_to_docx.Path.exists", autospec=True, side_effect=lambda path: str(path).endswith("/Descargas")):
+                self.assertEqual(find_downloads_dir(), Path("/tmp/fake-home/Descargas"))
+            with mock.patch("fusion_reader_v2.pdf_to_docx.Path.exists", autospec=True, side_effect=lambda path: str(path).endswith("/Downloads")):
+                self.assertEqual(find_downloads_dir(), Path("/tmp/fake-home/Downloads"))
+            with mock.patch("fusion_reader_v2.pdf_to_docx.Path.exists", autospec=True, return_value=False):
+                self.assertEqual(find_downloads_dir(), Path("/tmp/fake-home/Descargas"))
+
+    def test_pdf_to_docx_conversion_creates_real_docx_with_text(self):
+        root = Path(tempfile.mkdtemp())
+        pdf_path = root / "probe.pdf"
+        docx_path = root / "probe_convertido.docx"
+        pdf_path.write_bytes(make_simple_pdf_bytes(["Capitulo 1", "La realidad parece una costumbre compartida."]))
+        result = convert_pdf_to_docx(pdf_path, docx_path)
+        self.assertTrue(result.ok, result.error)
+        self.assertTrue(docx_path.exists())
+        with zipfile.ZipFile(docx_path) as zf:
+            document_xml = zf.read("word/document.xml").decode("utf-8", errors="replace")
+        self.assertIn("Capitulo 1", document_xml)
+        self.assertIn("La realidad parece una costumbre compartida.", document_xml)
 
     def test_mcp_memory_server_core_logic(self):
         from scripts import fusion_memory_mcp_server as mcp_mod

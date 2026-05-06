@@ -143,6 +143,25 @@ Propiedades:
 - editables, renombrables y borrables;
 - accesibles por texto y por voz.
 
+## Herramienta auxiliar PDF -> Word
+
+Componentes:
+
+- `fusion_reader_v2/pdf_to_docx.py`
+- endpoints auxiliares en `scripts/fusion_reader_v2_server.py`
+
+Propiedades:
+
+- es una utilidad lateral, no parte del core conversacional del lector;
+- no carga el resultado en Fusion ni reemplaza el documento activo;
+- convierte PDF digital a DOCX estructurado y editable;
+- prioriza orden de lectura, párrafos limpios y headings heurísticos;
+- guarda el resultado en `~/Descargas` o `~/Downloads`;
+- ofrece un enlace HTTP de descarga efímero para el DOCX recién generado;
+- omite imágenes por defecto;
+- no usa LibreOffice;
+- no hace OCR en v1: si el PDF no tiene texto extraíble, falla con mensaje explícito.
+
 ## Investigación externa
 
 Componentes:
