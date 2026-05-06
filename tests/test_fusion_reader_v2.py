@@ -2639,6 +2639,24 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn('max_bytes: int = 500 * 1024 * 1024', server)
         self.assertIn('Límite: {max_bytes // (1024 * 1024)} MB.', server)
 
+    def test_pdf_to_word_ocr_fallback_logic(self):
+        from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx
+        from unittest.mock import patch, MagicMock
+
+        # Mock a scanned PDF (no text returned by pdftotext)
+        with patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["   ", "  "]), \
+             patch("fusion_reader_v2.pdf_to_docx._ocr_pdf_pages", return_value=["Texto OCR de prueba"]) as mock_ocr, \
+             patch("fusion_reader_v2.pdf_to_docx._write_minimal_docx") as mock_write, \
+             patch("fusion_reader_v2.pdf_to_docx._page_count", return_value=2):
+            
+            res = convert_pdf_to_docx("dummy.pdf", "output.docx")
+            
+            self.assertTrue(res.ok)
+            self.assertEqual(res.engine, "ocr_tesseract")
+            self.assertTrue(any("OCR" in w for w in res.warnings))
+            mock_ocr.assert_called_once()
+            mock_write.assert_called_once()
+
     def test_mcp_memory_server_core_logic(self):
         from scripts import fusion_memory_mcp_server as mcp_mod
         

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import subprocess
 import zipfile
+import tempfile
 from dataclasses import dataclass, field
 from html import escape
 from pathlib import Path
@@ -62,25 +63,33 @@ def convert_pdf_to_docx(input_pdf: str | Path, output_docx: str | Path) -> Conve
     page_texts = _extract_pages_text(pdf_path)
     meaningful_pages = [text for text in page_texts if _has_meaningful_text(text)]
     if not meaningful_pages:
-        return ConversionResult(
-            False,
-            output_path=str(output_path),
-            pages=pages,
-            warnings=[],
-            engine="pdftotext",
-            text_blocks=0,
-            notes_detected=0,
-            error="Este PDF parece escaneado; OCR todavía no está habilitado en esta herramienta.",
-        )
+        try:
+            page_texts = _ocr_pdf_pages(pdf_path)
+            engine = "ocr_tesseract"
+            warnings.append("Este PDF parece escaneado: se aplicó OCR para extraer el texto. La estructura puede requerir revisión manual.")
+        except Exception as e:
+            return ConversionResult(
+                False,
+                output_path=str(output_path),
+                pages=pages,
+                warnings=[],
+                engine="pdftotext",
+                text_blocks=0,
+                notes_detected=0,
+                error=str(e),
+            )
+    else:
+        engine = "pdftotext"
+
     blocks, notes_detected = build_docx_from_pdf_structure(page_texts, output_path)
-    if pages and len(meaningful_pages) < pages:
+    if pages and len(meaningful_pages) < pages and engine == "pdftotext":
         warnings.append("Algunas páginas no devolvieron texto extraíble.")
     return ConversionResult(
         True,
         output_path=str(output_path),
         pages=pages or len(page_texts),
         warnings=warnings,
-        engine="pdftotext",
+        engine=engine,
         text_blocks=blocks,
         notes_detected=notes_detected,
     )
@@ -127,6 +136,60 @@ def _extract_pages_text(pdf_path: Path) -> list[str]:
     for page in range(1, pages + 1):
         out.append(_pdftotext_page(pdf_path, page))
     return out
+
+
+def _ocr_pdf_pages(pdf_path: Path, max_pages: int = 300) -> list[str]:
+    pages = _page_count(pdf_path)
+    if pages > max_pages:
+        raise ValueError(f"PDF escaneado demasiado largo para OCR v1: {pages} páginas. Límite actual: {max_pages}.")
+    
+    # Check for tesseract and languages
+    langs = _tesseract_langs()
+    lang_arg = "eng"
+    if "spa" in langs:
+        lang_arg = "spa+eng" if "eng" in langs else "spa"
+
+    with tempfile.TemporaryDirectory(prefix="fusion_ocr_") as tmpdir:
+        tmp_path = Path(tmpdir)
+        prefix = tmp_path / "page"
+        
+        try:
+            subprocess.run([
+                "pdftoppm", "-png", "-r", "150",
+                str(pdf_path), str(prefix)
+            ], check=True, timeout=300, capture_output=True)
+        except Exception as e:
+            raise RuntimeError(f"Falla al renderizar PDF para OCR: {e}")
+
+        image_files = list(tmp_path.glob("page-*.png"))
+        def sort_key(p: Path):
+            match = re.search(r"page-(\d+)\.png$", p.name)
+            return int(match.group(1)) if match else 0
+        
+        image_files.sort(key=sort_key)
+        
+        if not image_files:
+            raise RuntimeError("No se generaron imágenes de las páginas del PDF.")
+
+        texts = []
+        for img in image_files:
+            try:
+                proc = subprocess.run([
+                    "tesseract", str(img), "stdout", "-l", lang_arg
+                ], capture_output=True, text=True, check=True, timeout=60)
+                texts.append(proc.stdout)
+            except Exception as e:
+                texts.append(f"[Error en OCR de página: {e}]")
+        
+        return texts
+
+
+def _tesseract_langs() -> list[str]:
+    try:
+        proc = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, check=True)
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip() and not line.startswith("List")]
+    except:
+        return ["eng"]
 
 
 def _pdftotext_page(pdf_path: Path, page: int | None) -> str:

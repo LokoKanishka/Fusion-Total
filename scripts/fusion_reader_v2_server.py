@@ -2112,7 +2112,7 @@ INDEX_HTML = r"""<!doctype html>
         log('La herramienta PDF → Word solo acepta archivos PDF.');
         return;
       }
-      els.pdfToWordInfo.textContent = 'Convirtiendo...';
+      els.pdfToWordInfo.textContent = 'Convirtiendo... (procesando OCR si es necesario)';
       els.pdfToWordDownload.style.display = 'none';
       log('Convirtiendo PDF a DOCX estructurado...');
       const form = new FormData();
