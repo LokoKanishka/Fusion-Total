@@ -384,6 +384,70 @@ class FusionReaderV2Tests(unittest.TestCase):
                     else:
                         os.environ[key] = value
 
+    def test_alltalk_prefers_owned_gpu_url_over_cpu_fallback_env(self):
+        keys = [
+            "FUSION_READER_ALLTALK_URL",
+            "FUSION_READER_GPU_TTS_PORT",
+            "FUSION_READER_CPU_TTS_PORT",
+            "FUSION_READER_REQUIRE_TTS_OWNER",
+            "FUSION_READER_TTS_OWNER_FILE",
+        ]
+        previous = {key: os.environ.get(key) for key in keys}
+        with tempfile.TemporaryDirectory() as tmp:
+            owner_file = Path(tmp) / "tts_owner.json"
+            owner_file.write_text(
+                json.dumps(
+                    {
+                        "owner": "fusion_reader_v2",
+                        "port": 7853,
+                        "owner_pid": os.getpid(),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            try:
+                os.environ["FUSION_READER_ALLTALK_URL"] = "http://127.0.0.1:7851"
+                os.environ["FUSION_READER_GPU_TTS_PORT"] = "7853"
+                os.environ["FUSION_READER_CPU_TTS_PORT"] = "7851"
+                os.environ["FUSION_READER_REQUIRE_TTS_OWNER"] = "1"
+                os.environ["FUSION_READER_TTS_OWNER_FILE"] = str(owner_file)
+                with mock.patch.object(AllTalkProvider, "_gpu_service_ready", return_value=True), mock.patch.object(
+                    AllTalkProvider, "_owner_guard", return_value=(True, "")
+                ):
+                    provider = AllTalkProvider()
+                self.assertEqual(provider.base_url, "http://127.0.0.1:7853")
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+    def test_alltalk_keeps_cpu_fallback_when_gpu_not_ready(self):
+        keys = [
+            "FUSION_READER_ALLTALK_URL",
+            "FUSION_READER_GPU_TTS_PORT",
+            "FUSION_READER_CPU_TTS_PORT",
+            "FUSION_READER_REQUIRE_TTS_OWNER",
+        ]
+        previous = {key: os.environ.get(key) for key in keys}
+        try:
+            os.environ["FUSION_READER_ALLTALK_URL"] = "http://127.0.0.1:7851"
+            os.environ["FUSION_READER_GPU_TTS_PORT"] = "7853"
+            os.environ["FUSION_READER_CPU_TTS_PORT"] = "7851"
+            os.environ["FUSION_READER_REQUIRE_TTS_OWNER"] = "1"
+            with mock.patch.object(AllTalkProvider, "_gpu_service_ready", return_value=False), mock.patch.object(
+                AllTalkProvider, "_owner_guard", return_value=(False, "tts_owner_missing")
+            ):
+                provider = AllTalkProvider()
+            self.assertEqual(provider.base_url, "http://127.0.0.1:7851")
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_alltalk_rejects_doctora_and_historic_ports_even_when_configured(self):
         keys = ["FUSION_READER_REQUIRE_TTS_OWNER", "LUCY_TTS_PORT"]
         previous = {key: os.environ.get(key) for key in keys}
@@ -444,6 +508,8 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn('while (( $(date +%s) < gpu_wait_deadline )); do', text)
         self.assertIn('sleep 1', text)
         self.assertIn('owner valido', text)
+        self.assertIn('Fusion TTS URL selected:', text)
+        self.assertIn('Fusion TTS fallback selected:', text)
         self.assertNotIn("127.0.0.1:7852", text)
 
     def test_server_ui_surfaces_tts_gpu_and_cpu_fallback_modes(self):

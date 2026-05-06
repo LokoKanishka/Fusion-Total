@@ -48,6 +48,13 @@ def _default_owner_file() -> Path:
     )
 
 
+def _configured_cpu_tts_port() -> int:
+    try:
+        return int(os.environ.get("FUSION_READER_CPU_TTS_PORT", os.environ.get("DIRECT_CHAT_ALLTALK_PORT", "7851")))
+    except ValueError:
+        return 7851
+
+
 @dataclass(frozen=True)
 class AudioArtifact:
     ok: bool
@@ -96,12 +103,13 @@ class AllTalkProvider(TTSProvider):
 
     def __init__(self, base_url: str = "", default_voice: str = "", timeout_seconds: float | None = None) -> None:
         default_url = f"http://127.0.0.1:{_configured_gpu_tts_port()}"
-        self.base_url = (base_url or os.environ.get("FUSION_READER_ALLTALK_URL") or default_url).rstrip("/")
+        configured_url = (base_url or os.environ.get("FUSION_READER_ALLTALK_URL") or default_url).rstrip("/")
         self.default_voice = default_voice or os.environ.get("FUSION_READER_VOICE", "female_03.wav")
         self.timeout_seconds = timeout_seconds or float(os.environ.get("FUSION_READER_TTS_TIMEOUT", "120"))
         self.max_input_chars = int(os.environ.get("FUSION_READER_TTS_MAX_INPUT_CHARS", "0"))
         self.require_owner = _truthy(os.environ.get("FUSION_READER_REQUIRE_TTS_OWNER"), default=True)
         self.owner_file = _default_owner_file()
+        self.base_url = self._preferred_base_url(configured_url)
 
     def _local_port(self) -> int | None:
         parsed = urllib.parse.urlparse(self.base_url)
@@ -149,6 +157,28 @@ class AllTalkProvider(TTSProvider):
         if "tts_server:app" not in cmdline or f"--port {gpu_port}" not in cmdline:
             return False, f"tts_owner_pid_mismatch:{owner_pid}"
         return True, ""
+
+    def _gpu_service_ready(self) -> bool:
+        gpu_url = f"http://127.0.0.1:{_configured_gpu_tts_port()}/api/ready"
+        try:
+            with urllib.request.urlopen(gpu_url, timeout=1.5) as resp:
+                body = resp.read().decode("utf-8", errors="replace").strip().lower()
+            return bool(body) and body in {"ready", "ok", "true"}
+        except Exception:
+            return False
+
+    def _preferred_base_url(self, configured_url: str) -> str:
+        configured = (configured_url or "").rstrip("/")
+        gpu_url = f"http://127.0.0.1:{_configured_gpu_tts_port()}"
+        cpu_url = f"http://127.0.0.1:{_configured_cpu_tts_port()}"
+        if configured == gpu_url:
+            return configured
+        if configured and configured != cpu_url:
+            return configured
+        owner_ok, _ = self._owner_guard()
+        if owner_ok and self._gpu_service_ready():
+            return gpu_url
+        return configured or gpu_url
 
     def _prepare_text(self, text: str) -> str:
         prepared = unicodedata.normalize("NFC", str(text or ""))
