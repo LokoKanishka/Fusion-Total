@@ -2681,6 +2681,28 @@ Sigue en otra línea y mantiene la misma idea.
             self.assertIn("ocr", stages)
             self.assertIn("build_docx", stages)
 
+    def test_pdf_to_word_ocr_cleanup_logic(self):
+        from fusion_reader_v2.pdf_to_docx import _clean_ocr_line, _is_noise_line, _detect_heading, _should_merge_with_previous
+        
+        # 1. Cleaning
+        self.assertEqual(_clean_ocr_line("...  Texto sucio!!!"), "Texto sucio!!!")
+        self.assertEqual(_clean_ocr_line("Palabra — con raya"), "Palabra - con raya")
+        
+        # 2. Noise
+        self.assertTrue(_is_noise_line("A E A E A E"))
+        self.assertTrue(_is_noise_line("... --- ..."))
+        self.assertFalse(_is_noise_line("Este es un párrafo válido."))
+        
+        # 3. Headings
+        self.assertEqual(_detect_heading("CAPÍTULO 1: EL COMIENZO"), "Heading1")
+        self.assertEqual(_detect_heading("Introducción"), "Heading2")
+        self.assertIsNone(_detect_heading("Esta es una línea normal que termina en punto."))
+        
+        # 4. Merging
+        self.assertTrue(_should_merge_with_previous("Esta línea no termina en punto", "esta continúa"))
+        self.assertFalse(_should_merge_with_previous("Esta sí termina en punto.", "Esta es nueva"))
+        self.assertTrue(_should_merge_with_previous("Palabra cortada-", "continuación"))
+
     def test_mcp_memory_server_core_logic(self):
         from scripts import fusion_memory_mcp_server as mcp_mod
         

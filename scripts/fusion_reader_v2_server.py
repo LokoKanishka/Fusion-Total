@@ -3375,7 +3375,10 @@ class Handler(BaseHTTPRequestHandler):
                 "saved_path": job.saved_path,
                 "download_url": job.download_url,
                 "warnings": job.warnings,
-                "error": job.error
+                "error": job.error,
+                "noise_lines_removed": job.result.noise_lines_removed if job.result else 0,
+                "paragraphs_merged": job.result.paragraphs_merged if job.result else 0,
+                "headings_detected": job.result.headings_detected if job.result else 0,
             })
             return
 

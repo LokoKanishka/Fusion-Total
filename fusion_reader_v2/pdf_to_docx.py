@@ -22,6 +22,13 @@ class ConversionResult:
     text_blocks: int = 0
     notes_detected: int = 0
     error: str = ""
+    noise_lines_removed: int = 0
+    paragraphs_merged: int = 0
+    headings_detected: int = 0
+    low_confidence_pages: int = 0
+    ocr_dpi: int = 200
+    ocr_psm: int = 6
+    cleanup_applied: bool = True
 
 
 @dataclass
@@ -143,7 +150,7 @@ def convert_pdf_to_docx(
         job.message = "Generando archivo DOCX..."
         if status_callback: status_callback(job)
 
-    blocks, notes_detected = build_docx_from_pdf_structure(page_texts, output_path)
+    blocks, notes_detected, metrics = build_docx_from_pdf_structure(page_texts, output_path)
     
     if pages and engine == "pdftotext":
         # Recalculate meaningful for textual PDFs to warn about missing pages
@@ -159,6 +166,10 @@ def convert_pdf_to_docx(
         engine=engine,
         text_blocks=blocks,
         notes_detected=notes_detected,
+        noise_lines_removed=metrics.get("noise_removed", 0),
+        paragraphs_merged=metrics.get("merged", 0),
+        headings_detected=metrics.get("headings", 0),
+        low_confidence_pages=metrics.get("low_confidence", 0),
     )
     if job:
         job.result = res
@@ -167,22 +178,32 @@ def convert_pdf_to_docx(
     return res
 
 
-def build_docx_from_pdf_structure(page_texts: Iterable[str], output_docx: str | Path) -> tuple[int, int]:
+def build_docx_from_pdf_structure(page_texts: Iterable[str], output_docx: str | Path) -> tuple[int, int, dict]:
     blocks: list[ParagraphBlock] = []
     notes_detected = 0
+    total_metrics = {"noise_removed": 0, "merged": 0, "headings": 0, "low_confidence": 0}
+    
     for index, page_text in enumerate(page_texts, start=1):
         clean_page = str(page_text or "").replace("\r", "")
         if not _has_meaningful_text(clean_page):
+            total_metrics["low_confidence"] += 1
             continue
+            
         blocks.append(ParagraphBlock("Normal", f"--- Página {index} ---"))
-        paragraphs, page_notes = _page_paragraphs(clean_page)
+        page_blocks, page_notes, metrics = _page_paragraphs(clean_page)
+        
         notes_detected += len(page_notes)
-        blocks.extend(paragraphs)
+        blocks.extend(page_blocks)
+        
+        for k in total_metrics:
+            total_metrics[k] += metrics.get(k, 0)
+            
         if page_notes:
             blocks.append(ParagraphBlock("Heading2", f"[Notas de página {index}]"))
             blocks.extend(ParagraphBlock("Quote", note) for note in page_notes)
+            
     _write_minimal_docx(Path(output_docx), blocks)
-    return len(blocks), notes_detected
+    return len(blocks), notes_detected, total_metrics
 
 
 def _page_count(pdf_path: Path) -> int:
@@ -249,9 +270,9 @@ def _ocr_pdf_pages(
             prefix = tmp_path / "page"
             
             try:
-                # Render ONLY this page
+                # Render ONLY this page at higher DPI (200 is good balance)
                 subprocess.run([
-                    "pdftoppm", "-png", "-r", "150", "-f", str(page_idx), "-l", str(page_idx),
+                    "pdftoppm", "-png", "-r", "200", "-f", str(page_idx), "-l", str(page_idx),
                     str(pdf_path), str(prefix)
                 ], check=True, timeout=120, capture_output=True)
             except Exception as e:
@@ -264,9 +285,14 @@ def _ocr_pdf_pages(
                 continue
 
             img = image_files[0]
+            
+            # Pre-process image with ImageMagick if available
+            _preprocess_image(img)
+            
             try:
+                # Use PSM 6 (uniform block of text) for better paragraph preservation
                 proc = subprocess.run([
-                    "tesseract", str(img), "stdout", "-l", lang_arg
+                    "tesseract", str(img), "stdout", "-l", lang_arg, "--psm", "6"
                 ], capture_output=True, text=True, check=True, timeout=120)
                 texts.append(proc.stdout)
             except Exception as e:
@@ -284,6 +310,27 @@ def _tesseract_langs() -> list[str]:
         return [line.strip() for line in proc.stdout.splitlines() if line.strip() and not line.startswith("List")]
     except:
         return ["eng"]
+
+
+def _preprocess_image(image_path: Path) -> None:
+    """Apply ImageMagick filters to improve OCR quality."""
+    convert = shutil.which("convert")
+    if not convert:
+        return
+    try:
+        # Deskew, normalize, and sharpen
+        subprocess.run([
+            convert, str(image_path),
+            "-deskew", "40%",
+            "-normalize",
+            "-sharpen", "0x1",
+            str(image_path)
+        ], check=True, timeout=30, capture_output=True)
+    except:
+        pass
+
+
+import shutil
 
 
 def _pdftotext_page(pdf_path: Path, page: int | None) -> str:
@@ -309,9 +356,23 @@ def _has_meaningful_text(text: str) -> bool:
     return len(alpha) >= 12
 
 
-def _page_paragraphs(page_text: str) -> tuple[list[ParagraphBlock], list[str]]:
+def _page_paragraphs(page_text: str) -> tuple[list[ParagraphBlock], list[str], dict]:
     lines = [line.rstrip() for line in page_text.splitlines()]
-    non_empty = [line.strip() for line in lines if line.strip()]
+    
+    # 1. Clean and filter noise
+    clean_lines: list[str] = []
+    noise_removed = 0
+    for raw_line in lines:
+        line = _clean_ocr_line(raw_line)
+        if not line:
+            continue
+        if _is_noise_line(line):
+            noise_removed += 1
+            continue
+        clean_lines.append(line)
+
+    # 2. Extract notes (last lines starting with digit)
+    non_empty = [line for line in clean_lines if line.strip()]
     note_candidates: list[str] = []
     if non_empty:
         tail = non_empty[-3:]
@@ -319,23 +380,107 @@ def _page_paragraphs(page_text: str) -> tuple[list[ParagraphBlock], list[str]]:
             if re.match(r"^\d+[\])\.\-]?\s+\S+", candidate):
                 note_candidates.append(candidate)
     note_set = set(note_candidates)
-    filtered_lines = [line for line in lines if line.strip() not in note_set]
+    filtered_lines = [line for line in clean_lines if line not in note_set]
 
-    paragraphs: list[str] = []
-    current: list[str] = []
-    for raw_line in filtered_lines:
-        line = raw_line.strip()
-        if not line:
-            if current:
-                paragraphs.append(_join_paragraph_lines(current))
-                current = []
+    # 3. Merge lines into paragraphs
+    paragraphs: list[tuple[str, str]] = [] # (style, text)
+    current_style = "Normal"
+    current_paragraph: list[str] = []
+    headings_detected = 0
+    
+    for line in filtered_lines:
+        heading_style = _detect_heading(line)
+        if heading_style:
+            # Flush current paragraph
+            if current_paragraph:
+                paragraphs.append((current_style, _join_paragraph_lines(current_paragraph)))
+                current_paragraph = []
+            
+            paragraphs.append((heading_style, line))
+            headings_detected += 1
+            current_style = "Normal"
             continue
-        current.append(line)
-    if current:
-        paragraphs.append(_join_paragraph_lines(current))
+            
+        # Decision: should we merge with current?
+        if not current_paragraph:
+            current_paragraph.append(line)
+        else:
+            if _should_merge_with_previous(current_paragraph[-1], line):
+                current_paragraph.append(line)
+            else:
+                paragraphs.append((current_style, _join_paragraph_lines(current_paragraph)))
+                current_paragraph = [line]
 
-    blocks = [ParagraphBlock(_classify_style(text), text) for text in paragraphs if text]
-    return blocks, note_candidates
+    if current_paragraph:
+        paragraphs.append((current_style, _join_paragraph_lines(current_paragraph)))
+
+    blocks = [ParagraphBlock(p[0], p[1]) for p in paragraphs if p[1]]
+    metrics = {
+        "noise_removed": noise_removed,
+        "merged": len(filtered_lines) - len(paragraphs),
+        "headings": headings_detected
+    }
+    return blocks, note_candidates, metrics
+
+
+def _clean_ocr_line(line: str) -> str:
+    """Normalize whitespace and common OCR artifacts."""
+    # Remove weird chars at start/end
+    c = re.sub(r"^[^A-Za-z0-9ÁÉÍÓÚáéíóúÑñÜü\"'¿¡(]+", "", line)
+    c = re.sub(r"[^A-Za-z0-9ÁÉÍÓÚáéíóúÑñÜü\"'?!).\]]+$", "", c)
+    # Normalize spaces
+    c = re.sub(r"\s+", " ", c).strip()
+    # Normalize dashes
+    c = c.replace("—", "-").replace("–", "-")
+    return c
+
+
+def _is_noise_line(line: str) -> bool:
+    """Detect lines that look like OCR garbage or scan artifacts."""
+    if not line: return True
+    # Too short with no letters
+    if len(line) < 3 and not re.search(r"[A-Za-z0-9]", line): return True
+    # Just symbols
+    if not re.search(r"[A-Za-z0-9]", line): return True
+    # Repetitive nonsense like "A E A E"
+    if re.match(r"^([A-Z0-9]\s?){4,}$", line): return True
+    # Very high symbol-to-letter ratio
+    letters = sum(1 for c in line if c.isalpha())
+    if len(line) > 5 and letters / len(line) < 0.3: return True
+    return False
+
+
+def _detect_heading(line: str) -> str | None:
+    """Identify if a line looks like a title or chapter heading."""
+    clean = line.strip()
+    # "Capítulo X"
+    if re.match(r"^(cap[ií]tulo|chapter|parte|secci[oó]n|libro|acto|escena)\s+(\d+|[IVXLCDM]+)\b", clean, flags=re.IGNORECASE):
+        return "Heading1"
+    # Short uppercase lines
+    if 3 < len(clean) <= 60 and clean == clean.upper() and re.search(r"[A-Z]", clean):
+        return "Heading1"
+    # Title Case short lines without ending punctuation
+    if 3 < len(clean) <= 70 and not clean.endswith((".", ";", ":", ",")):
+        words = clean.split()
+        if len(words) > 0 and all(w[0].isupper() or not w[0].isalpha() for w in words):
+            return "Heading2"
+    return None
+
+
+def _should_merge_with_previous(prev: str, curr: str) -> bool:
+    """Heuristic to decide if current line continues the previous paragraph."""
+    p = prev.strip()
+    c = curr.strip()
+    if not p or not c: return False
+    # If previous ends with punctuation that usually ends a paragraph
+    if p.endswith((".", "!", "?", "\"", "»")):
+        return False
+    # If current starts with uppercase, maybe it's a new sentence but could be same paragraph.
+    # But if previous ends in a lowercase or comma, definitely merge.
+    if p[-1].islower() or p.endswith((",", ";", ":", "-")):
+        return True
+    # Default: merge if previous was long enough
+    return len(p) > 40
 
 
 def _join_paragraph_lines(lines: list[str]) -> str:
