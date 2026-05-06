@@ -111,8 +111,9 @@ class AllTalkProvider(TTSProvider):
         self.owner_file = _default_owner_file()
         self.base_url = self._preferred_base_url(configured_url)
 
-    def _local_port(self) -> int | None:
-        parsed = urllib.parse.urlparse(self.base_url)
+    def _local_port(self, url: str | None = None) -> int | None:
+        target = url or getattr(self, "base_url", "")
+        parsed = urllib.parse.urlparse(target)
         if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
             return None
         try:
@@ -120,8 +121,8 @@ class AllTalkProvider(TTSProvider):
         except ValueError:
             return None
 
-    def _owner_guard(self) -> tuple[bool, str]:
-        port = self._local_port()
+    def _owner_guard(self, url: str | None = None) -> tuple[bool, str]:
+        port = self._local_port(url)
         gpu_port = _configured_gpu_tts_port()
         if port == _configured_lucy_tts_port():
             return False, f"tts_foreign_doctora_lucy_port:{port}"
@@ -175,7 +176,7 @@ class AllTalkProvider(TTSProvider):
             return configured
         if configured and configured != cpu_url:
             return configured
-        owner_ok, _ = self._owner_guard()
+        owner_ok, _ = self._owner_guard(gpu_url)
         if owner_ok and self._gpu_service_ready():
             return gpu_url
         return configured or gpu_url
