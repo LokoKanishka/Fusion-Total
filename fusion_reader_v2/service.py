@@ -679,6 +679,26 @@ class FusionReaderV2:
         out["profile"] = self.profile_status()
         out["veil"] = self.veil_status()
         main_record = self._main_document_record()
+        total = int(out.get("total") or 0)
+        current = int(out.get("current") or 0)
+        document_loaded = bool(main_record and total > 0)
+        anchor_mode = str(self.laboratory_mode or "document").strip().lower() or "document"
+        document_doc_id = str(out.get("doc_id") or "") if document_loaded else ""
+        document_title = str(out.get("title") or "") if document_loaded else ""
+        document_current = current if document_loaded else 0
+        document_total = total if document_loaded else 0
+        out["document"] = {
+            "loaded": document_loaded,
+            "doc_id": document_doc_id,
+            "title": document_title,
+            "current": document_current,
+            "total": document_total,
+        }
+        out["anchor"] = {
+            "mode": "free" if anchor_mode == "free" else "document",
+            "uses_document": bool(document_loaded and anchor_mode != "free"),
+            "document_available": document_loaded,
+        }
         out["main_document"] = self._public_document_record(main_record) if main_record else {}
         out["reference_documents"] = self._reference_document_items()
         out["laboratory_focus"] = self.laboratory_focus_status()

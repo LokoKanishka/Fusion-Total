@@ -1284,8 +1284,9 @@ INDEX_HTML = r"""<!doctype html>
       if (!dialogue.active && !dialogue.processing && !dialogue.speaking) {
         setDialogueInfo(`Diálogo apagado. ${laboratoryModeSummary()}`);
       }
-      els.docTitle.textContent = data.title || 'Ningún documento activo';
-      els.docMeta.textContent = `Bloque ${data.current || 0} de ${data.total || 0}`;
+      const header = documentHeaderState(data);
+      els.docTitle.textContent = header.title;
+      els.docMeta.textContent = header.meta;
       const mainDocument = data.main_document && typeof data.main_document === 'object' ? data.main_document : {};
       els.mainDocTitle.textContent = mainDocument.title || data.title || 'Ningún documento principal';
       els.mainDocMeta.textContent = mainDocument.doc_id ? `${mainDocument.doc_id} | ${mainDocument.total || data.total || 0} bloques` : 'Sin lectura activa.';
@@ -1293,7 +1294,7 @@ INDEX_HTML = r"""<!doctype html>
       renderLabFocus(data.laboratory_focus || {});
       els.jumpInput.max = data.total || 1;
       els.jumpInput.value = data.current || 1;
-      els.chunk.textContent = data.text || 'Subí un documento para empezar.';
+      els.chunk.textContent = header.chunk;
       els.chunk.classList.toggle('empty', !data.text);
       const ttsState = describeTtsStatus(data);
       const ttsOk = ttsState.state !== 'down';
@@ -1340,6 +1341,37 @@ INDEX_HTML = r"""<!doctype html>
     function laboratoryModeSummary() {
       const profile = String(status && status.profile && status.profile.label || 'Académica');
       return `${profile}. ${currentLaboratoryMode() === 'free' ? 'Modo libre.' : 'Anclado al texto.'}`;
+    }
+
+    function documentHeaderState(data) {
+      const item = data && data.document && typeof data.document === 'object' ? data.document : {};
+      const anchor = data && data.anchor && typeof data.anchor === 'object' ? data.anchor : {};
+      const loaded = Boolean(item.loaded);
+      const title = String(item.title || data && data.title || '').trim();
+      const current = Number(item.current || data && data.current || 0);
+      const total = Number(item.total || data && data.total || 0);
+      const anchorMode = String(anchor.mode || currentLaboratoryMode() || 'document');
+      const usesDocument = Boolean(anchor.uses_document);
+      const documentAvailable = Boolean(anchor.document_available !== undefined ? anchor.document_available : loaded);
+      if (anchorMode === 'free') {
+        return {
+          title: 'Modo libre',
+          meta: documentAvailable && title ? `Documento disponible: ${title}` : 'Sin documento activo',
+          chunk: data && data.text ? data.text : 'Subí un documento para empezar.'
+        };
+      }
+      if (usesDocument && title) {
+        return {
+          title: `Documento — ${title}`,
+          meta: `Bloque ${current || 0} de ${total || 0}`,
+          chunk: data && data.text ? data.text : 'Subí un documento para empezar.'
+        };
+      }
+      return {
+        title: 'Ningún documento activo',
+        meta: 'Sin documento activo',
+        chunk: data && data.text ? data.text : 'Subí un documento para empezar.'
+      };
     }
 
     function dialogueAppliedReasoningLabel(data) {

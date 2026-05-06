@@ -677,6 +677,36 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertEqual(len(status["reference_documents"]), 1)
         self.assertEqual(status["reference_documents"][0]["doc_id"], "ref")
 
+    def test_status_free_mode_with_document_loaded_exposes_anchor_without_document_use(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.set_laboratory_mode("free")
+        status = app.status()
+        self.assertTrue(status["document"]["loaded"])
+        self.assertEqual(status["anchor"]["mode"], "free")
+        self.assertFalse(status["anchor"]["uses_document"])
+        self.assertTrue(status["anchor"]["document_available"])
+
+    def test_status_document_mode_with_document_loaded_exposes_anchor_use(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.set_laboratory_mode("document")
+        status = app.status()
+        self.assertTrue(status["document"]["loaded"])
+        self.assertEqual(status["anchor"]["mode"], "document")
+        self.assertTrue(status["anchor"]["uses_document"])
+        self.assertTrue(status["anchor"]["document_available"])
+
+    def test_status_after_clear_document_exposes_no_document_available(self):
+        app = test_app()
+        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.set_laboratory_mode("free")
+        app.clear_document()
+        status = app.status()
+        self.assertFalse(status["document"]["loaded"])
+        self.assertFalse(status["anchor"]["document_available"])
+        self.assertFalse(status["anchor"]["uses_document"])
+
     def test_promote_reference_swaps_main_and_previous_main_becomes_reference(self):
         app = test_app()
         app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
@@ -2010,6 +2040,8 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn("freeModeBtn", server)
         self.assertIn("/api/laboratory/mode", server)
         self.assertIn("Modo libre", server)
+        self.assertIn("Documento disponible:", server)
+        self.assertIn("Sin documento activo", server)
 
     def test_dialogue_barge_in_keeps_pre_roll_for_short_commands(self):
         server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
