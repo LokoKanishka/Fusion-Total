@@ -512,6 +512,18 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertIn('Fusion TTS fallback selected:', text)
         self.assertNotIn("127.0.0.1:7852", text)
 
+    def test_fusion_launcher_has_persistent_log_and_pid_lifecycle(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "scripts" / "start_fusion_reader_v2.sh").read_text(encoding="utf-8")
+        self.assertIn('RUNTIME_DIR="${FUSION_READER_RUNTIME_DIR:-$ROOT/runtime/fusion_reader_v2}"', text)
+        self.assertIn('LOG_DIR="${FUSION_READER_LOG_DIR:-$RUNTIME_DIR/logs}"', text)
+        self.assertIn('fusion_reader_v2_server.log', text)
+        self.assertIn('fusion_reader_v2.pid', text)
+        self.assertIn('API/UI port: ${PORT}', text)
+        self.assertIn('if [[ -n "$existing_pid" ]]; then', text)
+        self.assertIn('curl -fsS --max-time 2 "$startup_status_url"', text)
+        self.assertIn('Fusion Reader v2 health OK', text)
+
     def test_server_ui_surfaces_tts_gpu_and_cpu_fallback_modes(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")
