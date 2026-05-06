@@ -2329,6 +2329,61 @@ Sigue en otra línea y mantiene la misma idea.
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertIn("Mancha", prompt)
 
+    def test_document_mode_literal_request_injects_literal_instruction(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "Doc", "Bloque uno: La realidad parece una costumbre compartida.", prefetch=False)
+        app.set_laboratory_mode("document")
+        app.chat("¿Qué dice el bloque actual?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("respuesta literal sobre el texto actual", prompt)
+        self.assertIn("No saltes directo a interpretación", prompt)
+
+    def test_document_mode_interpretation_request_does_not_force_literal_instruction(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "Doc", "Bloque uno: La realidad parece una costumbre compartida.", prefetch=False)
+        app.set_laboratory_mode("document")
+        app.chat("¿Qué significa el bloque actual?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertNotIn("respuesta literal sobre el texto actual", prompt)
+        self.assertNotIn("No saltes directo a interpretación", prompt)
+
+    def test_document_mode_mixed_literal_and_interpretation_request_orders_both(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "Doc", "Bloque uno: La realidad parece una costumbre compartida.", prefetch=False)
+        app.set_laboratory_mode("document")
+        app.chat("Leeme el bloque y después decime qué significa.")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("respuesta literal sobre el texto actual", prompt)
+        self.assertIn("Primero reproduce o parafrasea fielmente", prompt)
+        self.assertIn("Después agregá una interpretación breve y secundaria", prompt)
+
+    def test_free_mode_without_document_request_does_not_inject_literal_document_instruction(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "Doc", "Bloque uno: La realidad parece una costumbre compartida.", prefetch=False)
+        app.set_laboratory_mode("free")
+        app.chat("Qué es la realidad?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertNotIn("respuesta literal sobre el texto actual", prompt)
+
+    def test_free_mode_explicit_document_literal_request_can_inject_literal_instruction(self):
+        chat_provider = NullChatProvider("Entendido.")
+        app = test_app()
+        app.conversation = ConversationCore(chat_provider)
+        app.load_text("doc123", "Doc", "Bloque uno: La realidad parece una costumbre compartida.", prefetch=False)
+        app.set_laboratory_mode("free")
+        app.chat("Según el texto en pantalla, qué dice?")
+        prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
+        self.assertIn("respuesta literal sobre el texto actual", prompt)
+        self.assertIn("Bloque uno: La realidad parece una costumbre compartida.", prompt)
+
     def test_supreme_mode_in_free_mode_honors_independence(self):
         chat_provider = NullChatProvider("Entendido.")
         app = test_app()

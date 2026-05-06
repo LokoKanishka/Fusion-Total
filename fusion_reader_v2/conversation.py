@@ -7,6 +7,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from unicodedata import normalize
 
 
 @dataclass(frozen=True)
@@ -536,6 +537,64 @@ class ConversationCore:
         ]
         return any(k in q for k in keywords)
 
+    def wants_literal_document_answer(self, question: str) -> bool:
+        q = self._normalize_intent_text(question)
+        patterns = (
+            r"\bque dice\b",
+            r"\bleeme\b",
+            r"\blee el bloque\b",
+            r"\bleer el bloque\b",
+            r"\bque hay en pantalla\b",
+            r"\brepeti\b",
+            r"\brepite\b",
+            r"\bcopiame\b",
+            r"\bcopiar\b",
+            r"\bliteral\b",
+            r"\btextual(?:mente)?\b",
+        )
+        return any(re.search(pattern, q) for pattern in patterns)
+
+    def wants_interpretation(self, question: str) -> bool:
+        q = self._normalize_intent_text(question)
+        patterns = (
+            r"\bque significa\b",
+            r"\binterpreta\b",
+            r"\binterpretar\b",
+            r"\banaliza\b",
+            r"\banalizar\b",
+            r"\bexplica\b",
+            r"\bexplicar\b",
+            r"\bque ves\b",
+            r"\bque pensas\b",
+            r"\bque pensas\b",
+            r"\bque plantea\b",
+        )
+        return any(re.search(pattern, q) for pattern in patterns)
+
+    def _document_literal_instruction(self, question: str, *, free_mode: bool, has_current_text: bool) -> str:
+        if not has_current_text:
+            return ""
+        if free_mode and not self.wants_document_context(question):
+            return ""
+        wants_literal = self.wants_literal_document_answer(question)
+        if not wants_literal:
+            return ""
+        if self.wants_interpretation(question):
+            return (
+                "El usuario pidió una respuesta literal sobre el texto actual y además quiere interpretación. "
+                "Primero reproduce o parafrasea fielmente lo que dice el bloque o la pantalla. "
+                "Después agregá una interpretación breve y secundaria."
+            )
+        return (
+            "El usuario pidió una respuesta literal sobre el texto actual. "
+            "Primero reproduce o parafrasea fielmente lo que dice el bloque o la pantalla. "
+            "No saltes directo a interpretación. Si agregás una lectura, que sea breve y secundaria."
+        )
+
+    def _normalize_intent_text(self, text: str) -> str:
+        clean = normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode("ascii")
+        return re.sub(r"\s+", " ", clean.lower()).strip()
+
     def _closing_discipline_hint(self, veil: str, dialogue: bool) -> str:
         if veil == "pregunta_viva":
             return ""
@@ -580,6 +639,7 @@ class ConversationCore:
         lab_mode_info = snapshot.get("laboratory_mode") if isinstance(snapshot.get("laboratory_mode"), dict) else {}
         laboratory_mode = str((lab_mode_info or {}).get("mode") or "document").strip().lower()
         free_mode = laboratory_mode == "free"
+        has_current_text = bool(str(snapshot.get("current_chunk") or "").strip())
         
         include_doc = not dialogue
         include_blocks = True
@@ -591,6 +651,7 @@ class ConversationCore:
                 
         context = self._context_text(question, snapshot, history=history or [], include_document=include_doc, include_blocks=include_blocks)
         persona_overlay = self._persona_overlay(reasoning_mode, dialogue=dialogue, profile=profile, free_mode=free_mode, veil=veil)
+        literal_instruction = self._document_literal_instruction(question, free_mode=free_mode, has_current_text=has_current_text)
         if dialogue:
             if free_mode:
                 system = (
@@ -621,6 +682,8 @@ class ConversationCore:
                     "Las notas solo las guarda y confirma el sistema reader_notes; si el usuario pregunta por notas visibles, decile que revise el panel de notas del documento o que repita el pedido como 'tomá nota de ...'. "
                     "Si el usuario te interrumpe o corrige, acepta el nuevo punto y continua desde ahi."
                 )
+            if literal_instruction:
+                system = f"{system} {literal_instruction}"
             if persona_overlay:
                 system = f"{system} {persona_overlay}"
             messages = [
@@ -666,6 +729,8 @@ class ConversationCore:
                 "Si el usuario pide guardar o tomar una nota y esa accion no aparece ya confirmada por el sistema, no finjas haberla guardado. "
                 "Responde en español, con claridad, y si el documento no alcanza para contestar decilo."
             )
+        if literal_instruction:
+            system = f"{system} {literal_instruction}"
         if persona_overlay:
             system = f"{system} {persona_overlay}"
         messages = [
