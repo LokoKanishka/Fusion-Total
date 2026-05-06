@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fusion_reader_v2 import AudioCache, FusionReaderV2, VoiceMetricsStore, import_document_bytes, import_document_path
-from fusion_reader_v2.pdf_to_docx import ConversionResult, convert_pdf_to_docx, find_downloads_dir, safe_output_name
+from fusion_reader_v2.pdf_to_docx import ConversionResult, JobStatus, convert_pdf_to_docx, find_downloads_dir, safe_output_name
 
 
 PORT = int(os.environ.get("FUSION_READER_V2_PORT", "8010"))
@@ -31,6 +31,7 @@ ALLOWED_LIBRARY_SUFFIXES = {".txt", ".md"}
 IMPORT_JOBS: dict[str, dict] = {}
 IMPORT_JOBS_LOCK = threading.Lock()
 PDF_TO_DOCX_DOWNLOADS: dict[str, dict] = {}
+PDF_TO_WORD_JOBS: dict[str, JobStatus] = {}
 PDF_TO_DOCX_LOCK = threading.Lock()
 APP = FusionReaderV2(
     cache=AudioCache(ROOT / "runtime" / "fusion_reader_v2" / "audio_cache"),
@@ -2102,33 +2103,79 @@ INDEX_HTML = r"""<!doctype html>
       return file.name.toLowerCase().endsWith('.pdf') || String(file.type || '').toLowerCase().includes('pdf');
     }
 
-    async function convertPdfToWord(file) {
-      if (!file) {
-        return;
-      }
+     async function convertPdfToWord(file) {
+      if (!file) return;
       if (!canConvertPdf(file)) {
         els.pdfToWordInfo.textContent = `${file.name}: solo PDF.`;
         els.pdfToWordDownload.style.display = 'none';
         log('La herramienta PDF → Word solo acepta archivos PDF.');
         return;
       }
-      els.pdfToWordInfo.textContent = 'Convirtiendo... (procesando OCR si es necesario)';
+      els.pdfToWordInfo.textContent = 'Subiendo...';
       els.pdfToWordDownload.style.display = 'none';
-      log('Convirtiendo PDF a DOCX estructurado...');
+      log('Iniciando conversión de PDF...');
+      
       const form = new FormData();
       form.append('file', file, file.name);
+      
       try {
         const res = await fetch('/api/tools/pdf-to-docx', { method: 'POST', body: form });
         const data = await res.json();
-        if (!res.ok || data.ok === false) {
-          throw new Error(data.error || 'pdf_to_docx_failed');
+        if (!res.ok || data.ok === false) throw new Error(data.error || 'upload_failed');
+        
+        const jobId = data.job_id;
+        log(`Conversión en segundo plano: job ${jobId}`);
+        
+        // Polling loop
+        let attempts = 0;
+        const maxAttempts = 1800; // 1 hour at 2s polling
+        
+        while (attempts < maxAttempts) {
+          const statusRes = await fetch(`/api/tools/pdf-to-docx/status/${jobId}`);
+          const statusData = await statusRes.json();
+          
+          if (!statusRes.ok || statusData.ok === false) throw new Error(statusData.error || 'status_failed');
+          
+          const s = statusData;
+          if (s.state === 'done') {
+            const warningText = Array.isArray(s.warnings) && s.warnings.length ? ` Avisos: ${s.warnings.join(' | ')}` : '';
+            els.pdfToWordInfo.textContent = `Listo: guardado en Descargas. ${s.filename}.${warningText}`.trim();
+            els.pdfToWordDownload.href = s.download_url;
+            els.pdfToWordDownload.textContent = 'Descargar';
+            els.pdfToWordDownload.style.display = 'inline';
+            log(`Conversión finalizada: ${s.filename}`);
+            break;
+          } else if (s.state === 'error') {
+            throw new Error(s.error || 'conversion_failed');
+          } else if (s.state === 'cancelled') {
+            els.pdfToWordInfo.textContent = 'Conversión cancelada.';
+            log('Conversión cancelada por el usuario.');
+            break;
+          } else {
+            // progress
+            els.pdfToWordInfo.textContent = s.message || 'Procesando...';
+            
+            if (!document.getElementById('pdfCancelBtn')) {
+              const cancelBtn = document.createElement('a');
+              cancelBtn.id = 'pdfCancelBtn';
+              cancelBtn.href = '#';
+              cancelBtn.textContent = ' [Cancelar]';
+              cancelBtn.style.marginLeft = '8px';
+              cancelBtn.style.fontSize = '0.8em';
+              cancelBtn.style.color = 'var(--danger)';
+              cancelBtn.style.textDecoration = 'none';
+              cancelBtn.onclick = async (e) => {
+                e.preventDefault();
+                cancelBtn.textContent = ' [Cancelando...]';
+                await fetch(`/api/tools/pdf-to-docx/cancel/${jobId}`, { method: 'POST' });
+              };
+              els.pdfToWordInfo.appendChild(cancelBtn);
+            }
+          }
+          
+          await new Promise(r => setTimeout(r, 2000));
+          attempts++;
         }
-        const warningText = Array.isArray(data.warnings) && data.warnings.length ? ` Avisos: ${data.warnings.join(' | ')}` : '';
-        els.pdfToWordInfo.textContent = `Listo: guardado en Descargas. ${data.filename}.${warningText}`.trim();
-        els.pdfToWordDownload.href = data.download_url;
-        els.pdfToWordDownload.textContent = 'Descargar';
-        els.pdfToWordDownload.style.display = 'inline';
-        log(`DOCX guardado en Descargas: ${data.filename}`);
       } catch (err) {
         const msg = String(err && err.message || 'conversion_failed');
         els.pdfToWordInfo.textContent = `Error: ${msg}`;
@@ -3308,6 +3355,30 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, job)
             return
+        if path.startswith("/api/tools/pdf-to-docx/status/"):
+            job_id = path.split("/")[-1]
+            with PDF_TO_DOCX_LOCK:
+                job = PDF_TO_WORD_JOBS.get(job_id)
+            if not job:
+                self._json(404, {"ok": False, "error": "Job no encontrado."})
+                return
+            self._json(200, {
+                "ok": True,
+                "job_id": job.job_id,
+                "state": job.state,
+                "stage": job.stage,
+                "current_page": job.current_page,
+                "total_pages": job.total_pages,
+                "percent": job.percent,
+                "message": job.message,
+                "filename": job.filename,
+                "saved_path": job.saved_path,
+                "download_url": job.download_url,
+                "warnings": job.warnings,
+                "error": job.error
+            })
+            return
+
         if path.startswith("/api/tools/pdf-to-docx/download/"):
             job_id = Path(path).name
             item = get_pdf_to_docx_download(job_id)
@@ -3368,40 +3439,59 @@ class Handler(BaseHTTPRequestHandler):
                 if Path(clean_name).suffix.lower() != ".pdf":
                     self._json(400, {"ok": False, "error": "Solo se aceptan archivos PDF."})
                     return
-                if mime and "pdf" not in mime.lower() and clean_name.lower().endswith(".pdf") is False:
-                    self._json(400, {"ok": False, "error": "Tipo de archivo no válido."})
-                    return
                 PDF_TO_WORD_ROOT.mkdir(parents=True, exist_ok=True)
                 job_id = uuid.uuid4().hex[:16]
                 input_path = PDF_TO_WORD_ROOT / f"{job_id}.pdf"
                 input_path.write_bytes(raw)
-                temp_docx = PDF_TO_WORD_ROOT / safe_output_name(clean_name)
-                try:
-                    result = convert_pdf_to_docx(input_path, temp_docx)
-                    if not result.ok:
-                        self._json(400, {"ok": False, "error": result.error or "No pude convertir el PDF."})
-                        return
-                    final_target = unique_download_target(Path(result.output_path).name)
-                    final_target.write_bytes(temp_docx.read_bytes())
-                    download_item = register_pdf_to_docx_download(final_target, final_target.name, result)
-                    self._json(
-                        200,
-                        {
-                            "ok": True,
-                            "filename": final_target.name,
-                            "saved_path": str(final_target),
-                            "download_url": f"/api/tools/pdf-to-docx/download/{download_item['id']}",
-                            "warnings": list(result.warnings),
-                            "pages": result.pages,
-                            "engine": result.engine,
-                            "text_blocks": result.text_blocks,
-                            "notes_detected": result.notes_detected,
-                        },
-                    )
+                
+                job = JobStatus(job_id=job_id, filename=safe_output_name(clean_name))
+                with PDF_TO_DOCX_LOCK:
+                    PDF_TO_WORD_JOBS[job_id] = job
+                
+                def _run_job(j: JobStatus, in_p: Path, original_name: str):
+                    try:
+                        temp_docx = PDF_TO_WORD_ROOT / f"{j.job_id}.docx"
+                        result = convert_pdf_to_docx(in_p, temp_docx, job=j)
+                        if not result.ok:
+                            j.state = "error"
+                            j.error = result.error or "Error desconocido en conversión."
+                            return
+                        
+                        if j.cancelled:
+                            j.state = "cancelled"
+                            return
+
+                        final_target = unique_download_target(j.filename)
+                        final_target.write_bytes(temp_docx.read_bytes())
+                        download_item = register_pdf_to_docx_download(final_target, final_target.name, result)
+                        
+                        j.state = "done"
+                        j.saved_path = str(final_target)
+                        j.filename = final_target.name
+                        j.download_url = f"/api/tools/pdf-to-docx/download/{download_item['id']}"
+                        j.warnings = list(result.warnings)
+                        temp_docx.unlink(missing_ok=True)
+                    except Exception as e:
+                        j.state = "error"
+                        j.error = str(e)
+                    finally:
+                        in_p.unlink(missing_ok=True)
+
+                threading.Thread(target=_run_job, args=(job, input_path, clean_name), daemon=True).start()
+                self._json(200, {"ok": True, "job_id": job_id})
+                return
+
+            if path.startswith("/api/tools/pdf-to-docx/cancel/"):
+                job_id = path.split("/")[-1]
+                with PDF_TO_DOCX_LOCK:
+                    job = PDF_TO_WORD_JOBS.get(job_id)
+                if not job:
+                    self._json(404, {"ok": False, "error": "Job no encontrado."})
                     return
-                finally:
-                    input_path.unlink(missing_ok=True)
-                    temp_docx.unlink(missing_ok=True)
+                job.cancelled = True
+                job.state = "cancelled"
+                self._json(200, {"ok": True, "job_id": job_id})
+                return
             if path == "/api/import-file/start":
                 params = parse_qs(parsed.query)
                 filename = str((params.get("filename") or ["documento"])[0])

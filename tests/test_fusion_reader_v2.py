@@ -2657,6 +2657,30 @@ Sigue en otra línea y mantiene la misma idea.
             mock_ocr.assert_called_once()
             mock_write.assert_called_once()
 
+    def test_pdf_to_word_job_progress(self):
+        from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus
+        from unittest.mock import patch
+
+        job = JobStatus(job_id="test_job")
+        progress_calls = []
+        def callback(j):
+            progress_calls.append((j.stage, j.current_page))
+
+        with patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["   "]), \
+             patch("fusion_reader_v2.pdf_to_docx._ocr_pdf_pages", return_value=["OCR text"]), \
+             patch("fusion_reader_v2.pdf_to_docx._write_minimal_docx"), \
+             patch("fusion_reader_v2.pdf_to_docx._page_count", return_value=1):
+            
+            convert_pdf_to_docx("dummy.pdf", "output.docx", status_callback=callback, job=job)
+            
+            self.assertEqual(job.state, "done")
+            self.assertEqual(job.total_pages, 1)
+            # Should have seen stages like preflight, extract_text, ocr, build_docx
+            stages = [c[0] for c in progress_calls]
+            self.assertIn("preflight", stages)
+            self.assertIn("ocr", stages)
+            self.assertIn("build_docx", stages)
+
     def test_mcp_memory_server_core_logic(self):
         from scripts import fusion_memory_mcp_server as mcp_mod
         

@@ -4,10 +4,12 @@ import re
 import subprocess
 import zipfile
 import tempfile
+import threading
+import time
 from dataclasses import dataclass, field
 from html import escape
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Callable
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,24 @@ class ConversionResult:
     text_blocks: int = 0
     notes_detected: int = 0
     error: str = ""
+
+
+@dataclass
+class JobStatus:
+    job_id: str
+    state: str = "queued"  # queued, running, done, error, cancelled
+    stage: str = "preflight"
+    current_page: int = 0
+    total_pages: int = 0
+    percent: int = 0
+    message: str = ""
+    filename: str = ""
+    saved_path: str = ""
+    download_url: str = ""
+    warnings: list[str] = field(default_factory=list)
+    error: str = ""
+    cancelled: bool = False
+    result: ConversionResult | None = None
 
 
 @dataclass(frozen=True)
@@ -55,19 +75,48 @@ def is_pdf_textual(path: str | Path) -> bool:
     return False
 
 
-def convert_pdf_to_docx(input_pdf: str | Path, output_docx: str | Path) -> ConversionResult:
+def convert_pdf_to_docx(
+    input_pdf: str | Path, 
+    output_docx: str | Path,
+    status_callback: Callable[[JobStatus], None] | None = None,
+    job: JobStatus | None = None
+) -> ConversionResult:
     pdf_path = Path(input_pdf)
     output_path = Path(output_docx)
     warnings: list[str] = []
+    
+    if job:
+        job.state = "running"
+        job.stage = "preflight"
+        job.message = "Calculando páginas..."
+        if status_callback: status_callback(job)
+
     pages = _page_count(pdf_path)
-    page_texts = _extract_pages_text(pdf_path)
+    if job:
+        job.total_pages = pages
+        job.stage = "extract_text"
+        job.message = "Buscando texto extraíble..."
+        if status_callback: status_callback(job)
+
+    # Initial fast check
+    page_texts = _extract_pages_text(pdf_path, limit=20) # Just check first few to decide engine
     meaningful_pages = [text for text in page_texts if _has_meaningful_text(text)]
+    
     if not meaningful_pages:
         try:
-            page_texts = _ocr_pdf_pages(pdf_path)
+            if job:
+                job.stage = "ocr"
+                if status_callback: status_callback(job)
+            
+            page_texts = _ocr_pdf_pages(pdf_path, status_callback=status_callback, job=job)
             engine = "ocr_tesseract"
             warnings.append("Este PDF parece escaneado: se aplicó OCR para extraer el texto. La estructura puede requerir revisión manual.")
         except Exception as e:
+            err_msg = str(e)
+            if job:
+                job.state = "error"
+                job.error = err_msg
+                if status_callback: status_callback(job)
             return ConversionResult(
                 False,
                 output_path=str(output_path),
@@ -76,15 +125,33 @@ def convert_pdf_to_docx(input_pdf: str | Path, output_docx: str | Path) -> Conve
                 engine="pdftotext",
                 text_blocks=0,
                 notes_detected=0,
-                error=str(e),
+                error=err_msg,
             )
     else:
+        # Full extraction if it's textual
+        if job:
+            job.message = "Extrayendo texto de todas las páginas..."
+            if status_callback: status_callback(job)
+        page_texts = _extract_pages_text(pdf_path)
         engine = "pdftotext"
 
+    if job and job.cancelled:
+        return ConversionResult(False, error="Operación cancelada por el usuario.")
+
+    if job:
+        job.stage = "build_docx"
+        job.message = "Generando archivo DOCX..."
+        if status_callback: status_callback(job)
+
     blocks, notes_detected = build_docx_from_pdf_structure(page_texts, output_path)
-    if pages and len(meaningful_pages) < pages and engine == "pdftotext":
-        warnings.append("Algunas páginas no devolvieron texto extraíble.")
-    return ConversionResult(
+    
+    if pages and engine == "pdftotext":
+        # Recalculate meaningful for textual PDFs to warn about missing pages
+        meaningful_count = sum(1 for text in page_texts if _has_meaningful_text(text))
+        if meaningful_count < pages:
+            warnings.append("Algunas páginas no devolvieron texto extraíble.")
+
+    res = ConversionResult(
         True,
         output_path=str(output_path),
         pages=pages or len(page_texts),
@@ -93,6 +160,11 @@ def convert_pdf_to_docx(input_pdf: str | Path, output_docx: str | Path) -> Conve
         text_blocks=blocks,
         notes_detected=notes_detected,
     )
+    if job:
+        job.result = res
+        job.warnings = list(warnings)
+        job.state = "done"
+    return res
 
 
 def build_docx_from_pdf_structure(page_texts: Iterable[str], output_docx: str | Path) -> tuple[int, int]:
@@ -127,21 +199,31 @@ def _page_count(pdf_path: Path) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _extract_pages_text(pdf_path: Path) -> list[str]:
+def _extract_pages_text(pdf_path: Path, limit: int | None = None) -> list[str]:
     pages = _page_count(pdf_path)
     if pages <= 0:
         raw = _pdftotext_page(pdf_path, None)
         return [segment for segment in raw.split("\f") if segment is not None]
+    
+    total = min(pages, limit) if limit else pages
     out: list[str] = []
-    for page in range(1, pages + 1):
+    for page in range(1, total + 1):
         out.append(_pdftotext_page(pdf_path, page))
     return out
 
 
-def _ocr_pdf_pages(pdf_path: Path, max_pages: int = 300) -> list[str]:
+def _ocr_pdf_pages(
+    pdf_path: Path, 
+    max_pages: int = 300,
+    status_callback: Callable[[JobStatus], None] | None = None,
+    job: JobStatus | None = None
+) -> list[str]:
     pages = _page_count(pdf_path)
     if pages > max_pages:
         raise ValueError(f"PDF escaneado demasiado largo para OCR v1: {pages} páginas. Límite actual: {max_pages}.")
+    
+    if job:
+        job.total_pages = pages
     
     # Check for tesseract and languages
     langs = _tesseract_langs()
@@ -149,39 +231,51 @@ def _ocr_pdf_pages(pdf_path: Path, max_pages: int = 300) -> list[str]:
     if "spa" in langs:
         lang_arg = "spa+eng" if "eng" in langs else "spa"
 
-    with tempfile.TemporaryDirectory(prefix="fusion_ocr_") as tmpdir:
-        tmp_path = Path(tmpdir)
-        prefix = tmp_path / "page"
-        
-        try:
-            subprocess.run([
-                "pdftoppm", "-png", "-r", "150",
-                str(pdf_path), str(prefix)
-            ], check=True, timeout=300, capture_output=True)
-        except Exception as e:
-            raise RuntimeError(f"Falla al renderizar PDF para OCR: {e}")
+    texts = []
+    
+    # Process page by page to allow progress and avoid memory/temp disk spikes
+    for page_idx in range(1, pages + 1):
+        if job and job.cancelled:
+            break
+            
+        if job:
+            job.current_page = page_idx
+            job.percent = int((page_idx - 1) * 100 / pages)
+            job.message = f"OCR página {page_idx} de {pages}..."
+            if status_callback: status_callback(job)
 
-        image_files = list(tmp_path.glob("page-*.png"))
-        def sort_key(p: Path):
-            match = re.search(r"page-(\d+)\.png$", p.name)
-            return int(match.group(1)) if match else 0
-        
-        image_files.sort(key=sort_key)
-        
-        if not image_files:
-            raise RuntimeError("No se generaron imágenes de las páginas del PDF.")
+        with tempfile.TemporaryDirectory(prefix=f"fusion_ocr_p{page_idx}_") as tmpdir:
+            tmp_path = Path(tmpdir)
+            prefix = tmp_path / "page"
+            
+            try:
+                # Render ONLY this page
+                subprocess.run([
+                    "pdftoppm", "-png", "-r", "150", "-f", str(page_idx), "-l", str(page_idx),
+                    str(pdf_path), str(prefix)
+                ], check=True, timeout=120, capture_output=True)
+            except Exception as e:
+                texts.append(f"[Error al renderizar página {page_idx}: {e}]")
+                continue
 
-        texts = []
-        for img in image_files:
+            image_files = list(tmp_path.glob("page-*.png"))
+            if not image_files:
+                texts.append(f"[No se generó imagen para página {page_idx}]")
+                continue
+
+            img = image_files[0]
             try:
                 proc = subprocess.run([
                     "tesseract", str(img), "stdout", "-l", lang_arg
-                ], capture_output=True, text=True, check=True, timeout=60)
+                ], capture_output=True, text=True, check=True, timeout=120)
                 texts.append(proc.stdout)
             except Exception as e:
-                texts.append(f"[Error en OCR de página: {e}]")
+                texts.append(f"[Error en OCR de página {page_idx}: {e}]")
+    
+    if job and job.cancelled:
+        raise RuntimeError("Operación cancelada.")
         
-        return texts
+    return texts
 
 
 def _tesseract_langs() -> list[str]:
