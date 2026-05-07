@@ -156,13 +156,15 @@ Propiedades:
 - no carga el resultado en Fusion ni reemplaza el documento activo;
 - convierte PDF (digital o escaneado) a DOCX estructurado y editable;
 - motor principal: **Docling GPU** (aceleración NVIDIA RTX 5090) para máxima calidad editorial;
+- modo: **text-first** (omite imágenes, base64 y ruido OCR por defecto);
 - motor secundario: `pdftotext` (rápido) para PDFs digitales simples;
 - fallback legado: `ocr_tesseract` (deprecado para documentos largos);
-- flujo: PDF → Docling GPU → Markdown → `python-docx` → Descargas;
+- flujo: PDF → Docling GPU (placeholder mode) → Markdown Sanitizado → `python-docx` → Descargas;
+- sanitización: elimina automáticamente `data:image`, `base64`, bloques de imágenes y caracteres basura;
 - no usa CPU fallback para Docling para evitar bloqueos de UI (mínimo 60 min en CPU vs 7 min en GPU);
 - guarda el resultado en `~/Descargas` o `~/Downloads`;
 - ofrece un enlace HTTP de descarga efímero para el DOCX recién generado;
-- omite imágenes por defecto;
+- omite imágenes por defecto para asegurar un Word limpio y editable;
 - no usa LibreOffice;
 
 ## Investigación externa

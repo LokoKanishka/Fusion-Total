@@ -670,7 +670,9 @@ def _convert_with_docling_gpu(
                 if status_callback: status_callback(job)
             
             proc = subprocess.Popen([
-                str(docling_bin), "--device", "cuda", str(pdf_path), "--output", str(tmp_path)
+                str(docling_bin), "--device", "cuda", 
+                "--image-export-mode", "placeholder",
+                str(pdf_path), "--output", str(tmp_path)
             ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             # Monitor progress (if possible) or just wait

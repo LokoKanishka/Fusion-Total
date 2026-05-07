@@ -2704,6 +2704,41 @@ Sigue en otra línea y mantiene la misma idea.
                 self.assertFalse(res.ok)
                 self.assertIn("Motor Docling GPU no disponible", res.error)
 
+    def test_md_to_docx_sanitization(self):
+        from fusion_reader_v2.md_to_docx import sanitize_markdown
+        md = "# Titulo\n![Image](data:image/png;base64,ABC)\nTexto real\n福\n<img src='data:image...'>\n"
+        sanitized = sanitize_markdown(md)
+        self.assertIn("# Titulo", sanitized)
+        self.assertIn("Texto real", sanitized)
+        self.assertNotIn("data:image", sanitized)
+        self.assertNotIn("![Image]", sanitized)
+        self.assertNotIn("福", sanitized)
+        self.assertNotIn("<img", sanitized)
+
+    def test_pdf_to_word_docling_uses_placeholder(self):
+        from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus
+        from unittest import mock
+        
+        with mock.patch("fusion_reader_v2.pdf_to_docx.is_docling_gpu_available", return_value=True), \
+             mock.patch("subprocess.Popen") as mock_popen, \
+             mock.patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["   "]), \
+             mock.patch("subprocess.run"):
+            
+            mock_proc = mock.MagicMock()
+            mock_proc.poll.return_value = 0
+            mock_proc.returncode = 0
+            mock_proc.communicate.return_value = ("ok", "")
+            mock_popen.return_value = mock_proc
+            
+            # Temporary mock for find md files
+            with mock.patch("pathlib.Path.glob", return_value=[Path("dummy.md")]):
+                convert_pdf_to_docx("test.pdf", "test.docx")
+            
+            args, kwargs = mock_popen.call_args
+            cmd = args[0]
+            self.assertIn("--image-export-mode", cmd)
+            self.assertIn("placeholder", cmd)
+
     def test_pdf_to_word_ocr_cleanup_logic(self):
         from fusion_reader_v2.pdf_to_docx import _clean_ocr_line, _is_noise_line, _detect_heading, _should_merge_with_previous
         

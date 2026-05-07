@@ -115,11 +115,12 @@ cdef8ab Respect literal document reading requests
 - `cdef8ab`: disciplina de lectura literal vs interpretación.
 - [x] Background PDF → Word tool.
 - [x] OCR fallback with Tesseract (Legacy).
-- [x] Professional OCR with Docling GPU (Mandatory for scans/complex PDFs).
-- [x] Isolated GPU venv for Docling (RTX 5090).
-- [x] No silent CPU fallback for Docling.
-- [x] Markdown to DOCX post-processing.
-- [x] Progress reporting and cancellation.
+- [x] **Conversión PDF a Word (Text-First)**:
+    *   Motor: **Docling GPU** (RTX 5090).
+    *   Política: Sin imágenes, sin base64, sin ruido OCR.
+    *   Sanitización: Implementada en `md_to_docx.py` para eliminar `data:image`, `base64` y caracteres basura.
+    *   Rendimiento: 15 págs en ~30s (59KB final vs 3.5MB con imágenes).
+    *   Tests: 190 OK (incluyendo validación de sanitización).
 
 ## Herramienta auxiliar PDF -> Word
 
