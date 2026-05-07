@@ -118,10 +118,11 @@ cdef8ab Respect literal document reading requests
 - [x] **Conversión PDF a Word (Text-First)**:
     *   Motor: **Docling GPU** (RTX 5090).
     *   Política: Sin imágenes, sin base64, sin ruido OCR.
-    *   Sanitización v2: Limpieza editorial (errores OCR, palabras pegadas, espacios en puntuación, headers repetidos).
-    *   Reparación de palabras pegadas: Implementada con diccionario de patrones, reglas CamelCase y lista de términos protegidos (Bonisagus, Bjornaer, etc.).
+    *   Sanitización v4: Limpieza editorial española conservadora (OCR común, acentos, palabras pegadas, espacios en puntuación, headers repetidos).
+    *   Reparación de palabras pegadas: Segmentador local con métrica objetiva, términos protegidos de Ars Magica y reglas de conectores españolas; no usa IA generativa ni reescribe contenido.
+    *   Medición real 2026-05-07 sobre `201721562-Roles-Ars-Magica-4a-Ed-1_convertido_8.docx`: 812 tokens sospechosos antes, 20 después en `convertido_9`, reducción 97.54%, sin `base64`, `data:image` ni `<!-- image -->`.
     *   Rendimiento: 15 págs en ~30s (59KB final vs 3.5MB con imágenes).
-    *   Tests: 191 OK (incluyendo validación de reparación de palabras pegadas).
+    *   Tests: incluye validación de reparación v4 con ejemplos reales y preservación de términos protegidos.
 
 ## Herramienta auxiliar PDF -> Word
 

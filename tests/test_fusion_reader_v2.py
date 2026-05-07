@@ -2770,6 +2770,45 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertNotIn("Bonisa gus", sanitized_prot)
         self.assertNotIn("Bjorna er", sanitized_prot)
 
+    def test_md_to_docx_glued_words_v4_real_ars_magica_examples(self):
+        from fusion_reader_v2.md_to_docx import detect_suspicious_glued_tokens, repair_glued_words_v4, sanitize_markdown
+
+        samples = {
+            "Diariode Antoninus": "Diario de Antoninus",
+            "Desarrollodela Cuarta Edicionen": "Desarrollo de la Cuarta Edición en",
+            "Coordinacion delaspruebas": "Coordinación de las pruebas",
+            "Que Dios Majestuosoqueha observado": "Que Dios Majestuoso que ha observado",
+            "Nuestro Senordemil cientoochentayseis": "Nuestro Señor de mil ciento ochenta y seis",
+            "mi tio mediocomonovicioalmonasterio": "mi tio medio como novicio al monasterio",
+            "lugardondehevivido desdeentonces": "lugar donde he vivido desde entonces",
+            "siemprehasostenidofirmementequelosmonjesdebenquedarse": "siempre ha sostenido firmemente que los monjes deben quedarse",
+            "Fulk me habló antes de que dejara alabad, ymedijo": "Fulk me habló antes de que dejara alabad, y me dijo",
+            "vestidoconelsimplehabitoblanco": "vestido con el simple hábito blanco",
+            "campamentohabian": "campamento habían",
+            "Laspalabrasrompieroncualquierhechizoenelqueme": "Las palabras rompieron cualquier hechizo en el que me",
+            "representarenvuestrosrelatos": "representar en vuestros relatos",
+            "suspoderesmisticosnohacensino": "sus poderes místicos no hacen sino",
+            "depersonas oanimalesmundanos": "de personas o animales mundanos",
+            "Queelcontextoyelsentidocomunseantuguia": "Que el contexto y el sentido común sean tu guía",
+        }
+        for source, expected in samples.items():
+            with self.subTest(source=source):
+                self.assertIn(expected, sanitize_markdown(source))
+
+        protected = "Bonisagus Bjornaer Quaesitores Intellego Ex Miscellanea Ars Magica Cistercienses Rievaulx Stonehenge Pythagoranis"
+        self.assertEqual(sanitize_markdown(protected), protected)
+        valid_long = "características responsabilidad administración experimentación"
+        self.assertEqual(sanitize_markdown(valid_long), valid_long)
+        noisy = "data:image/png;base64,ABC <!-- image --> ![Image](data:image/png;base64,ABC)"
+        self.assertNotIn("data:image", sanitize_markdown(noisy))
+        self.assertNotIn("<!-- image -->", sanitize_markdown(noisy))
+
+        before = detect_suspicious_glued_tokens("Diariode Majestuosoqueha Bonisagus")
+        repaired, metrics = repair_glued_words_v4("Diariode Majestuosoqueha Bonisagus")
+        after = detect_suspicious_glued_tokens(repaired)
+        self.assertGreater(before["suspicious_count"], after["suspicious_count"])
+        self.assertGreaterEqual(metrics["exact_fixes"], 2)
+
     def test_pdf_to_word_docling_uses_placeholder(self):
         from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus
         from unittest import mock

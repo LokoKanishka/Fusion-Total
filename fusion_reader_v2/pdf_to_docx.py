@@ -430,6 +430,8 @@ def _page_paragraphs(page_text: str) -> tuple[list[ParagraphBlock], list[str], d
 
 def _clean_ocr_line(line: str) -> str:
     """Normalize whitespace and common OCR artifacts."""
+    from fusion_reader_v2.md_to_docx import normalize_spanish_ocr_v4
+
     # Remove weird chars at start/end
     c = re.sub(r"^[^A-Za-z0-9ÁÉÍÓÚáéíóúÑñÜü\"'¿¡(]+", "", line)
     c = re.sub(r"[^A-Za-z0-9ÁÉÍÓÚáéíóúÑñÜü\"'?!).\]]+$", "", c)
@@ -437,6 +439,7 @@ def _clean_ocr_line(line: str) -> str:
     c = re.sub(r"\s+", " ", c).strip()
     # Normalize dashes
     c = c.replace("—", "-").replace("–", "-")
+    c, _metrics = normalize_spanish_ocr_v4(c)
     return c
 
 
@@ -623,6 +626,14 @@ def _core_xml() -> str:
   <dc:title>PDF convertido</dc:title>
   <dc:creator>Fusion Reader v2</dc:creator>
 </cp:coreProperties>
+"""
+
+
+def _app_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Fusion Reader v2</Application>
+</Properties>
 """
 
 
