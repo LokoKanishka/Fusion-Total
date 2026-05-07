@@ -159,8 +159,8 @@ Propiedades:
 - modo: **text-first** (omite imágenes, base64 y ruido OCR por defecto);
 - motor secundario: `pdftotext` (rápido) para PDFs digitales simples;
 - fallback legado: `ocr_tesseract` (deprecado para documentos largos);
-- flujo: PDF → Docling GPU (placeholder mode) → Markdown Sanitizado → `python-docx` → Descargas;
-- sanitización: elimina automáticamente `data:image`, `base64`, bloques de imágenes y caracteres basura;
+- flujo: PDF → Docling GPU (placeholder mode) → Markdown Sanitizado v2 → `python-docx` → Descargas;
+- sanitización v2: elimina automáticamente `data:image`, `base64`, bloques de imágenes, caracteres basura y limpia errores OCR (palabras pegadas, puntuación, headers repetidos);
 - no usa CPU fallback para Docling para evitar bloqueos de UI (mínimo 60 min en CPU vs 7 min en GPU);
 - guarda el resultado en `~/Descargas` o `~/Downloads`;
 - ofrece un enlace HTTP de descarga efímero para el DOCX recién generado;

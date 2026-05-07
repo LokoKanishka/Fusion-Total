@@ -2624,7 +2624,7 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertTrue(docx_path.exists())
         with zipfile.ZipFile(docx_path) as zf:
             document_xml = zf.read("word/document.xml").decode("utf-8", errors="replace")
-        self.assertIn("Capitulo 1", document_xml)
+        self.assertIn("Capítulo 1", document_xml)
         self.assertIn("La realidad parece una costumbre compartida.", document_xml)
 
     def test_pdf_to_word_ui_is_compact_and_correct(self):
@@ -2704,16 +2704,38 @@ Sigue en otra línea y mantiene la misma idea.
                 self.assertFalse(res.ok)
                 self.assertIn("Motor Docling GPU no disponible", res.error)
 
-    def test_md_to_docx_sanitization(self):
+    def test_md_to_docx_sanitization_v2(self):
         from fusion_reader_v2.md_to_docx import sanitize_markdown
-        md = "# Titulo\n![Image](data:image/png;base64,ABC)\nTexto real\n福\n<img src='data:image...'>\n"
+        
+        # 1. Images and Placeholders
+        md = "# Titulo\n![Image](data:image/png;base64,ABC)\n<!-- image -->\n福\n"
         sanitized = sanitize_markdown(md)
-        self.assertIn("# Titulo", sanitized)
-        self.assertIn("Texto real", sanitized)
         self.assertNotIn("data:image", sanitized)
         self.assertNotIn("![Image]", sanitized)
+        self.assertNotIn("<!-- image -->", sanitized)
         self.assertNotIn("福", sanitized)
-        self.assertNotIn("<img", sanitized)
+        
+        # 2. OCR Corrections
+        md_ocr = "Hrs Magica y la CuartaEdicion. Detectos y Hechbizos."
+        sanitized_ocr = sanitize_markdown(md_ocr)
+        self.assertIn("Ars Magica", sanitized_ocr)
+        self.assertIn("Cuarta Edición", sanitized_ocr)
+        self.assertIn("Defectos", sanitized_ocr)
+        self.assertIn("Hechizos", sanitized_ocr)
+        
+        # 3. Glued Words
+        md_glued = "QueDios nos ayude enel viaje mimaestra."
+        sanitized_glued = sanitize_markdown(md_glued)
+        self.assertIn("Que Dios", sanitized_glued)
+        self.assertIn("en el", sanitized_glued)
+        self.assertIn("mi maestra", sanitized_glued)
+        
+        # 4. Punctuation Spacing
+        md_punct = "Hola,mundo.Esto;está:pegado."
+        sanitized_punct = sanitize_markdown(md_punct)
+        self.assertIn("Hola, mundo", sanitized_punct)
+        self.assertIn("mundo. Esto", sanitized_punct)
+        self.assertIn("está: pegado", sanitized_punct)
 
     def test_pdf_to_word_docling_uses_placeholder(self):
         from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus

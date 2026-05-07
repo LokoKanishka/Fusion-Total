@@ -118,9 +118,9 @@ cdef8ab Respect literal document reading requests
 - [x] **Conversión PDF a Word (Text-First)**:
     *   Motor: **Docling GPU** (RTX 5090).
     *   Política: Sin imágenes, sin base64, sin ruido OCR.
-    *   Sanitización: Implementada en `md_to_docx.py` para eliminar `data:image`, `base64` y caracteres basura.
+    *   Sanitización v2: Implementada en `md_to_docx.py` con limpieza editorial (corrección de errores OCR, palabras pegadas, espacios en puntuación, eliminación de headers repetidos).
     *   Rendimiento: 15 págs en ~30s (59KB final vs 3.5MB con imágenes).
-    *   Tests: 190 OK (incluyendo validación de sanitización).
+    *   Tests: 190 OK (incluyendo validación de limpieza editorial v2).
 
 ## Herramienta auxiliar PDF -> Word
 
