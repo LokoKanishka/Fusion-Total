@@ -161,6 +161,7 @@ Propiedades:
 - fallback legado: `ocr_tesseract` (deprecado para documentos largos);
 - flujo: PDF → Docling GPU (placeholder mode) → Markdown Sanitizado v2 → `python-docx` → Descargas;
 - sanitización v2: elimina automáticamente `data:image`, `base64`, bloques de imágenes, caracteres basura y limpia errores OCR (palabras pegadas, puntuación, headers repetidos);
+- reparación de palabras pegadas: capa heurística en `md_to_docx.py` que separa tokens unidos sin espacios, preservando términos protegidos (lore de Ars Magica) y manteniendo la capitalización original;
 - no usa CPU fallback para Docling para evitar bloqueos de UI (mínimo 60 min en CPU vs 7 min en GPU);
 - guarda el resultado en `~/Descargas` o `~/Downloads`;
 - ofrece un enlace HTTP de descarga efímero para el DOCX recién generado;

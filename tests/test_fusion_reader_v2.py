@@ -2737,6 +2737,39 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn("mundo. Esto", sanitized_punct)
         self.assertIn("está: pegado", sanitized_punct)
 
+    def test_md_to_docx_glued_words(self):
+        from fusion_reader_v2.md_to_docx import sanitize_markdown
+        
+        # 1. Frequent patterns
+        md = "Desarrollo, ediciony maqueta. Diariode Antoninus. todoslos Magos."
+        sanitized = sanitize_markdown(md)
+        self.assertIn("edición y", sanitized)
+        self.assertIn("Diario de", sanitized)
+        self.assertIn("todos los", sanitized)
+        
+        # 2. Long spans
+        md_long = "Que Dios Majestuosoqueha observadotodamivida."
+        sanitized_long = sanitize_markdown(md_long)
+        self.assertIn("Majestuoso que ha", sanitized_long)
+        self.assertIn("observado toda mi vida", sanitized_long)
+        
+        # 3. CamelCase separation
+        md_camel = "QueDios bendiga Mimaestra y Nuestroviaje."
+        sanitized_camel = sanitize_markdown(md_camel)
+        self.assertIn("Que Dios", sanitized_camel)
+        self.assertIn("Mi maestra", sanitized_camel)
+        self.assertIn("Nuestro viaje", sanitized_camel)
+        
+        # 4. Protected terms (should NOT be split)
+        md_prot = "Bonisagus y Bjornaer son Quaesitores que usan Intellego."
+        sanitized_prot = sanitize_markdown(md_prot)
+        self.assertIn("Bonisagus", sanitized_prot)
+        self.assertIn("Bjornaer", sanitized_prot)
+        self.assertIn("Quaesitores", sanitized_prot)
+        self.assertIn("Intellego", sanitized_prot)
+        self.assertNotIn("Bonisa gus", sanitized_prot)
+        self.assertNotIn("Bjorna er", sanitized_prot)
+
     def test_pdf_to_word_docling_uses_placeholder(self):
         from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus
         from unittest import mock
