@@ -162,7 +162,7 @@ Propiedades:
 - flujo: PDF → Docling GPU (placeholder mode) → Markdown Sanitizado v4 → DOCX editable → Descargas;
 - sanitización v4: elimina automáticamente `data:image`, `base64`, bloques de imágenes y caracteres basura; normaliza OCR español conservador y repara palabras pegadas antes de escribir el DOCX;
 - reparación de palabras pegadas: capa editorial medible en `md_to_docx.py` con detector `detect_suspicious_glued_tokens`, segmentador español local, correcciones exactas seguras y protección de términos de Ars Magica (por ejemplo Bonisagus, Bjornaer, Intellego, Ex Miscellanea);
-- medición real v4: contra `convertido_8` del libro de Ars Magica se redujo de 812 a 20 tokens sospechosos en `convertido_9` (97.54%); no usa IA generativa, no inventa contenido y no reintroduce imágenes/base64/placeholders;
+- medición real v4: contra `convertido_8` del libro de Ars Magica se redujo de 812 a 17 tokens sospechosos en `convertido_9` (97.91%); no usa IA generativa, no inventa contenido y no reintroduce imágenes/base64/placeholders;
 - no usa CPU fallback para Docling para evitar bloqueos de UI (mínimo 60 min en CPU vs 7 min en GPU);
 - guarda el resultado en `~/Descargas` o `~/Downloads`;
 - ofrece un enlace HTTP de descarga efímero para el DOCX recién generado;

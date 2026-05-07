@@ -279,6 +279,19 @@ def build_spanish_wordlist_v4() -> set[str]:
     for replacement in EXACT_GLUED_REPAIRS_V4.values():
         words.update(_fold_spanish_v4(w) for w in re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+", replacement))
     words.update(_fold_spanish_v4(term) for term in PROTECTED_TERMS_V4 if " " not in term)
+    for dic_path in (
+        Path("/usr/share/hunspell/es.dic"),
+        Path("/usr/share/calibre/dictionaries/es-ES/es-ES.dic"),
+    ):
+        if not dic_path.exists():
+            continue
+        try:
+            for line in dic_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                entry = line.strip().split("/", 1)[0]
+                if entry and entry.isalpha() and 2 <= len(entry) <= 24:
+                    words.add(_fold_spanish_v4(entry))
+        except OSError:
+            continue
     return {w for w in words if w}
 
 
