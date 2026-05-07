@@ -2639,25 +2639,20 @@ Sigue en otra línea y mantiene la misma idea.
         self.assertIn('max_bytes: int = 500 * 1024 * 1024', server)
         self.assertIn('Límite: {max_bytes // (1024 * 1024)} MB.', server)
 
-    def test_pdf_to_word_ocr_fallback_logic(self):
+    @mock.patch("fusion_reader_v2.pdf_to_docx.is_docling_gpu_available", return_value=False)
+    @mock.patch("fusion_reader_v2.pdf_to_docx._ocr_pdf_pages")
+    def test_pdf_to_word_ocr_fallback_logic(self, mock_ocr, mock_gpu):
         from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx
-        from unittest.mock import patch, MagicMock
-
-        # Mock a scanned PDF (no text returned by pdftotext)
-        with patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["   ", "  "]), \
-             patch("fusion_reader_v2.pdf_to_docx._ocr_pdf_pages", return_value=["Texto OCR de prueba"]) as mock_ocr, \
-             patch("fusion_reader_v2.pdf_to_docx._write_minimal_docx") as mock_write, \
-             patch("fusion_reader_v2.pdf_to_docx._page_count", return_value=2):
+        # If no Docling GPU and it's a scan, it should now return error
+        with mock.patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["   ", "  "]), \
+             mock.patch("fusion_reader_v2.pdf_to_docx._page_count", return_value=2):
             
             res = convert_pdf_to_docx("dummy.pdf", "output.docx")
-            
-            self.assertTrue(res.ok)
-            self.assertEqual(res.engine, "ocr_tesseract")
-            self.assertTrue(any("OCR" in w for w in res.warnings))
-            mock_ocr.assert_called_once()
-            mock_write.assert_called_once()
+            self.assertFalse(res.ok)
+            self.assertIn("Motor Docling GPU no disponible", res.error)
 
-    def test_pdf_to_word_job_progress(self):
+    @mock.patch("fusion_reader_v2.pdf_to_docx.is_docling_gpu_available", return_value=False)
+    def test_pdf_to_word_job_progress(self, mock_gpu):
         from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus
         from unittest.mock import patch
 
@@ -2666,20 +2661,48 @@ Sigue en otra línea y mantiene la misma idea.
         def callback(j):
             progress_calls.append((j.stage, j.current_page))
 
-        with patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["   "]), \
-             patch("fusion_reader_v2.pdf_to_docx._ocr_pdf_pages", return_value=["OCR text"]), \
-             patch("fusion_reader_v2.pdf_to_docx._write_minimal_docx"), \
-             patch("fusion_reader_v2.pdf_to_docx._page_count", return_value=1):
+        # Use a string longer than 12 alpha chars
+        with mock.patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["Este es un texto digital suficientemente largo."]), \
+             mock.patch("fusion_reader_v2.pdf_to_docx._write_minimal_docx"), \
+             mock.patch("fusion_reader_v2.pdf_to_docx._page_count", return_value=1):
             
             convert_pdf_to_docx("dummy.pdf", "output.docx", status_callback=callback, job=job)
             
             self.assertEqual(job.state, "done")
             self.assertEqual(job.total_pages, 1)
-            # Should have seen stages like preflight, extract_text, ocr, build_docx
             stages = [c[0] for c in progress_calls]
             self.assertIn("preflight", stages)
-            self.assertIn("ocr", stages)
+            self.assertIn("extract_text", stages)
             self.assertIn("build_docx", stages)
+
+    def test_pdf_to_word_docling_gpu_selection(self):
+        from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus
+        import fusion_reader_v2.pdf_to_docx as pdf_to_docx
+        from unittest.mock import patch, MagicMock
+
+        # Mock is_docling_gpu_available to True
+        with mock.patch("fusion_reader_v2.pdf_to_docx.is_docling_gpu_available", return_value=True):
+            with mock.patch("fusion_reader_v2.pdf_to_docx._convert_with_docling_gpu") as mock_conv:
+                mock_conv.return_value = MagicMock(ok=True, engine="docling_gpu")
+                job = JobStatus(job_id="test_gpu")
+                res = convert_pdf_to_docx("dummy.pdf", "dummy.docx", job=job)
+                self.assertTrue(res.ok)
+                self.assertEqual(res.engine, "docling_gpu")
+                mock_conv.assert_called_once()
+
+    def test_pdf_to_word_no_docling_gpu_fallback_for_scans(self):
+        from fusion_reader_v2.pdf_to_docx import convert_pdf_to_docx, JobStatus
+        import fusion_reader_v2.pdf_to_docx as pdf_to_docx
+        from unittest.mock import patch
+
+        # Mock is_docling_gpu_available to False
+        # Mock _extract_pages_text to return empty text (scanned)
+        with mock.patch("fusion_reader_v2.pdf_to_docx.is_docling_gpu_available", return_value=False):
+            with mock.patch("fusion_reader_v2.pdf_to_docx._extract_pages_text", return_value=["", ""]):
+                job = JobStatus(job_id="test_no_gpu")
+                res = convert_pdf_to_docx("dummy.pdf", "dummy.docx", job=job)
+                self.assertFalse(res.ok)
+                self.assertIn("Motor Docling GPU no disponible", res.error)
 
     def test_pdf_to_word_ocr_cleanup_logic(self):
         from fusion_reader_v2.pdf_to_docx import _clean_ocr_line, _is_noise_line, _detect_heading, _should_merge_with_previous

@@ -113,7 +113,13 @@ cdef8ab Respect literal document reading requests
 - `dd90001`: separación `document` vs `anchor` en modo libre/documento.
 - `d97dd52`: proveedor STT activo visible en UI.
 - `cdef8ab`: disciplina de lectura literal vs interpretación.
-- herramienta auxiliar PDF -> Word.
+- [x] Background PDF → Word tool.
+- [x] OCR fallback with Tesseract (Legacy).
+- [x] Professional OCR with Docling GPU (Mandatory for scans/complex PDFs).
+- [x] Isolated GPU venv for Docling (RTX 5090).
+- [x] No silent CPU fallback for Docling.
+- [x] Markdown to DOCX post-processing.
+- [x] Progress reporting and cancellation.
 
 ## Herramienta auxiliar PDF -> Word
 

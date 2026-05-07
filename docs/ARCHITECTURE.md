@@ -154,13 +154,16 @@ Propiedades:
 
 - es una utilidad lateral, no parte del core conversacional del lector;
 - no carga el resultado en Fusion ni reemplaza el documento activo;
-- convierte PDF digital a DOCX estructurado y editable;
-- prioriza orden de lectura, párrafos limpios y headings heurísticos;
+- convierte PDF (digital o escaneado) a DOCX estructurado y editable;
+- motor principal: **Docling GPU** (aceleración NVIDIA RTX 5090) para máxima calidad editorial;
+- motor secundario: `pdftotext` (rápido) para PDFs digitales simples;
+- fallback legado: `ocr_tesseract` (deprecado para documentos largos);
+- flujo: PDF → Docling GPU → Markdown → `python-docx` → Descargas;
+- no usa CPU fallback para Docling para evitar bloqueos de UI (mínimo 60 min en CPU vs 7 min en GPU);
 - guarda el resultado en `~/Descargas` o `~/Downloads`;
 - ofrece un enlace HTTP de descarga efímero para el DOCX recién generado;
 - omite imágenes por defecto;
 - no usa LibreOffice;
-- no hace OCR en v1: si el PDF no tiene texto extraíble, falla con mensaje explícito.
 
 ## Investigación externa
 

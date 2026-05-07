@@ -6,6 +6,8 @@ import zipfile
 import tempfile
 import threading
 import time
+import os
+import shutil
 from dataclasses import dataclass, field
 from html import escape
 from pathlib import Path
@@ -101,81 +103,84 @@ def convert_pdf_to_docx(
     pages = _page_count(pdf_path)
     if job:
         job.total_pages = pages
-        job.stage = "extract_text"
-        job.message = "Buscando texto extraíble..."
+        job.stage = "preflight"
+        job.message = "Verificando motor de conversión..."
         if status_callback: status_callback(job)
 
-    # Initial fast check
-    page_texts = _extract_pages_text(pdf_path, limit=20) # Just check first few to decide engine
-    meaningful_pages = [text for text in page_texts if _has_meaningful_text(text)]
+    # Motor priority:
+    # 1. Docling GPU (if available) - Professional quality
+    # 2. pdftotext (if textual) - High speed
+    # 3. OCR Tesseract (last resort fallback for simple scans)
+
+    docling_gpu_venv = _get_docling_gpu_env()
     
-    if not meaningful_pages:
+    if is_docling_gpu_available():
+        if job:
+            job.stage = "docling_gpu"
+            job.message = "Procesando con Docling GPU (Acelerado)..."
+            if status_callback: status_callback(job)
+        
         try:
-            if job:
-                job.stage = "ocr"
-                if status_callback: status_callback(job)
-            
-            page_texts = _ocr_pdf_pages(pdf_path, status_callback=status_callback, job=job)
-            engine = "ocr_tesseract"
-            warnings.append("Este PDF parece escaneado: se aplicó OCR para extraer el texto. La estructura puede requerir revisión manual.")
+            return _convert_with_docling_gpu(pdf_path, output_path, job=job, status_callback=status_callback)
         except Exception as e:
-            err_msg = str(e)
+            err_msg = f"Fallo en Docling GPU: {e}"
             if job:
                 job.state = "error"
                 job.error = err_msg
                 if status_callback: status_callback(job)
-            return ConversionResult(
-                False,
-                output_path=str(output_path),
-                pages=pages,
-                warnings=[],
-                engine="pdftotext",
-                text_blocks=0,
-                notes_detected=0,
-                error=err_msg,
-            )
-    else:
-        # Full extraction if it's textual
+            return ConversionResult(False, error=err_msg, pages=pages, output_path=str(output_path))
+
+    # Fallback to legacy engines if Docling GPU is not available
+    # Initial fast check for textual content
+    page_texts_sample = _extract_pages_text(pdf_path, limit=20) 
+    meaningful_pages = [text for text in page_texts_sample if _has_meaningful_text(text)]
+    
+    if not meaningful_pages:
+        # It's a scan and we don't have Docling GPU
+        err_msg = "Motor Docling GPU no disponible. No se usó CPU fallback para evitar tiempos de conversión excesivos en este PDF escaneado."
         if job:
-            job.message = "Extrayendo texto de todas las páginas..."
+            job.state = "error"
+            job.error = err_msg
             if status_callback: status_callback(job)
+        return ConversionResult(False, error=err_msg, pages=pages, output_path=str(output_path))
+    else:
+        # It's textual, use pdftotext (Legacy fast path)
+        if job:
+            job.stage = "extract_text"
+            job.message = "Extrayendo texto (pdftotext)..."
+            if status_callback: status_callback(job)
+        
         page_texts = _extract_pages_text(pdf_path)
         engine = "pdftotext"
 
-    if job and job.cancelled:
-        return ConversionResult(False, error="Operación cancelada por el usuario.")
+        if job and job.cancelled:
+            return ConversionResult(False, error="Operación cancelada por el usuario.")
 
-    if job:
-        job.stage = "build_docx"
-        job.message = "Generando archivo DOCX..."
-        if status_callback: status_callback(job)
+        if job:
+            job.stage = "build_docx"
+            job.message = "Generando archivo DOCX..."
+            if status_callback: status_callback(job)
 
-    blocks, notes_detected, metrics = build_docx_from_pdf_structure(page_texts, output_path)
-    
-    if pages and engine == "pdftotext":
-        # Recalculate meaningful for textual PDFs to warn about missing pages
-        meaningful_count = sum(1 for text in page_texts if _has_meaningful_text(text))
-        if meaningful_count < pages:
-            warnings.append("Algunas páginas no devolvieron texto extraíble.")
-
-    res = ConversionResult(
-        True,
-        output_path=str(output_path),
-        pages=pages or len(page_texts),
-        warnings=warnings,
-        engine=engine,
-        text_blocks=blocks,
-        notes_detected=notes_detected,
-        noise_lines_removed=metrics.get("noise_removed", 0),
-        paragraphs_merged=metrics.get("merged", 0),
-        headings_detected=metrics.get("headings", 0),
-        low_confidence_pages=metrics.get("low_confidence", 0),
-    )
-    if job:
-        job.result = res
-        job.warnings = list(warnings)
-        job.state = "done"
-    return res
+        blocks, notes_detected, metrics = build_docx_from_pdf_structure(page_texts, output_path)
+        
+        res = ConversionResult(
+            True,
+            output_path=str(output_path),
+            pages=pages or len(page_texts),
+            warnings=warnings,
+            engine=engine,
+            text_blocks=blocks,
+            notes_detected=notes_detected,
+            noise_lines_removed=metrics.get("noise_removed", 0),
+            paragraphs_merged=metrics.get("merged", 0),
+            headings_detected=metrics.get("headings", 0),
+            low_confidence_pages=metrics.get("low_confidence", 0),
+        )
+        if job:
+            job.result = res
+            job.warnings = list(warnings)
+            job.state = "done"
+        return res
 
 
 def build_docx_from_pdf_structure(page_texts: Iterable[str], output_docx: str | Path) -> tuple[int, int, dict]:
@@ -621,9 +626,101 @@ def _core_xml() -> str:
 """
 
 
-def _app_xml() -> str:
-    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-  <Application>Fusion Reader v2</Application>
-</Properties>
-"""
+def is_docling_gpu_available() -> bool:
+    venv = _get_docling_gpu_env()
+    if not venv.exists():
+        return False
+    python_exe = venv / "bin" / "python3"
+    if not python_exe.exists():
+        return False
+    
+    # Check for CUDA availability inside the venv
+    try:
+        proc = subprocess.run([
+            str(python_exe), "-c", "import torch; print(torch.cuda.is_available())"
+        ], capture_output=True, text=True, timeout=10)
+        return proc.stdout.strip() == "True"
+    except:
+        return False
+
+
+def _get_docling_gpu_env() -> Path:
+    return Path("/home/lucy-ubuntu/Escritorio/Fusion Total/runtime/fusion_reader_v2/pdf_engine_benchmark/venvs/docling_gpu_venv")
+
+
+def _convert_with_docling_gpu(
+    pdf_path: Path, 
+    output_path: Path,
+    job: JobStatus | None = None,
+    status_callback: Callable[[JobStatus], None] | None = None
+) -> ConversionResult:
+    venv = _get_docling_gpu_env()
+    docling_bin = venv / "bin" / "docling"
+    python_exe = venv / "bin" / "python3"
+    
+    with tempfile.TemporaryDirectory(prefix="docling_gpu_job_") as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        # 1. Run Docling GPU
+        # We use --device cuda and output to the temp dir. 
+        # Docling will create a .md file with the same name as the PDF.
+        try:
+            if job:
+                job.message = "Docling GPU: Ejecutando modelos de visión y OCR..."
+                if status_callback: status_callback(job)
+            
+            proc = subprocess.Popen([
+                str(docling_bin), "--device", "cuda", str(pdf_path), "--output", str(tmp_path)
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            
+            # Monitor progress (if possible) or just wait
+            while proc.poll() is None:
+                if job and job.cancelled:
+                    proc.terminate()
+                    proc.stdout.close()
+                    proc.stderr.close()
+                    return ConversionResult(False, error="Cancelado durante Docling GPU.", output_path=str(output_path))
+                time.sleep(1)
+            
+            stdout_data, stderr_data = proc.communicate()
+            
+            if proc.returncode != 0:
+                raise RuntimeError(f"Docling falló (code {proc.returncode}): {stderr_data}")
+                
+        except Exception as e:
+            raise RuntimeError(f"Error en fase Docling GPU: {e}")
+
+        # Find the generated markdown file
+        md_files = list(tmp_path.glob("*.md"))
+        if not md_files:
+            raise RuntimeError("Docling no generó ningún archivo Markdown.")
+        
+        md_file = md_files[0]
+        
+        # 2. Convert Markdown to DOCX using our helper script
+        if job:
+            job.stage = "build_docx"
+            job.message = "Generando DOCX desde Markdown estructurado..."
+            if status_callback: status_callback(job)
+            
+        helper_script = Path(__file__).parent / "md_to_docx.py"
+        try:
+            subprocess.run([
+                str(python_exe), str(helper_script), str(md_file), str(output_path)
+            ], check=True, capture_output=True, timeout=120)
+        except Exception as e:
+            raise RuntimeError(f"Error al convertir Markdown a DOCX: {e}")
+            
+        if job:
+            job.percent = 100
+            job.message = "Conversión completada con Docling GPU."
+            if status_callback: status_callback(job)
+            
+        return ConversionResult(
+            True,
+            output_path=str(output_path),
+            pages=_page_count(pdf_path),
+            engine="docling_gpu",
+            headings_detected=0, # We don't count them here, docling did it
+            cleanup_applied=False # Docling handles its own cleanup
+        )
