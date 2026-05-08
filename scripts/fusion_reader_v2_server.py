@@ -443,14 +443,14 @@ INDEX_HTML = r"""<!doctype html>
     .dot.warn { background: var(--warn); }
     .reader {
       overflow: auto;
-      padding: 30px clamp(18px, 4vw, 56px) 14px;
+      padding: 24px clamp(24px, 3vw, 40px) 14px;
       display: flex;
-      align-items: flex-start;
+      align-items: stretch;
     }
     .chunk {
       width: 100%;
-      max-width: 980px;
-      margin: 0 auto;
+      max-width: none;
+      margin: 0;
       font-size: 22px;
       line-height: 1.45;
       color: var(--text);

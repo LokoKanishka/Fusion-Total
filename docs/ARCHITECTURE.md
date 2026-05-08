@@ -38,6 +38,7 @@ Propiedades:
 - reduce la fragmentacion de lectura y navegacion a costa de audios por bloque mas largos.
 - al renderizar un bloque nuevo, la UI resetea el viewport del lector al tope del contenedor scrolleable;
 - la cabecera del lector prioriza `document.loaded/title/current/total` para mostrar el documento activo y evita falsos "Ningun documento activo" por desfasajes del anchor.
+- el bloque visible del lector usa ahora el ancho completo del panel central, dejando solo padding lateral moderado para no volver a una columna angosta centrada.
 
 ## Diálogo
 

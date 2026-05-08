@@ -100,6 +100,7 @@ Estado consolidado:
 - Docling GPU disponible y operativo en runtime.
 - Chunking v2 de lectura activo: bloques tipo página, menos fragmentación y navegación más estable.
 - UI de lectura ajustada: el viewport del bloque vuelve arriba al cambiar de documento/bloque y la cabecera refleja el documento cargado aunque el anchor venga desfasado.
+- Layout visual del lector ensanchado: el texto usa casi todo el panel central con márgenes laterales moderados.
 
 Último commit relevante:
 
