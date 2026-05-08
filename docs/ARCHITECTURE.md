@@ -168,6 +168,9 @@ Propiedades:
 - ofrece un enlace HTTP de descarga efímero para el DOCX recién generado;
 - omite imágenes por defecto para asegurar un Word limpio y editable;
 - no usa LibreOffice;
+- alcance v1: funciona bien para textos académicos lineales y escaneos simples/medios;
+- no garantiza reconstrucción editorial perfecta en manuales complejos, libros con muchas imágenes, tablas, columnas o maquetación pesada;
+- cualquier capa de pulido adicional con IA/Qwen queda postergada como mejora futura opcional y no está implementada en esta etapa.
 
 ## Investigación externa
 

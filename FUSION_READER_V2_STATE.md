@@ -68,7 +68,7 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 181 OK
+tests.test_fusion_reader_v2: 192 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 ```
@@ -97,11 +97,12 @@ Estado consolidado:
 - Arquitectura de cinco ejes preservada y validada.
 - Smoke de lectura literal validado.
 - Smoke de conversión PDF -> DOCX validado con salida real en `~/Descargas`.
+- Docling GPU disponible y operativo en runtime.
 
 Último commit relevante:
 
 ```text
-cdef8ab Respect literal document reading requests
+4cf1ede Use local Spanish dictionary in glued word repair
 ```
 
 ## Historial corto de consolidación
@@ -135,7 +136,15 @@ cdef8ab Respect literal document reading requests
 - ofrece además una descarga HTTP efímera desde `/api/tools/pdf-to-docx/download/<id>`;
 - omite imágenes por defecto;
 - no usa LibreOffice en esta v1;
-- no incluye OCR: si el PDF parece escaneado sin texto extraíble, devuelve error claro.
+- usa Docling GPU para PDFs digitales y escaneos simples/medios;
+- no usa CPU fallback silencioso para PDFs escaneados largos o pesados.
+
+## Alcance de PDF -> Word v1
+
+- funcional para textos académicos lineales y escaneos simples/medios;
+- validado operativamente con `sample_a` y con conversiones reales como `Platon El banquete` y `Ars Magica` para uso académico editable;
+- no garantiza reconstrucción editorial perfecta en manuales complejos, libros con muchas imágenes, tablas, columnas o maquetación pesada;
+- el pulido adicional con IA/Qwen queda postergado como mejora futura opcional y no forma parte de esta v1.
 
 ## Arranque recomendado
 
