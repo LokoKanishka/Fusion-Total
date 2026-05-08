@@ -98,6 +98,7 @@ Estado consolidado:
 - Smoke de lectura literal validado.
 - Smoke de conversión PDF -> DOCX validado con salida real en `~/Descargas`.
 - Docling GPU disponible y operativo en runtime.
+- Chunking v2 de lectura activo: bloques tipo página, menos fragmentación y navegación más estable.
 
 Último commit relevante:
 
@@ -160,6 +161,16 @@ Notas:
 - `start_fusion_reader_v2.sh` no levanta `8021` automáticamente.
 - `open_fusion_reader.sh` sí contempla el arranque del STT dedicado.
 - Si `8021` no está arriba, Fusion sigue operativo por `whisper_cli`.
+
+## Chunking v2 de lectura
+
+- objetivo por bloque: ~2200 caracteres;
+- mínimo normal: ~1200 caracteres;
+- máximo duro: ~3200 caracteres;
+- títulos y párrafos cortos se empaquetan con el contenido siguiente;
+- párrafos largos se dividen por oración y, si hace falta, por palabras;
+- mejora principal: menos bloques diminutos, mejor lectura continua y mejor navegación;
+- impacto esperado: audios por bloque más largos, pero mucha menos fragmentación entre avances.
 
 ## Memory MCP read-only v1
 

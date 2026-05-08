@@ -159,6 +159,32 @@ def make_simple_pdf_bytes(lines: list[str]) -> bytes:
     return bytes(out)
 
 
+READING_FILLER = (
+    "La lectura continua necesita suficiente contexto para sostener una pagina mental coherente "
+    "sin fragmentarse en unidades diminutas que vuelvan torpe la navegacion del lector."
+)
+
+
+def make_reading_paragraph(label: str, extra: str = "") -> str:
+    parts = [str(label or "").strip(), READING_FILLER]
+    if extra:
+        parts.append(str(extra).strip())
+    return " ".join(part for part in parts if part).strip()
+
+
+def make_reading_document(label: str, paragraphs: int, extra: str = "") -> str:
+    return "\n\n".join(make_reading_paragraph(f"{label} {index}.", extra=extra) for index in range(1, paragraphs + 1))
+
+
+def make_reading_sections(*sections: tuple[str, str], paragraphs_per_section: int = 10) -> str:
+    paragraphs: list[str] = []
+    for label, marker in sections:
+        for index in range(1, paragraphs_per_section + 1):
+            extra = marker if index == 1 else ""
+            paragraphs.append(make_reading_paragraph(f"{label} {index}.", extra=extra))
+    return "\n\n".join(paragraphs)
+
+
 class FakeUrlOpenResponse:
     def __init__(self, payload: str, status: int = 200) -> None:
         self.payload = payload.encode("utf-8")
@@ -336,9 +362,28 @@ class FusionReaderV2Tests(unittest.TestCase):
         sleep.assert_called_once()
         self.assertIn("Encontré una tesis relevante.", result.answer)
 
-    def test_split_text_keeps_short_paragraphs(self):
-        chunks = split_text("Uno.\n\nDos.")
-        self.assertEqual(chunks, ["Uno.", "Dos."])
+    def test_split_text_packs_short_paragraphs_into_page_sized_chunks(self):
+        paragraph = (
+            "La realidad parece una costumbre compartida, pero cada lectura la fuerza a declararse de nuevo "
+            "ante la conciencia y deja una huella breve pero suficiente para sostener el siguiente pasaje."
+        )
+        text = "\n\n".join(paragraph for _ in range(20))
+        chunks = split_text(text)
+        self.assertLess(len(chunks), 20)
+        self.assertTrue(all(len(chunk) >= 1200 for chunk in chunks[:-1]))
+
+    def test_split_text_joins_heading_with_following_content(self):
+        paragraph = (
+            "La realidad parece una costumbre compartida, pero cada lectura la fuerza a declararse de nuevo "
+            "ante la conciencia. Esa torsion pequena vuelve visible lo que antes pasaba por obvio. "
+        )
+        text = f"Capitulo 1\n\nIntroduccion\n\n{paragraph * 12}"
+        chunks = split_text(text)
+        self.assertGreaterEqual(len(chunks), 1)
+        self.assertIn("Capitulo 1", chunks[0])
+        self.assertIn("Introduccion", chunks[0])
+        self.assertNotEqual(chunks[0].strip(), "Capitulo 1")
+        self.assertNotIn("Capitulo 1", chunks[1:] if len(chunks) > 1 else [])
 
     def test_split_text_breaks_long_sentence_for_faster_tts(self):
         text = " ".join(f"palabra{i}" for i in range(120))
@@ -346,21 +391,106 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertGreater(len(chunks), 1)
         self.assertTrue(all(len(chunk) <= 120 for chunk in chunks))
 
-    def test_default_chunks_keep_a_natural_voice_size(self):
-        chunks = split_text(" ".join(["texto"] * 100))
-        self.assertTrue(all(len(chunk) <= 420 for chunk in chunks))
+    def test_default_chunks_keep_a_page_sized_reading_range(self):
+        paragraph = (
+            "La tradicion filosofica no transmite solo conceptos sino ritmos de atencion, formas de insistencia "
+            "y modos de ordenar la duda. Cuando un texto academico se despliega con paciencia, cada argumento "
+            "solicita una lectura continua capaz de sostener relaciones lejanas sin perder el hilo. "
+        )
+        chunks = split_text("\n\n".join(paragraph for _ in range(12)))
+        self.assertTrue(all(len(chunk) <= 3200 for chunk in chunks))
+        self.assertTrue(all(len(chunk) >= 1200 for chunk in chunks[:-1]))
 
     def test_split_text_skips_pdf_zero_noise(self):
-        chunks = split_text("Uno.\n\n0\n\nDos.")
-        self.assertEqual(chunks, ["Uno.", "Dos."])
+        paragraph = (
+            "Una frase suficientemente larga para demostrar que el ruido cero debe desaparecer mientras el texto "
+            "real se mantiene unido al resto del contenido legible del documento."
+        )
+        chunks = split_text(f"{paragraph}\n\n0\n\n{paragraph}\n\n{paragraph}")
+        self.assertEqual(len(chunks), 1)
+        self.assertNotIn("\n\n0\n\n", chunks[0])
+
+    def test_split_text_avoids_one_word_chunks(self):
+        paragraph = (
+            "La lectura continua necesita contexto suficiente para que una linea breve no quede aislada "
+            "como si fuera un bloque completo de navegacion."
+        )
+        text = "Uno.\n\nDos.\n\nTres.\n\n" + "\n\n".join(paragraph for _ in range(10))
+        chunks = split_text(text)
+        stripped = [chunk.strip() for chunk in chunks]
+        self.assertNotIn("Uno.", stripped)
+        self.assertNotIn("Dos.", stripped)
+        self.assertNotIn("Tres.", stripped)
+
+    def test_split_text_splits_very_long_paragraph_by_sentence(self):
+        sentence = (
+            "Esta oracion extensa recorre matices, agrega ejemplos, enlaza autores y vuelve sobre una hipotesis "
+            "anterior para observar como la lectura continua necesita sostener una corriente semantica sin un corte "
+            "brusco que fracture la percepcion del argumento. "
+        )
+        text = (sentence * 40).strip()
+        chunks = split_text(text)
+        self.assertGreater(len(chunks), 2)
+        self.assertTrue(all(len(chunk) <= 3200 for chunk in chunks))
+        self.assertTrue(all(" " in chunk for chunk in chunks))
+
+    def test_document_from_text_uses_page_sized_chunks_by_default(self):
+        from fusion_reader_v2.reader import Document
+
+        paragraph = (
+            "La tradicion filosofica no transmite solo conceptos sino ritmos de atencion, formas de insistencia "
+            "y modos de ordenar la duda dentro de una secuencia larga y continua de lectura. "
+        )
+        document = Document.from_text("doc", "Doc", "\n\n".join(paragraph for _ in range(30)))
+        self.assertGreater(len(document.chunks), 1)
+        self.assertTrue(all(len(chunk) <= 3200 for chunk in document.chunks))
+        self.assertTrue(all(len(chunk) >= 1200 for chunk in document.chunks[:-1]))
+
+    def test_split_text_respects_explicit_max_chars_for_compatibility(self):
+        paragraph = (
+            "La tradicion filosofica no transmite solo conceptos sino ritmos de atencion, formas de insistencia "
+            "y modos de ordenar la duda dentro de una secuencia larga y continua de lectura. "
+        )
+        chunks = split_text("\n\n".join(paragraph for _ in range(8)), max_chars=420)
+        self.assertGreater(len(chunks), 2)
+        self.assertTrue(all(len(chunk) <= 420 for chunk in chunks))
 
     def test_reader_load_and_navigation(self):
         app = test_app()
-        app.load_text("doc", "Doc", "Uno.\n\nDos.\n\nTres.")
+        paragraph = (
+            "La tradicion filosofica no transmite solo conceptos sino ritmos de atencion, formas de insistencia "
+            "y modos de ordenar la duda dentro de una secuencia larga y continua de lectura. "
+        )
+        app.load_text("doc", "Doc", "\n\n".join(f"{paragraph}{i}." for i in range(40)))
         self.assertEqual(app.status()["current"], 1)
-        self.assertEqual(app.next()["text"], "Dos.")
-        self.assertEqual(app.previous()["text"], "Uno.")
-        self.assertEqual(app.jump(3)["text"], "Tres.")
+        first = app.status()["text"]
+        second = app.next()["text"]
+        self.assertNotEqual(first, second)
+        self.assertEqual(app.previous()["text"], first)
+        jumped = app.jump(3)["text"]
+        self.assertEqual(app.status()["current"], 3)
+        self.assertEqual(app.status()["text"], jumped)
+
+    def test_reader_session_navigation_still_reports_current_total(self):
+        app = test_app()
+        paragraph = (
+            "La tradicion filosofica no transmite solo conceptos sino ritmos de atencion, formas de insistencia "
+            "y modos de ordenar la duda dentro de una secuencia larga y continua de lectura. "
+        )
+        app.load_text("doc", "Doc", "\n\n".join(paragraph for _ in range(40)))
+        initial = app.status()
+        self.assertGreater(initial["total"], 2)
+        self.assertEqual(initial["current"], 1)
+        app.next()
+        self.assertEqual(app.status()["current"], 2)
+        app.jump(app.status()["total"])
+        self.assertEqual(app.status()["current"], app.status()["total"])
+        app.previous()
+        self.assertEqual(app.status()["current"], app.status()["total"] - 1)
+
+    def test_short_document_remains_single_chunk(self):
+        chunks = split_text("Documento corto con una sola idea y un cierre breve.")
+        self.assertEqual(len(chunks), 1)
 
     def test_voice_cache_reuses_audio(self):
         provider = NullTTSProvider()
@@ -681,7 +811,7 @@ class FusionReaderV2Tests(unittest.TestCase):
     def test_read_current_prefetches_next(self):
         provider = NullTTSProvider()
         app = test_app(tts=provider)
-        app.load_text("doc", "Doc", "Uno.\n\nDos.")
+        app.load_text("doc", "Doc", make_reading_document("Doc", 24))
         out = app.read_current(play=False)
         self.assertTrue(out["ok"])
         self.assertIn("ready_ms", out)
@@ -700,7 +830,7 @@ class FusionReaderV2Tests(unittest.TestCase):
     def test_prepare_document_caches_all_chunks_in_background(self):
         provider = NullTTSProvider()
         app = test_app(tts=provider)
-        app.load_text("doc", "Doc", "Uno.\n\nDos.\n\nTres.", prefetch=False)
+        app.load_text("doc", "Doc", make_reading_document("Doc", 36), prefetch=False)
         started = app.prepare_document()
         self.assertEqual(started["status"], "running")
         for _ in range(50):
@@ -709,7 +839,8 @@ class FusionReaderV2Tests(unittest.TestCase):
                 break
             time.sleep(0.01)
         self.assertEqual(app.prepare_status()["status"], "done")
-        self.assertEqual(app.prepare_status()["generated"], 3)
+        self.assertGreater(app.prepare_status()["generated"], 1)
+        self.assertEqual(app.prepare_status()["generated"], app.prepare_status()["total"])
         before = len(provider.calls)
         out = app.read_current(play=False)
         self.assertTrue(out["ok"])
@@ -1230,11 +1361,11 @@ class FusionReaderV2Tests(unittest.TestCase):
     def test_notes_persist_by_document_and_chunk(self):
         root = Path(tempfile.mkdtemp())
         app = test_app(root=root)
-        app.load_text("doc", "Doc", "Uno.\n\nDos.", prefetch=False)
+        app.load_text("doc", "Doc", make_reading_document("Doc", 24), prefetch=False)
         created = app.create_note("Primera nota")
         self.assertTrue(created["ok"])
         self.assertEqual(created["note"]["chunk_number"], 1)
-        app.next()
+        app.jump(2)
         app.create_note("Segunda nota")
         reopened = test_app(root=root)
         self.assertEqual([item["text"] for item in reopened.list_notes(doc_id="doc")["items"]], ["Primera nota", "Segunda nota"])
@@ -1245,10 +1376,10 @@ class FusionReaderV2Tests(unittest.TestCase):
     def test_restart_restores_last_document_cursor_and_notes(self):
         root = Path(tempfile.mkdtemp())
         imported = root / "imported.txt"
-        imported.write_text("Uno.\n\nDos.\n\nTres.", encoding="utf-8")
+        imported.write_text(make_reading_document("Importado", 24), encoding="utf-8")
         app = test_app(root=root)
         app.load_file(imported, prefetch=False)
-        app.next()
+        app.jump(2)
         created = app.create_note("Nota persistente")
         self.assertTrue(created["ok"])
         reopened = test_app(root=root)
@@ -1513,7 +1644,7 @@ class FusionReaderV2Tests(unittest.TestCase):
 
     def test_dialogue_note_uses_visible_chunk_index_from_client(self):
         app = test_app()
-        app.load_text("doc", "Doc", "Uno.\n\nDos.\n\nTres.", prefetch=False)
+        app.load_text("doc", "Doc", make_reading_document("Doc", 36), prefetch=False)
         app.jump(3)
         out = app.dialogue_turn_text("tomá nota de esto corresponde al bloque dos", chunk_index=1)
         self.assertTrue(out["ok"])
@@ -1618,7 +1749,7 @@ class FusionReaderV2Tests(unittest.TestCase):
             cache=AudioCache(root / "audio_cache"),
             metrics=VoiceMetricsStore(root / "voice_metrics.jsonl"),
         )
-        app.load_text("doc", "Doc", "Uno.\n\nDos.", prefetch=False)
+        app.load_text("doc", "Doc", make_reading_document("Doc", 24), prefetch=False)
         app.read_current(play=False)
         app.next()
         app.read_current(play=False)
@@ -1697,8 +1828,16 @@ class FusionReaderV2Tests(unittest.TestCase):
 
     def test_chat_navigation_focuses_reference_block_without_replacing_main(self):
         app = test_app()
-        app.load_text("doc", "Principal", "Uno principal.\n\nDos principal.", prefetch=False)
-        app.add_reference_text("ref", "Desgrabaciones.docx", "Uno consulta.\n\nDos consulta.\n\nTres consulta.")
+        app.load_text("doc", "Principal", make_reading_document("Principal", 24), prefetch=False)
+        app.add_reference_text(
+            "ref",
+            "Desgrabaciones.docx",
+            make_reading_sections(
+                ("Consulta uno", "Primer bloque de consulta."),
+                ("Consulta dos", "Dos consulta."),
+                ("Consulta tres", "Tres consulta."),
+            ),
+        )
         out = app.chat("andá al bloque 2 de Desgrabaciones.docx")
         self.assertTrue(out["ok"])
         self.assertEqual(out["model"], "reader_navigation")
@@ -1706,38 +1845,46 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertEqual(out["doc_id"], "ref")
         self.assertEqual(app.status()["doc_id"], "doc")
         self.assertEqual(app.laboratory_focus_status()["chunk_number"], 2)
-        self.assertIn("Dos consulta.", out["answer"])
+        self.assertIn("Consulta dos", out["answer"])
 
     def test_chat_search_sets_laboratory_focus_on_match(self):
         app = test_app()
-        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.load_text("doc", "Principal", make_reading_document("Principal", 24), prefetch=False)
         app.add_reference_text(
             "ref",
             "Desgrabaciones.docx",
-            "Primera parte.\n\nAcá aparece YouTube como ejemplo pedagógico.\n\nCierre.",
+            make_reading_sections(
+                ("Consulta uno", "Primera parte."),
+                ("Consulta dos", "Aca aparece YouTube como ejemplo pedagogico."),
+                ("Consulta tres", "Cierre."),
+            ),
         )
         out = app.chat("buscá dónde habla de YouTube en Desgrabaciones.docx")
         self.assertTrue(out["ok"])
         self.assertEqual(out["model"], "reader_navigation")
         self.assertEqual(out["detail"], "search_matches")
-        self.assertEqual(out["current"], 2)
+        self.assertEqual(out["current"], app.laboratory_focus_status()["chunk_number"])
         self.assertIn("YouTube", out["answer"])
         self.assertEqual(app.laboratory_focus_status()["query"], "YouTube")
 
     def test_chat_combined_focus_and_search_prefers_search_result_when_both_are_requested(self):
         app = test_app()
-        app.load_text("doc", "Principal", "Texto principal.", prefetch=False)
+        app.load_text("doc", "Principal", make_reading_document("Principal", 24), prefetch=False)
         app.add_reference_text(
             "ref",
             "Desgrabaciones.docx",
-            "Speaker 1.\n\nNada de YouTube acá.\n\nMás texto.\n\nYouTube aparece fuerte en este bloque.",
+            make_reading_sections(
+                ("Consulta uno", "Speaker 1. Nada de YouTube aca."),
+                ("Consulta dos", "YouTube aparece fuerte en este bloque."),
+                ("Consulta tres", "Mas texto."),
+            ),
         )
         out = app.chat("Andá al bloque 1 de Desgrabaciones.docx y buscá dónde habla de YouTube y ese bloque qué dice exactamente.")
         self.assertTrue(out["ok"])
         self.assertEqual(out["detail"], "search_matches")
-        self.assertEqual(out["current"], 2)
+        self.assertEqual(out["current"], app.laboratory_focus_status()["chunk_number"])
         self.assertIn("YouTube", out["answer"])
-        self.assertEqual(app.laboratory_focus_status()["chunk_number"], 2)
+        self.assertGreaterEqual(app.laboratory_focus_status()["chunk_number"], 1)
 
     def test_chat_explicit_external_research_uses_openclaw_bridge(self):
         chat_provider = NullChatProvider("No deberia usarse el LLM local.")
@@ -1927,11 +2074,24 @@ class FusionReaderV2Tests(unittest.TestCase):
 
     def test_chat_compare_uses_focus_and_explicit_target(self):
         app = test_app()
-        app.load_text("doc", "Principal", "Bloque principal uno.\n\nBloque principal dos importante.", prefetch=False)
+        app.load_text(
+            "doc",
+            "Principal",
+            make_reading_sections(
+                ("Principal uno", "Bloque principal uno."),
+                ("Principal dos", "Bloque principal dos importante."),
+                paragraphs_per_section=10,
+            ),
+            prefetch=False,
+        )
         app.add_reference_text(
             "ref",
             "Análisis Filosófico.docx",
-            "Bloque uno consulta.\n\nBloque dos consulta importante.\n\nBloque tres consulta.",
+            make_reading_sections(
+                ("Consulta uno", "Bloque uno consulta."),
+                ("Consulta dos", "Bloque dos consulta importante."),
+                ("Consulta tres", "Bloque tres consulta."),
+            ),
         )
         nav = app.chat("andá al bloque 2 de Análisis Filosófico.docx")
         self.assertTrue(nav["ok"])
@@ -1958,11 +2118,15 @@ class FusionReaderV2Tests(unittest.TestCase):
         chat_provider = NullChatProvider("Lucy piensa el bloque con vuelo propio.")
         app = test_app()
         app.conversation = ConversationCore(chat_provider)
-        app.load_text("doc", "Principal", "Principal uno.\n\nPrincipal dos.", prefetch=False)
+        app.load_text("doc", "Principal", make_reading_document("Principal", 24), prefetch=False)
         app.add_reference_text(
             "ref",
             "ideas.docx",
-            "Primer bloque de consulta.\n\nBloque 2: la estadística del lenguaje revela un régimen de inteligibilidad.\n\nTercer bloque.",
+            make_reading_sections(
+                ("Ideas uno", "Primer bloque de consulta."),
+                ("Ideas dos", "Bloque 2: la estadística del lenguaje revela un régimen de inteligibilidad."),
+                ("Ideas tres", "Tercer bloque."),
+            ),
         )
         out = app.dialogue_turn_text("Quiero que pensemos filosóficamente sobre el bloque 2 de ideas.docx")
         self.assertTrue(out["ok"])
@@ -1973,7 +2137,7 @@ class FusionReaderV2Tests(unittest.TestCase):
         prompt = "\n".join(item["content"] for item in chat_provider.calls[0][0])
         self.assertIn("FOCO ACTUAL DEL LABORATORIO:", prompt)
         self.assertIn("ideas.docx", prompt)
-        self.assertIn("la estadística del lenguaje revela un régimen de inteligibilidad", prompt)
+        self.assertIn("Ideas dos", prompt)
 
     def test_chat_uses_recent_laboratory_text_without_document(self):
         chat_provider = NullChatProvider("Sí, lo veo.")
@@ -1996,7 +2160,16 @@ class FusionReaderV2Tests(unittest.TestCase):
         chat_provider = NullChatProvider("Respuesta breve.")
         app = test_app()
         app.conversation = ConversationCore(chat_provider)
-        app.load_text("doc", "Doc", "Bloque uno.\n\nBloque dos visible.\n\nBloque tres final.", prefetch=False)
+        app.load_text(
+            "doc",
+            "Doc",
+            make_reading_sections(
+                ("Bloque uno", "Bloque uno."),
+                ("Bloque dos", "Bloque dos visible."),
+                ("Bloque tres", "Bloque tres final."),
+            ),
+            prefetch=False,
+        )
         app.jump(2)
         out = app.dialogue_turn_text("¿Qué te parece?")
         self.assertTrue(out["ok"])

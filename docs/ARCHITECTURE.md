@@ -32,6 +32,10 @@ Propiedades:
 - cachea audio por texto + voz + idioma;
 - usa prefetch alrededor del cursor;
 - puede preparar documento completo en background.
+- chunking v2 tipo pagina: objetivo ~2200 caracteres, minimo normal ~1200 y maximo duro ~3200;
+- empaqueta titulos y parrafos cortos con el contenido siguiente para evitar bloques diminutos;
+- divide parrafos enormes por oracion y, si hace falta, por palabras para no romper el maximo duro;
+- reduce la fragmentacion de lectura y navegacion a costa de audios por bloque mas largos.
 
 ## Diálogo
 
