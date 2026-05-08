@@ -739,6 +739,36 @@ class FusionReaderV2Tests(unittest.TestCase):
         self.assertNotIn("renderStatus(data)", read_current)
         self.assertIn("playAudio(data)", read_current)
 
+    def test_server_ui_resets_reader_viewport_only_on_real_block_changes(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("function resetReaderViewport()", server)
+        self.assertIn("document.querySelector('.reader')", server)
+        self.assertIn("reader.scrollTop = 0;", server)
+        self.assertIn("const didChangeViewport = nextDocId !== lastRenderedDocId || nextBlockIndex !== lastRenderedBlockIndex || header.chunk !== lastRenderedBlockText;", server)
+        self.assertIn("if (didChangeViewport) {", server)
+        self.assertIn("resetReaderViewport();", server)
+
+    def test_server_ui_reader_layout_starts_chunks_from_top(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn(".reader {\n      overflow: auto;\n      padding: 30px clamp(18px, 4vw, 56px) 14px;\n      display: flex;\n      align-items: flex-start;", server)
+        chunk_start = server.index(".chunk {")
+        chunk_end = server.index(".chunk.empty {", chunk_start)
+        chunk_css = server[chunk_start:chunk_end]
+        self.assertNotIn("transform: translateY(-8%);", chunk_css)
+
+    def test_server_ui_document_header_prefers_loaded_document_state(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        header_start = server.index("function documentHeaderState(data) {")
+        header_end = server.index("function dialogueAppliedReasoningLabel(data) {", header_start)
+        header_logic = server[header_start:header_end]
+        self.assertIn("const loaded = Boolean(item.loaded);", header_logic)
+        self.assertIn("const documentActive = Boolean(loaded || usesDocument || (title && (current > 0 || total > 0 || hasChunkText)));", header_logic)
+        self.assertIn("const documentAvailable = Boolean(anchor.document_available !== undefined ? anchor.document_available : documentActive);", header_logic)
+        self.assertIn("if (documentActive && title) {", header_logic)
+        self.assertIn("Documento — ${title}", header_logic)
+        self.assertIn("Modo libre", header_logic)
+        self.assertIn("Sin documento activo", header_logic)
+
     def test_dialogue_microphone_capture_diagnostics_are_exposed(self):
         root = Path(__file__).resolve().parents[1]
         server = (root / "scripts" / "fusion_reader_v2_server.py").read_text(encoding="utf-8")

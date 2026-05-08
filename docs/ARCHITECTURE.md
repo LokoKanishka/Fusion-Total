@@ -36,6 +36,8 @@ Propiedades:
 - empaqueta titulos y parrafos cortos con el contenido siguiente para evitar bloques diminutos;
 - divide parrafos enormes por oracion y, si hace falta, por palabras para no romper el maximo duro;
 - reduce la fragmentacion de lectura y navegacion a costa de audios por bloque mas largos.
+- al renderizar un bloque nuevo, la UI resetea el viewport del lector al tope del contenedor scrolleable;
+- la cabecera del lector prioriza `document.loaded/title/current/total` para mostrar el documento activo y evita falsos "Ningun documento activo" por desfasajes del anchor.
 
 ## Diálogo
 

@@ -68,7 +68,7 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 192 OK
+tests.test_fusion_reader_v2: 202 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 ```
@@ -99,11 +99,12 @@ Estado consolidado:
 - Smoke de conversión PDF -> DOCX validado con salida real en `~/Descargas`.
 - Docling GPU disponible y operativo en runtime.
 - Chunking v2 de lectura activo: bloques tipo página, menos fragmentación y navegación más estable.
+- UI de lectura ajustada: el viewport del bloque vuelve arriba al cambiar de documento/bloque y la cabecera refleja el documento cargado aunque el anchor venga desfasado.
 
 Último commit relevante:
 
 ```text
-4cf1ede Use local Spanish dictionary in glued word repair
+77f5528 Use page-sized reading chunks
 ```
 
 ## Historial corto de consolidación

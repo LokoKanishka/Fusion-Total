@@ -445,7 +445,7 @@ INDEX_HTML = r"""<!doctype html>
       overflow: auto;
       padding: 30px clamp(18px, 4vw, 56px) 14px;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
     }
     .chunk {
       width: 100%;
@@ -455,7 +455,6 @@ INDEX_HTML = r"""<!doctype html>
       line-height: 1.45;
       color: var(--text);
       overflow-wrap: anywhere;
-      transform: translateY(-8%);
     }
     .chunk.empty {
       color: var(--muted);
@@ -964,6 +963,9 @@ INDEX_HTML = r"""<!doctype html>
     const LAB_NOTES_DOC_ID = '__laboratory__';
     let status = null;
     let notesState = { docId: '', current: 0, items: [] };
+    let lastRenderedDocId = '';
+    let lastRenderedBlockIndex = 0;
+    let lastRenderedBlockText = '';
     const dialogue = {
       active: false,
       stream: null,
@@ -1323,9 +1325,21 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    function resetReaderViewport() {
+      const reader = document.querySelector('.reader');
+      if (reader && typeof reader.scrollTop === 'number') {
+        reader.scrollTop = 0;
+      }
+      if (els.chunk && typeof els.chunk.scrollTop === 'number') {
+        els.chunk.scrollTop = 0;
+      }
+    }
+
     function renderStatus(data) {
       const selectedNotesDocId = data.doc_id || LAB_NOTES_DOC_ID;
       const shouldRefreshNotes = selectedNotesDocId !== notesState.docId || data.current !== notesState.current || Boolean(data.notes && data.notes.count !== notesState.items.length);
+      const nextDocId = String(data.doc_id || data.document && data.document.doc_id || '');
+      const nextBlockIndex = Number(data.current || data.document && data.document.current || 0);
       status = data;
       renderReasoningStatus(data.reasoning || {});
       renderProfileStatus(data.profile || {});
@@ -1346,6 +1360,13 @@ INDEX_HTML = r"""<!doctype html>
       els.jumpInput.value = data.current || 1;
       els.chunk.textContent = header.chunk;
       els.chunk.classList.toggle('empty', !data.text);
+      const didChangeViewport = nextDocId !== lastRenderedDocId || nextBlockIndex !== lastRenderedBlockIndex || header.chunk !== lastRenderedBlockText;
+      if (didChangeViewport) {
+        resetReaderViewport();
+      }
+      lastRenderedDocId = nextDocId;
+      lastRenderedBlockIndex = nextBlockIndex;
+      lastRenderedBlockText = header.chunk;
       const ttsState = describeTtsStatus(data);
       const ttsOk = ttsState.state !== 'down';
       els.ttsDot.classList.toggle('ok', ttsOk);
@@ -1456,9 +1477,11 @@ INDEX_HTML = r"""<!doctype html>
       const title = String(item.title || data && data.title || '').trim();
       const current = Number(item.current || data && data.current || 0);
       const total = Number(item.total || data && data.total || 0);
+      const hasChunkText = Boolean(data && String(data.text || '').trim());
       const anchorMode = String(anchor.mode || currentLaboratoryMode() || 'document');
       const usesDocument = Boolean(anchor.uses_document);
-      const documentAvailable = Boolean(anchor.document_available !== undefined ? anchor.document_available : loaded);
+      const documentActive = Boolean(loaded || usesDocument || (title && (current > 0 || total > 0 || hasChunkText)));
+      const documentAvailable = Boolean(anchor.document_available !== undefined ? anchor.document_available : documentActive);
       if (anchorMode === 'free') {
         return {
           title: 'Modo libre',
@@ -1466,7 +1489,7 @@ INDEX_HTML = r"""<!doctype html>
           chunk: data && data.text ? data.text : 'Subí un documento para empezar.'
         };
       }
-      if (usesDocument && title) {
+      if (documentActive && title) {
         return {
           title: `Documento — ${title}`,
           meta: `Bloque ${current || 0} de ${total || 0}`,
