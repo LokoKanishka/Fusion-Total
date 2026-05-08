@@ -227,6 +227,33 @@ INDEX_HTML = r"""<!doctype html>
       border-top: 1px solid var(--line);
       padding-top: 10px;
     }
+    .audio-export-panel {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .audio-export-grid {
+      display: grid;
+      gap: 8px;
+    }
+    .audio-export-inline {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .audio-export-inline.single {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .audio-export-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .audio-export-hidden {
+      display: none;
+    }
     .reference-panel {
       display: grid;
       gap: 8px;
@@ -805,6 +832,30 @@ INDEX_HTML = r"""<!doctype html>
       <button id="clearDocBtn" class="compact-btn danger-btn" type="button" onclick="clearDocument()" style="margin-top:4px">Limpiar documento</button>
       <p id="prepareInfo" class="upload-info">Audio sin preparar.</p>
       <div class="progress-wrap" aria-hidden="true"><div id="prepareProgress" class="progress-bar"></div></div>
+      <details class="audio-export-panel" open>
+        <summary>Exportar audio</summary>
+        <div class="audio-export-grid">
+          <select id="audioExportMode" class="compact-select" aria-label="Modo de exportación de audio">
+            <option value="current">Bloque actual</option>
+            <option value="block">Bloque específico</option>
+            <option value="range">Rango</option>
+            <option value="full">Documento completo</option>
+          </select>
+          <div id="audioExportBlockWrap" class="audio-export-inline single audio-export-hidden">
+            <input id="audioExportBlockInput" class="compact-input" type="number" min="1" value="1" aria-label="Bloque específico">
+          </div>
+          <div id="audioExportRangeWrap" class="audio-export-inline audio-export-hidden">
+            <input id="audioExportStartInput" class="compact-input" type="number" min="1" value="1" aria-label="Bloque inicial">
+            <input id="audioExportEndInput" class="compact-input" type="number" min="1" value="1" aria-label="Bloque final">
+          </div>
+          <div class="audio-export-actions">
+            <button id="audioExportBtn" class="compact-btn" type="button">Generar</button>
+            <button id="audioExportCancelBtn" class="compact-btn" type="button">Cancelar</button>
+          </div>
+          <p id="audioExportInfo" class="upload-info">Sin exportación de audio activa.</p>
+          <a id="audioExportDownload" href="#" class="upload-info" style="display:none; font-weight: bold;" download>Descargar WAV</a>
+        </div>
+      </details>
       <details class="notes-panel" open>
         <summary id="notesSummary">Notas del documento</summary>
         <textarea id="noteInput" class="note-input" placeholder="Escribí una nota para el bloque actual..."></textarea>
@@ -916,6 +967,16 @@ INDEX_HTML = r"""<!doctype html>
       clearDocBtn: document.getElementById('clearDocBtn'),
       prepareInfo: document.getElementById('prepareInfo'),
       prepareProgress: document.getElementById('prepareProgress'),
+      audioExportMode: document.getElementById('audioExportMode'),
+      audioExportBlockWrap: document.getElementById('audioExportBlockWrap'),
+      audioExportBlockInput: document.getElementById('audioExportBlockInput'),
+      audioExportRangeWrap: document.getElementById('audioExportRangeWrap'),
+      audioExportStartInput: document.getElementById('audioExportStartInput'),
+      audioExportEndInput: document.getElementById('audioExportEndInput'),
+      audioExportBtn: document.getElementById('audioExportBtn'),
+      audioExportCancelBtn: document.getElementById('audioExportCancelBtn'),
+      audioExportInfo: document.getElementById('audioExportInfo'),
+      audioExportDownload: document.getElementById('audioExportDownload'),
       notesSummary: document.getElementById('notesSummary'),
       noteInput: document.getElementById('noteInput'),
       saveNoteBtn: document.getElementById('saveNoteBtn'),
@@ -966,6 +1027,7 @@ INDEX_HTML = r"""<!doctype html>
     let lastRenderedDocId = '';
     let lastRenderedBlockIndex = 0;
     let lastRenderedBlockText = '';
+    let audioExportPollingJobId = '';
     const dialogue = {
       active: false,
       stream: null,
@@ -1205,6 +1267,45 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    function syncAudioExportInputs() {
+      const mode = String(els.audioExportMode.value || 'current');
+      els.audioExportBlockWrap.classList.toggle('audio-export-hidden', mode !== 'block');
+      els.audioExportRangeWrap.classList.toggle('audio-export-hidden', mode !== 'range');
+    }
+
+    function renderAudioExportStatus(item) {
+      const data = item && typeof item === 'object' ? item : {};
+      const state = String(data.state || 'idle');
+      const cached = Number(data.cached_blocks || 0);
+      const generated = Number(data.generated_blocks || 0);
+      if (state === 'running' || state === 'queued' || state === 'canceling') {
+        const detail = data.detail || `Generando bloque ${Number(data.completed_blocks || 0) + 1} de ${Number(data.total_blocks || 0)}...`;
+        els.audioExportInfo.textContent = `${detail} Cacheados: ${cached} · Generados: ${generated}`;
+      } else if (state === 'done') {
+        els.audioExportInfo.textContent = `Listo: guardado en Descargas. Cacheados: ${cached} · Generados: ${generated}`;
+      } else if (state === 'cancelled') {
+        els.audioExportInfo.textContent = 'Exportación cancelada.';
+      } else if (state === 'error') {
+        els.audioExportInfo.textContent = data.error || data.detail || 'No pude exportar audio.';
+      } else {
+        els.audioExportInfo.textContent = 'Sin exportación de audio activa.';
+      }
+      if (data.download_url && state === 'done') {
+        els.audioExportDownload.href = data.download_url;
+        els.audioExportDownload.style.display = 'inline';
+      } else {
+        els.audioExportDownload.removeAttribute('href');
+        els.audioExportDownload.style.display = 'none';
+      }
+      if ((state === 'running' || state === 'queued' || state === 'canceling') && data.job_id && audioExportPollingJobId !== data.job_id) {
+        audioExportPollingJobId = data.job_id;
+        pollAudioExport(data.job_id).catch(() => {});
+      }
+      if (!['running', 'queued', 'canceling'].includes(state) && (!data.job_id || data.job_id === audioExportPollingJobId)) {
+        audioExportPollingJobId = '';
+      }
+    }
+
     function voiceLabel(filename) {
       const labels = {
         'female_01.wav': 'M01 — Afrodita',
@@ -1360,6 +1461,7 @@ INDEX_HTML = r"""<!doctype html>
       els.jumpInput.value = data.current || 1;
       els.chunk.textContent = header.chunk;
       els.chunk.classList.toggle('empty', !data.text);
+      renderAudioExportStatus(data.audio_export || {});
       const didChangeViewport = nextDocId !== lastRenderedDocId || nextBlockIndex !== lastRenderedBlockIndex || header.chunk !== lastRenderedBlockText;
       if (didChangeViewport) {
         resetReaderViewport();
@@ -2270,6 +2372,54 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    async function pollAudioExport(jobId) {
+      while (jobId && audioExportPollingJobId === jobId) {
+        await wait(1000);
+        const data = await api(`/api/audio-export/status/${jobId}`);
+        renderAudioExportStatus(data);
+        if (!['running', 'queued', 'canceling'].includes(String(data.state || 'idle'))) {
+          return data;
+        }
+      }
+      return null;
+    }
+
+    async function startAudioExport() {
+      const mode = String(els.audioExportMode.value || 'current');
+      const payload = { mode };
+      if (mode === 'block') {
+        payload.block = Number(els.audioExportBlockInput.value || 0);
+      } else if (mode === 'range') {
+        payload.start = Number(els.audioExportStartInput.value || 0);
+        payload.end = Number(els.audioExportEndInput.value || 0);
+      }
+      setBusy(true);
+      try {
+        const data = await api('/api/audio-export', payload);
+        renderAudioExportStatus(data);
+        log(data.detail || 'Exportación de audio iniciada.');
+      } catch (err) {
+        log(`No pude exportar audio: ${err.message}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function cancelAudioExport() {
+      const jobId = audioExportPollingJobId || String(status && status.audio_export && status.audio_export.job_id || '');
+      if (!jobId) {
+        log('No hay exportación de audio en curso.');
+        return;
+      }
+      try {
+        const data = await api(`/api/audio-export/cancel/${jobId}`, {});
+        renderAudioExportStatus(data);
+        log('Cancelando exportación de audio...');
+      } catch (err) {
+        log(`No pude cancelar la exportación: ${err.message}`);
+      }
+    }
+
     async function readNextWhenAudioEnds() {
       if (!els.continuousToggle.checked || !status || !status.total || status.current >= status.total) {
         return;
@@ -2928,6 +3078,9 @@ INDEX_HTML = r"""<!doctype html>
     els.jumpBtn.addEventListener('click', () => navigate('/api/jump', { index: Number(els.jumpInput.value || 1) }));
     els.prepareBtn.addEventListener('click', prepareDocument);
     els.cancelPrepareBtn.addEventListener('click', cancelPrepare);
+    els.audioExportMode.addEventListener('change', syncAudioExportInputs);
+    els.audioExportBtn.addEventListener('click', startAudioExport);
+    els.audioExportCancelBtn.addEventListener('click', cancelAudioExport);
     els.saveNoteBtn.addEventListener('click', saveCurrentNote);
     els.sendChatBtn.addEventListener('click', sendChat);
     els.clearLabHistoryBtn.addEventListener('click', clearLaboratoryHistory);
@@ -2947,6 +3100,7 @@ INDEX_HTML = r"""<!doctype html>
       }
     });
     els.player.addEventListener('ended', readNextWhenAudioEnds);
+    syncAudioExportInputs();
     els.dialoguePlayer.addEventListener('ended', () => {
       dialogue.speaking = false;
       if (dialogue.active) {
@@ -3353,6 +3507,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/prepare/status":
             self._json(200, APP.prepare_status())
             return
+        if path == "/api/audio-export/status":
+            self._json(200, APP.audio_export_overview())
+            return
         if path == "/api/references":
             self._json(200, APP.list_reference_documents())
             return
@@ -3420,6 +3577,26 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
             self.send_header("Content-Length", str(len(raw)))
             self.send_header("Content-Disposition", f"attachment; filename=\"{Path(str(item.get('filename') or 'documento.docx')).name}\"")
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+        if path.startswith("/api/audio-export/status/"):
+            job_id = Path(path).name
+            status = APP.audio_export_status(job_id)
+            self._json(200 if status.get("ok") else 404, status)
+            return
+        if path.startswith("/api/audio-export/download/"):
+            job_id = Path(path).name
+            item = APP.get_audio_export_download(job_id)
+            if not item.get("ok"):
+                self._json(404, item)
+                return
+            wav_path = Path(str(item.get("path") or "")).resolve()
+            raw = wav_path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Content-Disposition", f"attachment; filename=\"{Path(str(item.get('filename') or 'audio.wav')).name}\"")
             self.end_headers()
             self.wfile.write(raw)
             return
@@ -3643,6 +3820,20 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/prepare/cancel":
                 self._json(200, APP.cancel_prepare())
+                return
+            if path == "/api/audio-export":
+                self._json(
+                    200,
+                    APP.start_audio_export(
+                        str(payload.get("mode") or ""),
+                        block=int(payload.get("block")) if payload.get("block") is not None else None,
+                        start=int(payload.get("start")) if payload.get("start") is not None else None,
+                        end=int(payload.get("end")) if payload.get("end") is not None else None,
+                    ),
+                )
+                return
+            if path.startswith("/api/audio-export/cancel/"):
+                self._json(200, APP.cancel_audio_export(Path(path).name))
                 return
             if path == "/api/notes/create":
                 chunk_index = payload.get("chunk_index")

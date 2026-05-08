@@ -1,6 +1,6 @@
 # Fusion Reader v2 — Estado de Continuidad
 
-Fecha: 2026-05-06
+Fecha: 2026-05-08
 
 Esta es la hoja corta para retomar el proyecto sin perderse. La historia larga
 vive en `docs/HISTORY.md` y en los documentos históricos de diseño.
@@ -68,7 +68,7 @@ Reglas:
 ## Validación vigente
 
 ```text
-tests.test_fusion_reader_v2: 202 OK
+tests.test_fusion_reader_v2: 216 OK
 verify_voice_port_isolation.sh: OK
 legacy reader safety: 35 tests OK
 ```
@@ -101,11 +101,13 @@ Estado consolidado:
 - Chunking v2 de lectura activo: bloques tipo página, menos fragmentación y navegación más estable.
 - UI de lectura ajustada: el viewport del bloque vuelve arriba al cambiar de documento/bloque y la cabecera refleja el documento cargado aunque el anchor venga desfasado.
 - Layout visual del lector ensanchado: el texto usa casi todo el panel central con márgenes laterales moderados.
+- Exportación de audio v1 activa: bloque actual, bloque N, rango y documento completo con job en background, progreso, cancelación y salida WAV en `~/Descargas`.
+- La exportación reutiliza cache/TTS actual y, si AllTalk rechaza un bloque largo por tamaño, lo sintetiza por segmentos y recompone un WAV único sin tocar el chunking.
 
 Último commit relevante:
 
 ```text
-77f5528 Use page-sized reading chunks
+e2f654a Use wider reader text layout
 ```
 
 ## Historial corto de consolidación
@@ -173,6 +175,17 @@ Notas:
 - párrafos largos se dividen por oración y, si hace falta, por palabras;
 - mejora principal: menos bloques diminutos, mejor lectura continua y mejor navegación;
 - impacto esperado: audios por bloque más largos, pero mucha menos fragmentación entre avances.
+
+## Audio Export v1
+
+- modos soportados: bloque actual, bloque específico, rango y documento completo;
+- corre como job en background con estado `queued/running/done/error/cancelled`;
+- muestra progreso por bloques, cacheados y generados;
+- reutiliza `AudioCache` y el TTS actual sin cambiar motor, voces ni puertos;
+- concatena WAV localmente y guarda el resultado final en `~/Descargas` o `~/Downloads`;
+- ofrece descarga HTTP efímera desde `/api/audio-export/download/<job_id>`;
+- selección irregular de bloques queda postergada para una versión futura;
+- smoke real validado en `8010` con `Platon El Banquete`: bloque actual, bloque 2 y rango 1-2.
 
 ## Memory MCP read-only v1
 

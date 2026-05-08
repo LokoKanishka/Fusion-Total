@@ -6,11 +6,20 @@ import threading
 import time
 import os
 import re
+import tempfile
+import uuid
 import unicodedata
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .audio_export import (
+    AudioExportJob,
+    AudioExportSnapshot,
+    build_audio_export_filename,
+    concat_wav_files,
+    unique_audio_download_target,
+)
 from .conversation import ConversationCore
 from .dialogue import STTProvider, default_stt_provider
 from .metrics import VoiceMetric, VoiceMetricsStore
@@ -19,6 +28,7 @@ from .local_web_bridge import default_external_research_bridge
 from .openclaw_bridge import ExternalResearchBridge, ExternalResearchResult
 from .reader import Document, ReaderSession
 from .tts import AllTalkProvider, AudioArtifact, AudioCache, TTSProvider
+from .pdf_to_docx import find_downloads_dir
 
 LABORATORY_NOTES_DOC_ID = "__laboratory__"
 LABORATORY_NOTES_TITLE = "Laboratorio"
@@ -58,6 +68,7 @@ class FusionReaderV2:
         self.prefetch_wait_seconds = prefetch_wait_seconds
         self.prefetch_ahead = max(0, int(prefetch_ahead if prefetch_ahead is not None else os.environ.get("FUSION_READER_PREFETCH_AHEAD", "3")))
         self.prefetch_workers = max(1, int(prefetch_workers if prefetch_workers is not None else os.environ.get("FUSION_READER_PREFETCH_WORKERS", "1")))
+        self.tts_segment_chars = max(240, int(os.environ.get("FUSION_READER_TTS_SEGMENT_CHARS", "900")))
         self._executor = ThreadPoolExecutor(max_workers=self.prefetch_workers, thread_name_prefix="fusion-reader-v2-tts")
         self._prefetch_lock = threading.Lock()
         self._prefetch_futures: dict[int, Future[AudioArtifact]] = {}
@@ -71,6 +82,12 @@ class FusionReaderV2:
         self._prepare_thread: threading.Thread | None = None
         self._prepare_generation = 0
         self._prepare_status: dict = self._new_prepare_status()
+        self._audio_export_lock = threading.Lock()
+        self._audio_export_cancel = threading.Event()
+        self._audio_export_thread: threading.Thread | None = None
+        self._audio_export_jobs: dict[str, AudioExportJob] = {}
+        self._audio_export_active_job_id = ""
+        self._audio_export_latest_job_id = ""
         self._chat_lock = threading.Lock()
         self._chat_history: list[dict] = []
         self._dialogue_lock = threading.Lock()
@@ -416,6 +433,69 @@ class FusionReaderV2:
             "done_ts": 0.0,
         }
 
+    def _new_audio_export_job(self, snapshot: AudioExportSnapshot) -> AudioExportJob:
+        start_block = snapshot.blocks[0][0]
+        end_block = snapshot.blocks[-1][0]
+        job_id = uuid.uuid4().hex[:16]
+        filename = build_audio_export_filename(snapshot.title, start_block, end_block, snapshot.total_blocks)
+        return AudioExportJob(
+            job_id=job_id,
+            state="queued",
+            title=snapshot.title,
+            start_block=start_block,
+            end_block=end_block,
+            total_blocks=len(snapshot.blocks),
+            filename=filename,
+            detail="En cola para exportar audio.",
+            started_at=time.time(),
+            doc_id=snapshot.doc_id,
+            voice=snapshot.voice,
+            language=snapshot.language,
+            snapshot=snapshot,
+        )
+
+    def _resolve_audio_export_snapshot(
+        self,
+        mode: str,
+        block: int | None = None,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> AudioExportSnapshot:
+        document = self.session.document
+        if not document or not document.chunks:
+            raise ValueError("no_document_loaded")
+        total = len(document.chunks)
+        current_block = self.session.cursor + 1
+        normalized_mode = str(mode or "").strip().lower()
+        if normalized_mode == "current":
+            start_block = current_block
+            end_block = current_block
+        elif normalized_mode == "block":
+            chosen = int(block or 0)
+            if chosen < 1 or chosen > total:
+                raise ValueError("audio_export_block_out_of_range")
+            start_block = chosen
+            end_block = chosen
+        elif normalized_mode == "range":
+            start_block = int(start or 0)
+            end_block = int(end or 0)
+            if start_block < 1 or end_block < 1 or start_block > end_block or end_block > total:
+                raise ValueError("audio_export_range_invalid")
+        elif normalized_mode == "full":
+            start_block = 1
+            end_block = total
+        else:
+            raise ValueError("audio_export_mode_invalid")
+        blocks = [(index + 1, document.chunks[index]) for index in range(start_block - 1, end_block)]
+        return AudioExportSnapshot(
+            doc_id=document.doc_id,
+            title=document.title,
+            voice=self.voice.voice,
+            language=self.voice.language,
+            total_blocks=total,
+            blocks=blocks,
+        )
+
     def load_text(
         self,
         doc_id: str,
@@ -710,19 +790,116 @@ class FusionReaderV2:
             out["prefetch_done_indexes"] = sorted(index for index, future in self._prefetch_futures.items() if future.done())
             out["prefetch_ahead"] = self.prefetch_ahead
         out["prepare"] = self.prepare_status()
+        out["audio_export"] = self.audio_export_overview()
         out["notes"] = self.notes_summary()
         return out
 
     def _synthesize_cached(self, text: str) -> AudioArtifact:
-        cached = self.cache.get(text, self.voice.voice, self.voice.language)
+        return self._synthesize_cached_with_settings(text, self.voice.voice, self.voice.language)
+
+    def _synthesize_cached_with_settings(self, text: str, voice: str, language: str) -> AudioArtifact:
+        cached = self.cache.get(text, voice, language)
         if cached:
             return cached
         with self._tts_lock:
-            cached = self.cache.get(text, self.voice.voice, self.voice.language)
+            cached = self.cache.get(text, voice, language)
             if cached:
                 return cached
-            artifact = self.tts.synthesize(text, voice=self.voice.voice, language=self.voice.language)
-            return self.cache.put(text, self.voice.voice, self.voice.language, artifact)
+            artifact = self.tts.synthesize(text, voice=voice, language=language)
+            if not artifact.ok and artifact.detail == "http_400":
+                artifact = self._synthesize_segmented_with_settings(text, voice, language)
+            return self.cache.put(text, voice, language, artifact)
+
+    def _synthesize_segmented_with_settings(self, text: str, voice: str, language: str) -> AudioArtifact:
+        segment_limit = getattr(self.tts, "max_input_chars", 0) or self.tts_segment_chars
+        pieces = self._split_text_for_tts(text, max(80, int(segment_limit)))
+        if len(pieces) <= 1:
+            return AudioArtifact(False, provider=self.tts.name, detail="http_400")
+        artifacts: list[AudioArtifact] = []
+        paths: list[Path] = []
+        started = time.perf_counter()
+        try:
+            for piece in pieces:
+                artifact = self.tts.synthesize(piece, voice=voice, language=language)
+                if not artifact.ok or not artifact.path:
+                    return artifact
+                artifacts.append(artifact)
+                paths.append(Path(artifact.path))
+            fd, name = tempfile.mkstemp(prefix="fusion_reader_v2_segmented_", suffix=".wav")
+            os.close(fd)
+            output_path = Path(name)
+            method = concat_wav_files(paths, output_path)
+            return AudioArtifact(
+                True,
+                path=output_path,
+                provider=self.tts.name,
+                detail=f"segmented:{method}",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+        finally:
+            for path in paths:
+                try:
+                    if path.exists():
+                        path.unlink()
+                except Exception:
+                    continue
+
+    def _split_text_for_tts(self, text: str, max_chars: int) -> list[str]:
+        cleaned = str(text or "").strip()
+        if not cleaned:
+            return []
+        if len(cleaned) <= max_chars:
+            return [cleaned]
+        parts: list[str] = []
+        paragraphs = [piece.strip() for piece in re.split(r"\n\s*\n+", cleaned) if piece.strip()]
+        for paragraph in paragraphs or [cleaned]:
+            if len(paragraph) <= max_chars:
+                parts.append(paragraph)
+                continue
+            sentences = [piece.strip() for piece in re.split(r"(?<=[.!?])\s+", paragraph) if piece.strip()]
+            if not sentences:
+                sentences = [paragraph]
+            current = ""
+            for sentence in sentences:
+                if len(sentence) > max_chars:
+                    if current:
+                        parts.append(current)
+                        current = ""
+                    parts.extend(self._split_long_tts_unit(sentence, max_chars))
+                    continue
+                candidate = sentence if not current else f"{current} {sentence}"
+                if current and len(candidate) > max_chars:
+                    parts.append(current)
+                    current = sentence
+                else:
+                    current = candidate
+            if current:
+                parts.append(current)
+        return parts or [cleaned]
+
+    def _split_long_tts_unit(self, text: str, max_chars: int) -> list[str]:
+        words = text.split()
+        if not words:
+            return []
+        parts: list[str] = []
+        current = ""
+        for word in words:
+            if len(word) > max_chars:
+                if current:
+                    parts.append(current)
+                    current = ""
+                for offset in range(0, len(word), max_chars):
+                    parts.append(word[offset : offset + max_chars])
+                continue
+            candidate = word if not current else f"{current} {word}"
+            if current and len(candidate) > max_chars:
+                parts.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            parts.append(current)
+        return parts
 
     def _artifact_for_index(self, index: int, text: str) -> AudioArtifact:
         with self._prefetch_lock:
@@ -979,6 +1156,198 @@ class FusionReaderV2:
             self._prepare_status["message"] = message
             self._prepare_status["updated_ts"] = time.time()
             self._prepare_status["done_ts"] = time.time()
+
+    def audio_export_overview(self) -> dict:
+        with self._audio_export_lock:
+            job_id = self._audio_export_active_job_id or self._audio_export_latest_job_id
+            if not job_id or job_id not in self._audio_export_jobs:
+                return {
+                    "ok": True,
+                    "job_id": "",
+                    "state": "idle",
+                    "detail": "Sin exportación de audio activa.",
+                    "title": "",
+                    "start_block": 0,
+                    "end_block": 0,
+                    "total_blocks": 0,
+                    "completed_blocks": 0,
+                    "cached_blocks": 0,
+                    "generated_blocks": 0,
+                    "current_block": 0,
+                    "output_path": "",
+                    "filename": "",
+                    "download_url": "",
+                    "concat_method": "",
+                    "error": "",
+                }
+            return self._audio_export_jobs[job_id].to_dict()
+
+    def audio_export_status(self, job_id: str) -> dict:
+        clean = str(job_id or "").strip()
+        if not clean:
+            return self.audio_export_overview()
+        with self._audio_export_lock:
+            job = self._audio_export_jobs.get(clean)
+            if not job:
+                return {"ok": False, "error": "audio_export_job_not_found"}
+            return job.to_dict()
+
+    def start_audio_export(self, mode: str, block: int | None = None, start: int | None = None, end: int | None = None) -> dict:
+        try:
+            snapshot = self._resolve_audio_export_snapshot(mode, block=block, start=start, end=end)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        if any(not self.cache.get(text, snapshot.voice, snapshot.language) for _, text in snapshot.blocks):
+            tts_health = self.tts.health()
+            if not bool(tts_health.get("ok")):
+                return {
+                    "ok": False,
+                    "error": "tts_unavailable_for_audio_export",
+                    "detail": str(tts_health.get("detail") or ""),
+                }
+        with self._audio_export_lock:
+            if self._audio_export_thread and self._audio_export_thread.is_alive():
+                return {"ok": False, "error": "audio_export_busy", "detail": "Ya hay una exportación de audio en curso."}
+            self._audio_export_cancel.clear()
+            job = self._new_audio_export_job(snapshot)
+            job.download_url = f"/api/audio-export/download/{job.job_id}"
+            self._audio_export_jobs[job.job_id] = job
+            self._audio_export_active_job_id = job.job_id
+            self._audio_export_latest_job_id = job.job_id
+            self._audio_export_thread = threading.Thread(
+                target=self._audio_export_worker,
+                args=(job.job_id,),
+                name="fusion-reader-v2-audio-export",
+                daemon=True,
+            )
+            self._audio_export_thread.start()
+            return job.to_dict()
+
+    def cancel_audio_export(self, job_id: str) -> dict:
+        clean = str(job_id or "").strip()
+        with self._audio_export_lock:
+            target_id = clean or self._audio_export_active_job_id
+            job = self._audio_export_jobs.get(target_id)
+            if not job:
+                return {"ok": False, "error": "audio_export_job_not_found"}
+            if job.state not in {"queued", "running"}:
+                return job.to_dict()
+            job.state = "canceling" if job.state == "running" else "cancelled"
+            job.detail = "Cancelando exportación de audio..."
+            self._audio_export_cancel.set()
+            return job.to_dict()
+
+    def get_audio_export_download(self, job_id: str) -> dict:
+        clean = str(job_id or "").strip()
+        with self._audio_export_lock:
+            job = self._audio_export_jobs.get(clean)
+            if not job:
+                return {"ok": False, "error": "audio_export_job_not_found"}
+            if job.state != "done" or not job.output_path:
+                return {"ok": False, "error": "audio_export_not_ready"}
+            path = Path(job.output_path).resolve()
+            filename = job.filename
+        downloads_dir = find_downloads_dir().resolve()
+        try:
+            path.relative_to(downloads_dir)
+        except ValueError:
+            return {"ok": False, "error": "audio_export_path_invalid"}
+        if not path.exists():
+            return {"ok": False, "error": "audio_export_file_missing"}
+        return {"ok": True, "path": str(path), "filename": filename}
+
+    def _finish_audio_export_job(
+        self,
+        job_id: str,
+        state: str,
+        detail: str,
+        *,
+        output_path: Path | None = None,
+        concat_method: str = "",
+        error: str = "",
+    ) -> None:
+        with self._audio_export_lock:
+            job = self._audio_export_jobs.get(job_id)
+            if not job:
+                return
+            job.state = state
+            job.detail = detail
+            job.concat_method = concat_method
+            job.error = error
+            job.finished_at = time.time()
+            if output_path:
+                job.output_path = str(output_path)
+                job.filename = output_path.name
+            if self._audio_export_active_job_id == job_id:
+                self._audio_export_active_job_id = ""
+
+    def _audio_export_worker(self, job_id: str) -> None:
+        with self._audio_export_lock:
+            job = self._audio_export_jobs.get(job_id)
+            if not job or not job.snapshot:
+                return
+            snapshot = job.snapshot
+            job.state = "running"
+            job.detail = "Preparando exportación de audio..."
+        inputs: list[Path] = []
+        target: Path | None = None
+        try:
+            for chunk_number, text in snapshot.blocks:
+                if self._audio_export_cancel.is_set():
+                    self._finish_audio_export_job(job_id, "cancelled", "Exportación cancelada.")
+                    return
+                self._wait_for_interactive_tts()
+                with self._audio_export_lock:
+                    job = self._audio_export_jobs.get(job_id)
+                    if not job:
+                        return
+                    job.current_block = chunk_number
+                    job.detail = f"Generando bloque {job.completed_blocks + 1} de {job.total_blocks}..."
+                cached_artifact = self.cache.get(text, snapshot.voice, snapshot.language)
+                if cached_artifact:
+                    artifact = cached_artifact
+                    with self._audio_export_lock:
+                        current_job = self._audio_export_jobs.get(job_id)
+                        if current_job:
+                            current_job.cached_blocks += 1
+                else:
+                    artifact = self._synthesize_cached_with_settings(text, snapshot.voice, snapshot.language)
+                    if not artifact.ok:
+                        self._finish_audio_export_job(job_id, "error", "No pude generar audio para exportar.", error=artifact.detail or "tts_failed")
+                        return
+                    with self._audio_export_lock:
+                        current_job = self._audio_export_jobs.get(job_id)
+                        if current_job:
+                            current_job.generated_blocks += 1
+                if not artifact.ok or not artifact.path or not artifact.path.exists():
+                    self._finish_audio_export_job(job_id, "error", "No encontré el WAV de un bloque exportado.", error="audio_export_missing_artifact")
+                    return
+                inputs.append(Path(artifact.path))
+                with self._audio_export_lock:
+                    current_job = self._audio_export_jobs.get(job_id)
+                    if current_job:
+                        current_job.completed_blocks += 1
+                        current_job.detail = f"Bloque {chunk_number} listo."
+            if not inputs:
+                self._finish_audio_export_job(job_id, "error", "No había bloques para exportar.", error="audio_export_no_inputs")
+                return
+            target = unique_audio_download_target(job.filename)
+            if len(inputs) == 1:
+                target.write_bytes(inputs[0].read_bytes())
+                concat_method = "copy"
+            else:
+                concat_method = concat_wav_files(inputs, target)
+            if self._audio_export_cancel.is_set():
+                target.unlink(missing_ok=True)
+                self._finish_audio_export_job(job_id, "cancelled", "Exportación cancelada.")
+                return
+            self._finish_audio_export_job(job_id, "done", "Listo: guardado en Descargas.", output_path=target, concat_method=concat_method)
+        except Exception as exc:
+            if target:
+                target.unlink(missing_ok=True)
+            self._finish_audio_export_job(job_id, "error", "Falló la exportación de audio.", error=str(exc))
+        finally:
+            self._audio_export_cancel.clear()
 
     def test_voice(self, text: str = "Prueba de voz neural del lector conversacional.", play: bool = True) -> dict:
         started = time.perf_counter()

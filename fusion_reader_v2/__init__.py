@@ -10,12 +10,16 @@ from .reader import Document, ReaderSession, split_text
 from .service import FusionReaderV2
 from .tts import AllTalkProvider, AudioArtifact, AudioCache, NullTTSProvider
 from .metrics import VoiceMetric, VoiceMetricsStore
+from .audio_export import AudioExportJob, AudioExportRequest, AudioExportSnapshot
 
 __all__ = [
     "AllTalkProvider",
+    "AudioExportJob",
     "AutoExternalResearchBridge",
     "AudioArtifact",
     "AudioCache",
+    "AudioExportRequest",
+    "AudioExportSnapshot",
     "AutoSTTProvider",
     "ChatResult",
     "ConversationCore",

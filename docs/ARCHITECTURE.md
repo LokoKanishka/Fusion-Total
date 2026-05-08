@@ -36,6 +36,7 @@ Propiedades:
 - empaqueta titulos y parrafos cortos con el contenido siguiente para evitar bloques diminutos;
 - divide parrafos enormes por oracion y, si hace falta, por palabras para no romper el maximo duro;
 - reduce la fragmentacion de lectura y navegacion a costa de audios por bloque mas largos.
+- cuando AllTalk rechaza un bloque largo por tamaño (`http_400`), el servicio lo sintetiza por segmentos y recompone un WAV unico antes de cachearlo para no romper lectura ni exportacion.
 - al renderizar un bloque nuevo, la UI resetea el viewport del lector al tope del contenedor scrolleable;
 - la cabecera del lector prioriza `document.loaded/title/current/total` para mostrar el documento activo y evita falsos "Ningun documento activo" por desfasajes del anchor.
 - el bloque visible del lector usa ahora el ancho completo del panel central, dejando solo padding lateral moderado para no volver a una columna angosta centrada.
@@ -178,6 +179,25 @@ Propiedades:
 - alcance v1: funciona bien para textos académicos lineales y escaneos simples/medios;
 - no garantiza reconstrucción editorial perfecta en manuales complejos, libros con muchas imágenes, tablas, columnas o maquetación pesada;
 - cualquier capa de pulido adicional con IA/Qwen queda postergada como mejora futura opcional y no está implementada en esta etapa.
+
+## Herramienta auxiliar Audio Export v1
+
+Componentes:
+
+- `fusion_reader_v2/audio_export.py`
+- `fusion_reader_v2/service.py`
+- endpoints auxiliares en `scripts/fusion_reader_v2_server.py`
+
+Propiedades:
+
+- exporta audio del documento principal cargado en cuatro modos: bloque actual, bloque especifico, rango y documento completo;
+- toma snapshot del documento, voz, idioma y chunks al iniciar para no depender del estado mutable de la UI;
+- reutiliza `AudioCache` y el flujo TTS existente antes de regenerar audio;
+- corre en background con un solo job activo a la vez, progreso visible y cancelacion cooperativa;
+- concatena WAV localmente con `wave` cuando los parametros coinciden y usa `ffmpeg` como fallback si hace falta;
+- guarda el WAV final en `~/Descargas` o `~/Downloads` y ofrece descarga HTTP efimera desde `/api/audio-export/download/<job_id>`;
+- no cambia la reproduccion normal, el chunking, las voces ni los puertos;
+- la seleccion irregular de bloques queda fuera de alcance en esta v1.
 
 ## Investigación externa
 
