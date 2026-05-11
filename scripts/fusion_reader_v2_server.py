@@ -38,6 +38,25 @@ APP = FusionReaderV2(
     metrics=VoiceMetricsStore(ROOT / "runtime" / "fusion_reader_v2" / "voice_metrics.jsonl"),
 )
 
+def _get_git_commit() -> str:
+    try:
+        import subprocess
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=str(ROOT), stderr=subprocess.DEVNULL).decode("ascii").strip()
+    except Exception:
+        return "unknown"
+
+RUNTIME_INFO = {
+    "app": "fusion_reader_v2",
+    "commit": _get_git_commit(),
+    "pid": os.getpid(),
+    "port": PORT,
+    "cwd": os.getcwd(),
+    "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    "server_file": __file__,
+    "python": sys.executable,
+    "log_file": os.environ.get("FUSION_READER_LOG_FILE", str(ROOT / "runtime" / "fusion_reader_v2" / "logs" / "fusion_reader_v2_server.log")),
+}
+
 INDEX_HTML = r"""<!doctype html>
 <html lang="es">
 <head>
@@ -3480,7 +3499,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "text/html; charset=utf-8", INDEX_HTML.encode("utf-8"))
             return
         if path in ("/health", "/api/status"):
-            self._json(200, APP.status())
+            st = APP.status()
+            st["runtime"] = RUNTIME_INFO
+            self._json(200, st)
+            return
+        if path == "/api/build":
+            self._json(200, {"ok": True, **RUNTIME_INFO})
             return
         if path == "/api/library":
             self._json(200, {"ok": True, "items": library_items()})
@@ -3615,6 +3639,15 @@ class Handler(BaseHTTPRequestHandler):
             raw = INDEX_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            return
+        if path in ("/health", "/api/status"):
+            st = APP.status()
+            st["runtime"] = RUNTIME_INFO
+            raw = json.dumps(st).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
             return

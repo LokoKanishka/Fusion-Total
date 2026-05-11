@@ -104,6 +104,14 @@ class ServerAPITests(unittest.TestCase):
         self.assertIn("project_state.md", mcp.allowed_memory_files())
         self.assertTrue(mcp.read_memory_file("project_state.md").startswith("# Project State"))
 
+    def test_status_reports_runtime_metadata(self):
+        from scripts import fusion_reader_v2_server as server_mod
+        rt = server_mod.RUNTIME_INFO
+        self.assertEqual(rt["app"], "fusion_reader_v2")
+        self.assertIn("commit", rt)
+        self.assertIn("pid", rt)
+        self.assertEqual(rt["port"], server_mod.PORT)
+
     def test_status_reports_runtime_services_without_ambiguous_ok(self):
         app = test_app()
         status = app.status()

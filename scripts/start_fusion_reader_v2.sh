@@ -120,15 +120,55 @@ else
   select_fusion_tts_url
 fi
 
+current_commit="$(current_commit)"
 existing_pid="$(listening_pid || true)"
+
 if [[ -n "$existing_pid" ]]; then
-  log_msg "Fusion Reader v2 ya tiene ocupado el puerto ${PORT} por PID ${existing_pid}. No se lanza un duplicado."
-  if curl -fsS --max-time 2 "$startup_status_url" >/dev/null 2>&1; then
-    log_msg "Health existente OK en ${startup_status_url}"
-    exit 0
+  log_msg "Puerto ${PORT} ocupado por PID ${existing_pid}. Verificando instancia..."
+  
+  status_raw=$(curl -fsS --max-time 2 "$startup_status_url" 2>/dev/null || echo "")
+  
+  if [[ -n "$status_raw" ]]; then
+    # Parse metadata using python inline
+    runtime_data=$(python3 -c "import json, sys; data=json.load(sys.stdin); rt=data.get('runtime', {}); print('|'.join([str(rt.get(k, '')) for k in ['app', 'commit', 'pid']]))" <<< "$status_raw")
+    IFS='|' read -r rt_app rt_commit rt_pid <<< "$runtime_data"
+    
+    if [[ "$rt_app" == "fusion_reader_v2" ]]; then
+      if [[ "$rt_commit" == "$current_commit" ]]; then
+        log_msg "Fusion Reader v2 ya está vivo con commit actual (${current_commit}). No se relanza."
+        # Update PID file just in case
+        echo "$existing_pid" > "$PID_FILE"
+        exit 0
+      else
+        log_msg "Instancia vieja detectada (commit: ${rt_commit:-unknown}, actual: ${current_commit}). Reiniciando..."
+        kill "$existing_pid" 2>/dev/null || true
+        sleep 2
+        if listening_pid >/dev/null 2>&1; then
+           log_msg "Esperando que el puerto ${PORT} se libere..."
+           sleep 3
+        fi
+      fi
+    else
+      log_msg "ERROR: El puerto ${PORT} está ocupado por otra aplicación que no parece ser Fusion Reader v2."
+      exit 1
+    fi
+  else
+    # Status doesn't respond but port is busy. Check if it looks like our server script.
+    if [[ -r "/proc/${existing_pid}/cmdline" ]]; then
+      cmdline=$(tr '\0' ' ' <"/proc/${existing_pid}/cmdline")
+      if [[ "$cmdline" == *"fusion_reader_v2_server.py"* ]]; then
+        log_msg "Instancia de Fusion detectada (sin metadatos runtime). Reiniciando..."
+        kill "$existing_pid" 2>/dev/null || true
+        sleep 3
+      else
+        log_msg "ERROR: El puerto ${PORT} está ocupado por un proceso desconocido (PID ${existing_pid})."
+        exit 1
+      fi
+    else
+      log_msg "ERROR: El puerto ${PORT} está ocupado y no se puede identificar el proceso."
+      exit 1
+    fi
   fi
-  log_msg "El puerto ${PORT} esta ocupado pero ${startup_status_url} no respondio."
-  exit 1
 fi
 
 log_msg "==== Fusion Reader v2 startup ===="
