@@ -257,10 +257,16 @@ stdio fusion_memory_mcp_server.py
 ## Lifecycle operativo
 
 - `scripts/start_fusion_reader_v2.sh`
+  - detecta commit actual y verifica instancias existentes en el puerto `8010`;
+  - si existe una instancia con el mismo commit, evita lanzamientos duplicados;
+  - si existe una instancia vieja (commit diferente), la reinicia automáticamente;
+  - aborta con error si el puerto está ocupado por un proceso ajeno (no-Fusion);
   - selecciona TTS `7853` con validación de owner;
   - deja log persistente en `runtime/fusion_reader_v2/logs/fusion_reader_v2_server.log`;
   - guarda PID en `runtime/fusion_reader_v2/fusion_reader_v2.pid`;
   - valida health post-start de `8010`.
+- `scripts/fusion_reader_v2_server.py`
+  - inyecta metadata de runtime (commit, pid, port, logs) en `/api/status` y `/api/build` para facilitar la gestión del lifecycle.
 - `scripts/start_fusion_reader_v2_stt.sh`
   - levanta el server `8021` cuando se invoca explícitamente;
   - hoy no forma parte obligatoria del launcher principal.

@@ -120,7 +120,6 @@ e2f654a Use wider reader text layout
 - `d97dd52`: proveedor STT activo visible en UI.
 - `cdef8ab`: disciplina de lectura literal vs interpretación.
 - [x] Background PDF → Word tool.
-- [x] OCR fallback with Tesseract (Legacy).
 - [x] **Conversión PDF a Word (Text-First)**:
     *   Motor: **Docling GPU** (RTX 5090).
     *   Política: Sin imágenes, sin base64, sin ruido OCR.
@@ -129,6 +128,11 @@ e2f654a Use wider reader text layout
     *   Medición real 2026-05-07 sobre `201721562-Roles-Ars-Magica-4a-Ed-1_convertido_8.docx`: 812 tokens sospechosos antes, 17 después en `convertido_9`, reducción 97.91%, sin `base64`, `data:image` ni `<!-- image -->`.
     *   Rendimiento: 15 págs en ~30s (59KB final vs 3.5MB con imágenes).
     *   Tests: incluye validación de reparación v4 con ejemplos reales y preservación de términos protegidos.
+- [x] **Consolidación Lifecycle 8010 v2**:
+    *   Inyección de metadatos `runtime` (commit, pid, port, logs, python) en `/api/status` y `/api/build`.
+    *   Launcher `start_fusion_reader_v2.sh` con verificación de commit: detecta si ya hay una instancia viva con el commit actual para evitar duplicados, y reinicia automáticamente si detecta una versión obsoleta.
+    *   Protección contra colisiones: Aborta el inicio si el puerto 8010 está ocupado por una aplicación ajena.
+    *   Trazabilidad: Registro de commit actual en el log de inicio y metadata persistente.
 
 ## Herramienta auxiliar PDF -> Word
 
