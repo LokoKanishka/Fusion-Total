@@ -7,6 +7,7 @@ import json
 import subprocess
 import collections
 import tempfile
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -299,6 +300,14 @@ class STTManager:
         self._rms_threshold = 0.02
         self._vad_true_ratio = 0.0
         self._last_segment_ms = 0
+        self._vad_active = False
+        self._in_speech = False
+        self._silence_ms = 0
+        self._last_barge_any_mono = 0.0
+        self._last_error = ""
+        self._pending_chat: list[dict] = []
+        self._emit_count = 0
+        self._chat_commit_total = 0
 
     def enable(self, session_id: str = "") -> None:
         with self._lock:
@@ -335,12 +344,98 @@ class STTManager:
     def stop(self) -> None:
         self.disable()
 
+    def restart(self) -> None:
+        with self._lock:
+            enabled = self._enabled
+            owner = self._owner_session_id
+        if enabled:
+            self.disable()
+            self.enable(owner)
+
+    def list_devices(self) -> list[dict]:
+        return []
+
+    def _legacy_module(self):
+        return sys.modules.get("openclaw_direct_chat") or sys.modules.get("scripts.openclaw_direct_chat")
+
+    def _voice_state(self) -> dict:
+        mod = self._legacy_module()
+        if mod and hasattr(mod, "_load_voice_state"):
+            try:
+                return dict(mod._load_voice_state())
+            except Exception:
+                return {}
+        return {}
+
+    def _debug_enabled(self) -> bool:
+        return os.environ.get("DIRECT_CHAT_STT_DEBUG", "0") == "1"
+
+    def _command_only_enabled(self) -> bool:
+        return os.environ.get("DIRECT_CHAT_STT_COMMAND_ONLY", "0") == "1"
+
+    def _chat_enabled(self) -> bool:
+        return os.environ.get("DIRECT_CHAT_STT_CHAT_ENABLED", "1") != "0"
+
+    def _barge_any_enabled(self) -> bool:
+        return os.environ.get("DIRECT_CHAT_STT_BARGE_ANY", "1") != "0"
+
+    def _barge_any_cooldown_ms(self) -> int:
+        return int(os.environ.get("DIRECT_CHAT_STT_BARGE_ANY_COOLDOWN_MS", "1200"))
+
+    def _resolve_stt_device(self, requested_index: int | None) -> int | None:
+        if requested_index is None:
+            return None
+        devices = self.list_devices()
+        requested = next((item for item in devices if int(item.get("index", -1)) == int(requested_index)), None)
+        if os.environ.get("DIRECT_CHAT_STT_ALLOW_LOOPBACK_DEVICE", "0") == "1":
+            return requested_index
+        name = str((requested or {}).get("name") or "").lower()
+        if name and not any(token in name for token in ("pulse", "monitor", "loopback")):
+            return requested_index
+        for item in devices:
+            item_name = str(item.get("name") or "").lower()
+            if item.get("default") and not any(token in item_name for token in ("pulse", "monitor", "loopback")):
+                return int(item.get("index"))
+        for item in devices:
+            item_name = str(item.get("name") or "").lower()
+            if not any(token in item_name for token in ("pulse", "monitor", "loopback")):
+                return int(item.get("index"))
+        return requested_index
+
+    def _on_worker_telemetry(self, item: dict) -> None:
+        with self._lock:
+            if str(item.get("kind") or "") == "stt_emit":
+                self._emit_count += 1
+                self._status["stt_emit_count"] = self._emit_count
+                self._status["last_emit_chars"] = int(item.get("chars") or 0)
+
     def poll(self, session_id: str, limit: int = 5) -> list:
+        mod = self._legacy_module()
         with self._lock:
             if self._enabled and self._owner_session_id and session_id != self._owner_session_id:
                 return []
             out = []
+            tts_playing = bool(getattr(mod, "_tts_is_playing", lambda: False)()) if mod else False
+            reader_target = bool(getattr(mod, "_reader_voice_any_barge_target_active", lambda _sid: False)(session_id)) if mod else False
+            if self._barge_any_enabled() and tts_playing:
+                state = self._voice_state()
+                threshold = float(state.get("stt_barge_rms_threshold") or state.get("stt_rms_threshold") or 0.02)
+                speech_active = bool(self._vad_active or self._in_speech or self._rms_current >= threshold)
+                if speech_active and self._rms_current >= threshold:
+                    now = time.monotonic()
+                    if (now - self._last_barge_any_mono) * 1000.0 >= self._barge_any_cooldown_ms():
+                        self._last_barge_any_mono = now
+                        out.append({"kind": "voice_cmd", "source": "voice_any", "cmd": "pause", "text": "", "ts": time.time()})
+                        if len(out) >= max(1, int(limit or 5)):
+                            return out
+                elif reader_target:
+                    return []
+            if self._pending_chat and not tts_playing:
+                while self._pending_chat and len(out) < max(1, int(limit or 5)):
+                    out.append(self._pending_chat.pop(0))
             for _ in range(max(1, int(limit or 5))):
+                if len(out) >= max(1, int(limit or 5)):
+                    break
                 try:
                     item = self._queue.get_nowait()
                 except queue.Empty:
@@ -354,7 +449,23 @@ class STTManager:
                 elif any(w in low for w in ("repetir", "repeti", "repetí")):
                     out.append({"kind": "voice_cmd", "source": "voice_cmd", "cmd": "repeat", "text": text, "ts": item.get("ts", time.time())})
                 elif text:
-                    out.append({"kind": "chat_text", "source": "voice_chat", "text": text, "ts": item.get("ts", time.time())})
+                    drop_reason = ""
+                    if mod and hasattr(mod, "_stt_chat_drop_reason"):
+                        drop_reason = str(mod._stt_chat_drop_reason(text))
+                    elif not re.search(r"[a-záéíóúñ]{2,}", low, re.I):
+                        drop_reason = "noise_text"
+                    if drop_reason:
+                        self._status["match_reason"] = drop_reason
+                        continue
+                    chat_item = {"kind": "chat_text", "source": "voice_chat", "text": text, "ts": item.get("ts", time.time())}
+                    if tts_playing:
+                        self._pending_chat.append(chat_item)
+                        continue
+                    if self._command_only_enabled() and not self._chat_enabled():
+                        continue
+                    out.append(chat_item)
+                    self._chat_commit_total += 1
+                    self._status["stt_chat_commit_total"] = self._chat_commit_total
             return out
 
     def status(self) -> dict:
@@ -368,6 +479,12 @@ class STTManager:
                 "threshold": self._rms_threshold,
                 "vad_true_ratio": self._vad_true_ratio,
                 "last_segment_ms": self._last_segment_ms,
+                "stt_vad_active": self._vad_active,
+                "stt_in_speech": self._in_speech,
+                "stt_silence_ms": self._silence_ms,
+                "stt_emit_count": self._emit_count,
+                "stt_chat_commit_total": self._chat_commit_total,
+                "last_error": self._last_error,
             })
             return out
 

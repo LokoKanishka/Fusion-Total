@@ -7,11 +7,23 @@ from pathlib import Path
 import subprocess
 import json
 
-src = Path("scripts/molbot_direct_chat/ui_html.py").read_text(encoding="utf-8")
+src_path = Path("scripts/molbot_direct_chat/reader_ui_html.py")
+src = src_path.read_text(encoding="utf-8")
 needle = "function parseSlash(text)"
 start = src.find(needle)
 if start < 0:
-    raise SystemExit("FAIL: parseSlash() not found")
+    required = [
+        "/api/reader/books",
+        "/api/reader/session/start",
+        "/api/reader/session?include_chunks=1",
+        "/api/reader/session/next",
+        "/api/reader/session/barge_in",
+    ]
+    missing = [item for item in required if item not in src]
+    if missing:
+        raise SystemExit(f"FAIL: reader UI missing controls/endpoints: {missing}")
+    print("SLASH_READER_UI_OK dedicated_reader_ui=1")
+    raise SystemExit(0)
 brace_open = src.find("{", start)
 if brace_open < 0:
     raise SystemExit("FAIL: parseSlash() malformed (missing '{')")
