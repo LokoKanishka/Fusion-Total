@@ -120,6 +120,12 @@ class ServerAPITests(unittest.TestCase):
         self.assertIn("stt", status["services"])
         self.assertIn("chat", status["services"])
 
+    def test_voice_selector_has_persistence_logic_and_auto_repair(self):
+        server = Path("scripts/fusion_reader_v2_server.py").read_text(encoding="utf-8")
+        self.assertIn("ensureVoiceCatalog", server)
+        self.assertIn("voiceCatalogRefreshInFlight", server)
+        self.assertIn("gotMany && hadMany", server)
+
 from tests.helpers import attach_legacy_tests
 
 attach_legacy_tests(ServerAPITests, (

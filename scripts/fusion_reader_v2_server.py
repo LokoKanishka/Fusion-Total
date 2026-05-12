@@ -1047,6 +1047,7 @@ INDEX_HTML = r"""<!doctype html>
     let lastRenderedBlockIndex = 0;
     let lastRenderedBlockText = '';
     let audioExportPollingJobId = '';
+    let voiceCatalogRefreshInFlight = false;
     const dialogue = {
       active: false,
       stream: null,
@@ -1387,6 +1388,12 @@ INDEX_HTML = r"""<!doctype html>
 
     function renderVoices(data) {
       if (!data || !Array.isArray(data.voices)) return;
+      const hadMany = els.voiceSelect.options.length > 1;
+      const gotMany = data.voices.length > 1;
+      if (!gotMany && hadMany) {
+        if (data.current) els.voiceSelect.value = data.current;
+        return;
+      }
       els.voiceSelect.replaceChildren();
 
       const sorted = [...data.voices].sort((a, b) => voiceSortKey(a) - voiceSortKey(b));
@@ -1439,9 +1446,22 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    async function ensureVoiceCatalog() {
+      if (!els.voiceSelect || els.voiceSelect.options.length > 1 || voiceCatalogRefreshInFlight) return;
+      voiceCatalogRefreshInFlight = true;
+      try {
+        await refreshVoices();
+      } finally {
+        voiceCatalogRefreshInFlight = false;
+      }
+    }
+
     function renderVoiceStatus(voice) {
       if (voice && els.voiceSelect.value !== voice) {
         els.voiceSelect.value = voice;
+      }
+      if (els.voiceSelect.options.length <= 1) {
+        ensureVoiceCatalog();
       }
     }
 
