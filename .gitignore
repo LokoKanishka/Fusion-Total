@@ -71,3 +71,5 @@ cmd_pipe
 
 .playwright-cli/
 state/
+DOCS/
+scratch/
